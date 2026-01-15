@@ -1,0 +1,26 @@
+{
+  "name": "safegram-complete-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build:win": "electron-builder --win --x64"
+  },
+  "dependencies": {
+    "electron": "^31.0.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^25.0.5"
+  },
+  "build": {
+    "appId": "school.safegram.complete",
+    "productName": "SafeGram Complete",
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "icon.ico"
+    }
+  }
+}

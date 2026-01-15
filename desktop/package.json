@@ -1,0 +1,67 @@
+{
+  "name": "safegram-desktop",
+  "version": "1.0.0",
+  "description": "SafeGram Desktop Application - Professional messaging client",
+  "main": "main/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
+    "dev:main": "node scripts/wait-and-run.js",
+    "dev:electron": "electron .",
+    "dev:renderer": "cd renderer && npm run dev",
+    "build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "cd renderer && npm run build",
+    "build:electron": "electron-builder",
+    "build:native": "node-gyp rebuild",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7",
+    "electron-store": "^8.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^25.0.5",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0",
+    "node-addon-api": "^8.0.0",
+    "node-gyp": "^10.0.0"
+  },
+  "build": {
+    "appId": "com.safegram.desktop",
+    "productName": "SafeGram",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main/**/*",
+      "renderer/dist/**/*",
+      "renderer/node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

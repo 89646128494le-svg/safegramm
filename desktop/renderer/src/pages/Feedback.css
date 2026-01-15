@@ -1,0 +1,85 @@
+.feedback-page {
+  padding: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.feedback-description {
+  color: var(--fg-secondary, #9ca3af);
+  margin-bottom: 24px;
+}
+
+.feedback-form {
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.required {
+  color: #ef4444;
+}
+
+.form-input,
+.form-textarea {
+  padding: 12px;
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 8px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--fg-primary, #e5e7eb);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent, #3b82f6);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 150px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 8px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--fg-primary, #e5e7eb);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover, #2a2a2a);
+}
+
+.btn-primary {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+  border-color: var(--accent, #3b82f6);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover, #2563eb);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

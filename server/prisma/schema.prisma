@@ -1,0 +1,237 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username     String   @unique
+  email        String?  @unique
+  phone        String?  @unique
+  age          Int?
+  passhash     String
+  salt         String
+  roles        String   @default("user") // comma-separated roles
+  premium      Boolean  @default(false)
+  status       String   @default("online")
+  lastSeen     DateTime?
+  profileColor String   @default("#4da3ff")
+  avatarUrl    String?
+  showAvatar   Boolean  @default(true)
+  showBio      Boolean  @default(true)
+  bio          String?
+  pubKey       String?
+  profile      String?
+  settings     String?
+  pinHash      String?
+  twofaSecret  String?
+  recoveryCode String?
+  lastRenameAt DateTime?
+  termsAcceptedAt DateTime?
+
+  contactsA Contact[] @relation("A")
+  contactsB Contact[] @relation("B")
+  subs      PushSub[]
+  blocksA   Block[]   @relation("Blocker")
+  blocksB   Block[]   @relation("Blocked")
+  savedMsgs SavedMessage[]
+  reactions Reaction[]
+  messages  Message[]
+  pollVotes PollVote[]
+  chatMembers ChatMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Block {
+  id        String @id @default(uuid())
+  blockerId String
+  blockedId String
+  blocker   User   @relation("Blocker", fields: [blockerId], references: [id])
+  blocked   User   @relation("Blocked", fields: [blockedId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+}
+
+model Contact {
+  id   String @id @default(uuid())
+  aId  String
+  bId  String
+  a    User   @relation("A", fields: [aId], references: [id])
+  b    User   @relation("B", fields: [bId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([aId, bId])
+}
+
+model Chat {
+  id        String   @id @default(uuid())
+  type      String   // dm|group|channel
+  title     String?
+  description String?
+  requiresReview Boolean @default(false)
+  approved  Boolean @default(true)
+  ownerId   String?
+  members   ChatMember[]
+  messages  Message[]
+  pins      PinnedMessage[]
+  // Group E2EE
+  groupKeyEnvelope String?
+  createdAt DateTime @default(now())
+}
+
+model ChatMember {
+  id       String @id @default(uuid())
+  chatId   String
+  userId   String
+  role     String  @default("member") // owner|admin|moderator|member
+  mutedUntil DateTime?
+  joinedAt DateTime @default(now())
+  chat     Chat   @relation(fields: [chatId], references: [id])
+  user     User   @relation(fields: [userId], references: [id])
+
+  @@unique([chatId, userId])
+}
+
+model Message {
+  id        String  @id @default(uuid())
+  chatId    String
+  senderId  String
+  type      String   @default("text")
+  text      String?
+  ciphertext String?
+  replyToId String?
+  forwardFromId String?
+  forwardFromChatId String?
+  expiresAt DateTime?
+  editedAt  DateTime?
+  deletedAt DateTime?
+  deleteForAll Boolean @default(false)
+  moderationStatus String @default("clean")
+  moderationReason String?
+  createdAt DateTime @default(now())
+  chat      Chat   @relation(fields: [chatId], references: [id])
+  sender    User   @relation(fields: [senderId], references: [id])
+  attachments Attachment[]
+  reactions  Reaction[]
+  poll       Poll?
+  savedBy    SavedMessage[]
+  pinnedBy   PinnedMessage[]
+
+  @@index([chatId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([moderationStatus])
+}
+
+model Attachment {
+  id        String @id @default(uuid())
+  messageId String
+  url       String
+  kind      String  // image|video|audio|file|thumb|voice
+  size      Int?
+  mime      String?
+  width     Int?
+  height    Int?
+  durationMs Int?
+  thumbUrl  String?
+  createdAt DateTime @default(now())
+  message   Message @relation(fields: [messageId], references: [id])
+}
+
+model Reaction {
+  id        String @id @default(uuid())
+  userId    String
+  messageId String
+  emoji     String
+  createdAt DateTime @default(now())
+  user      User    @relation(fields: [userId], references: [id])
+  message   Message @relation(fields: [messageId], references: [id])
+
+  @@unique([userId, messageId, emoji])
+}
+
+model SavedMessage {
+  id        String @id @default(uuid())
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
+  user      User    @relation(fields: [userId], references: [id])
+  message   Message @relation(fields: [messageId], references: [id])
+
+  @@unique([userId, messageId])
+}
+
+model PinnedMessage {
+  id        String @id @default(uuid())
+  chatId    String
+  messageId String
+  pinnedBy  String
+  createdAt DateTime @default(now())
+  chat      Chat    @relation(fields: [chatId], references: [id])
+  message   Message @relation(fields: [messageId], references: [id])
+}
+
+model Poll {
+  id        String @id @default(uuid())
+  messageId String @unique
+  question  String
+  options   String   // JSON string [{id,text}]
+  allowsMulti Boolean @default(false)
+  createdAt DateTime @default(now())
+  message   Message @relation(fields: [messageId], references: [id])
+  votes     PollVote[]
+}
+
+model PollVote {
+  id        String @id @default(uuid())
+  pollId    String
+  userId    String
+  optionId  String
+  createdAt DateTime @default(now())
+  poll      Poll   @relation(fields: [pollId], references: [id])
+  user      User   @relation(fields: [userId], references: [id])
+
+  @@unique([pollId, userId])
+}
+
+model Report {
+  id        String @id @default(uuid())
+  reporterId String
+  messageId  String
+  reason     String
+  createdAt  DateTime @default(now())
+}
+
+model Feedback {
+  id        String @id @default(uuid())
+  userId    String?
+  subject   String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model ResetToken {
+  id        String @id @default(uuid())
+  userId    String
+  code      String  @unique
+  kind      String  // password|2fa|recovery
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model PushSub {
+  id        String @id @default(uuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+  endpoint  String @unique
+  keys      String
+  createdAt DateTime @default(now())
+}

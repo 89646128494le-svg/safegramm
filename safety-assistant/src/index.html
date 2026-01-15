@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Safety / Safety-X Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-root">
+    <header class="app-header">
+      <div class="app-title">SafeGram Safety Assistant</div>
+      <div class="app-controls">
+        <select id="mode-select">
+          <option value="normal">Safety</option>
+          <option value="x">Safety-X</option>
+        </select>
+        <select id="voice-select">
+          <option value="alloy">Alloy (нейтральный)</option>
+          <option value="onyx">Onyx (глубокий, “Джарвис”)</option>
+          <option value="verse">Verse (тёплый)</option>
+        </select>
+        <input id="api-key-input" type="password" placeholder="OpenAI API ключ (sk-...)" />
+        <button id="save-key-btn">Сохранить</button>
+        <button id="clear-btn">Очистить чат</button>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <section class="app-left">
+        <div class="avatar-card">
+          <div id="safety-avatar" class="safety-avatar safety-mode-normal safety-state-idle">
+            <div class="safety-avatar-inner">
+              <div class="safety-face">
+                <div class="safety-eyes"></div>
+                <div class="safety-mouth"></div>
+                <div class="safety-ear"></div>
+                <div class="safety-siren"></div>
+              </div>
+            </div>
+          </div>
+          <div class="avatar-status">
+            <div>Режим: <span id="mode-label">Safety</span></div>
+            <div>Состояние: <span id="state-label">idle</span></div>
+          </div>
+        </div>
+
+        <div class="quick-actions">
+          <div class="qa-title">Быстрые запросы</div>
+          <button data-prompt="Составь план на день с приоритетами.">План дня</button>
+          <button data-prompt="Разбери риски в продукте и предложи меры безопасности.">Риски и защита</button>
+          <button data-prompt="Дай идеи для контента о кибербезопасности.">Контент-идеи</button>
+          <button data-prompt="Сделай краткое резюме последних сообщений.">Резюме чата</button>
+        </div>
+      </section>
+
+      <section class="app-center">
+        <div class="chat-window">
+          <div id="chat-log" class="chat-log"></div>
+          <div class="chat-input-row">
+            <textarea id="user-input" rows="2" placeholder="Спросите Safety или Safety-X..."></textarea>
+            <div class="chat-buttons">
+              <button id="send-btn">Отправить</button>
+              <button id="listen-btn">Слушать (STT)</button>
+              <button id="voice-btn">Озвучить (TTS)</button>
+            </div>
+            <div class="status-row">Статус: <span id="status-label">Готов</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="app-right">
+        <div class="info-card">
+          <div class="info-title">Режимы</div>
+          <p><strong>Safety</strong> — дружелюбный помощник для повседневных задач.</p>
+          <p><strong>Safety-X</strong> — строгий режим аудита, акцент на безопасности.</p>
+        </div>
+
+        <div class="info-card">
+          <div class="info-title">Подсказки</div>
+          <p>Ключ OpenAI хранится локально (localStorage). TTS работает при валидном ключе.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

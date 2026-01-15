@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>SafeGram — Login</title>
+<style>
+body{margin:0;background:#0b0f14;color:#e7f1fb;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+.card{background:#121a22;border:1px solid #1f2a35;border-radius:12px;padding:18px;margin:18px}
+input,button{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #1f2a35;background:#0f141b;color:#e7f1fb;outline:none}
+button{border:none;background:#4da3ff;color:#081018;font-weight:700;cursor:pointer}
+.mt{margin-top:10px}
+.bad{color:#ff6565}
+</style>
+</head><body>
+  <div class="card">
+    <h3>Подключение к серверу</h3>
+    <input id="server" class="mt" placeholder="Server URL (например, http://YOUR-IP:8080)" value="http://localhost:8080">
+    <input id="web" class="mt" placeholder="Web URL (например, http://YOUR-IP:5173)" value="http://localhost:5173">
+  </div>
+  <div class="card">
+    <div style="display:flex;gap:8px"><button id="tabLogin" class="mt">Вход</button><button id="tabReg" class="mt">Регистрация</button></div>
+    <div id="form"></div>
+  </div>
+  <script src="login.js"></script>
+</body></html>

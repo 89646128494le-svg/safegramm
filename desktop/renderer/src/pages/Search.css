@@ -1,0 +1,122 @@
+.search-page {
+  padding: 24px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.search-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 8px;
+  background: var(--bg-secondary, #252525);
+  color: var(--fg-primary, #e5e7eb);
+  font-size: 14px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent, #3b82f6);
+}
+
+.search-type-select {
+  padding: 12px 16px;
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 8px;
+  background: var(--bg-secondary, #252525);
+  color: var(--fg-primary, #e5e7eb);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.search-section {
+  background: var(--bg-secondary, #252525);
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.search-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent, #3b82f6);
+}
+
+.search-result-item {
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-bottom: 8px;
+}
+
+.search-result-item:hover {
+  background: var(--bg-hover, #2a2a2a);
+}
+
+.result-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.result-text {
+  color: var(--fg-secondary, #9ca3af);
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.result-meta {
+  font-size: 12px;
+  color: var(--fg-tertiary, #6b7280);
+}
+
+.search-empty {
+  text-align: center;
+  padding: 48px;
+  color: var(--fg-secondary, #9ca3af);
+}
+
+.btn {
+  padding: 12px 24px;
+  border: 1px solid var(--border-color, #374151);
+  border-radius: 8px;
+  background: var(--bg-primary, #1a1a1a);
+  color: var(--fg-primary, #e5e7eb);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover, #2a2a2a);
+}
+
+.btn-primary {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+  border-color: var(--accent, #3b82f6);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover, #2563eb);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -1,0 +1,2703 @@
+
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { api, API_URL } from '../services/api';
+import { getSocket, sendWebSocketMessage, closeSocket } from '../services/websocket';
+import MentionAutocomplete from './MentionAutocomplete';
+import GroupVideoCall from './GroupVideoCall';
+import DMCall from './DMCall';
+import EmojiPicker from './EmojiPicker';
+import MediaGallery from './MediaGallery';
+import UserProfile from './UserProfile';
+import StickerPicker from './StickerPicker';
+import GifPicker from './GifPicker';
+import LocationPicker from './LocationPicker';
+import GroupChannelSettings from './GroupChannelSettings';
+import AudioPlayer from './AudioPlayer';
+import { showToast } from './Toast';
+import { ConfirmModal, PromptModal } from './Modal';
+
+interface Message {
+  id: string;
+  chatId: string;
+  senderId: string;
+  text: string;
+  attachmentUrl?: string;
+  replyTo?: string;
+  replyToMessage?: {
+    id: string;
+    text: string;
+    senderId: string;
+    sender?: {
+      id: string;
+      username: string;
+      avatarUrl?: string;
+    };
+  };
+  forwardFrom?: string;
+  forwardFromChatId?: string;
+  forwardedMessage?: {
+    id: string;
+    text: string;
+    senderId: string;
+    sender?: {
+      id: string;
+      username: string;
+      avatarUrl?: string;
+    };
+    attachmentUrl?: string;
+    createdAt: number;
+  };
+  threadId?: string;
+  stickerId?: string;
+  editedAt?: number;
+  deletedAt?: number;
+  expiresAt?: number;
+  createdAt: number;
+  isRead?: boolean; // Прочитано ли сообщение текущим пользователем
+  readReceipts?: Array<{ // Список пользователей, прочитавших сообщение
+    userId: string;
+    readAt: number;
+    user?: {
+      id: string;
+      username: string;
+      avatarUrl?: string;
+    };
+  }>;
+}
+
+interface Sticker {
+  id: string;
+  packId: string;
+  emoji: string;
+  url: string;
+  width: number;
+  height: number;
+}
+
+interface StickerPack {
+  id: string;
+  name: string;
+  title: string;
+  thumbnailUrl?: string;
+  isAnimated: boolean;
+  stickerCount?: number;
+}
+
+interface Thread {
+  id: string;
+  chatId: string;
+  rootMessageId: string;
+  name: string;
+  createdAt: number;
+  messageCount?: number;
+  lastMessage?: Message;
+  unreadCount?: number;
+}
+
+interface Chat {
+  id: string;
+  type: 'dm' | 'group' | 'channel';
+  name?: string;
+  members: string[];
+  lastMessage?: Message;
+}
+
+interface User {
+  id: string;
+  username: string;
+  avatarUrl?: string;
+  status?: string;
+}
+
+interface EnhancedChatWindowProps {
+  chatId: string;
+  currentUser: User;
+  onClose?: () => void;
+  chatMembers?: string[];
+  onMarkAsRead?: () => void;
+}
+
+// Функция для воспроизведения звука сообщения
+const playMessageSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+  } catch (e) {
+    console.warn('Failed to play message sound:', e);
+  }
+};
+
+// Функция для воспроизведения звука звонка
+const playCallSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 1000;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+  } catch (e) {
+    console.warn('Failed to play call sound:', e);
+  }
+};
+
+export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatMembers, onMarkAsRead }: EnhancedChatWindowProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [text, setText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [users, setUsers] = useState<Map<string, User>>(new Map());
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+  const [reactions, setReactions] = useState<Map<string, Array<{userId: string, emoji: string}>>>(new Map());
+  const [mentionQuery, setMentionQuery] = useState<{query: string, position: number} | null>(null);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const [inGroupCall, setInGroupCall] = useState(false);
+  const [inDMCall, setInDMCall] = useState<{isVideo: boolean, otherUserId: string, isIncoming?: boolean, offerData?: any} | null>(null);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [showThreads, setShowThreads] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showMediaGallery, setShowMediaGallery] = useState(false);
+  const [showUserProfile, setShowUserProfile] = useState<string | null>(null);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [stickerPacks, setStickerPacks] = useState<StickerPack[]>([]);
+  const [selectedPack, setSelectedPack] = useState<string | null>(null);
+  const [stickers, setStickers] = useState<Map<string, Sticker[]>>(new Map());
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showGroupSettings, setShowGroupSettings] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{open: boolean, messageId: string, deleteForAll: boolean}>({
+    open: false,
+    messageId: '',
+    deleteForAll: false
+  });
+  const [showThreadModal, setShowThreadModal] = useState(false);
+  const [threadRootMessageId, setThreadRootMessageId] = useState<string>('');
+  const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
+  const [showPinned, setShowPinned] = useState(false);
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [forwardMessageId, setForwardMessageId] = useState<string | null>(null);
+  const [forwardComment, setForwardComment] = useState('');
+  const [availableChats, setAvailableChats] = useState<Array<{id: string, name: string, type: string}>>([]);
+  const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
+  const [isChatOwner, setIsChatOwner] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
+  const [oldestMessageId, setOldestMessageId] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingIntervalRef = useRef<number | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const chatInfoRef = useRef<{members: string[], type: string} | null>(null);
+
+  // Загрузка пользователей
+  const loadUsers = useCallback(async () => {
+    try {
+      const data = await api('/api/users');
+      const usersMap = new Map<string, User>();
+      data.users?.forEach((u: User) => usersMap.set(u.id, u));
+      setUsers(usersMap);
+    } catch (e) {
+      console.error('Failed to load users:', e);
+    }
+  }, []);
+
+  // Загрузка информации о чате
+  const loadChatInfo = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const chats = await api('/api/chats');
+      const chat = chats.chats?.find((c: any) => c.id === chatId);
+      if (chat) {
+        chatInfoRef.current = { members: chat.members || [], type: chat.type || 'dm' };
+        
+        // Проверяем права пользователя
+        if (chat.members && Array.isArray(chat.members)) {
+          const currentMember = chat.members.find((m: any) => m.userId === currentUser.id);
+          setIsChatOwner(currentMember?.role === 'owner');
+        }
+        
+        // Проверяем, является ли пользователь админом платформы
+        const userRoles = Array.isArray(currentUser.roles) ? currentUser.roles : 
+                         (currentUser.roles ? String(currentUser.roles).split(',').map((r: string) => r.trim()) : []);
+        setIsPlatformAdmin(userRoles.includes('admin') || userRoles.includes('owner'));
+      }
+    } catch (e) {
+      console.error('Failed to load chat info:', e);
+    }
+  }, [chatId, currentUser?.id, currentUser?.roles]);
+
+  // Загрузка сообщений с пагинацией
+  const loadMessages = useCallback(async (beforeId?: string, append: boolean = false) => {
+    if (!chatId) return;
+    const url = selectedThreadId 
+      ? `/api/threads/${selectedThreadId}/messages`
+      : `/api/chats/${chatId}/messages`;
+    
+    try {
+      // Добавляем параметры пагинации
+      const params = new URLSearchParams();
+      params.append('limit', '50');
+      if (beforeId) {
+        params.append('before', beforeId);
+      }
+      
+      const data = await api(`${url}?${params.toString()}`);
+      const loadedMessages = (data.messages || []).map((m: any) => ({
+        ...m,
+        createdAt: m.createdAt ? (typeof m.createdAt === 'string' ? new Date(m.createdAt).getTime() : (typeof m.createdAt === 'number' ? m.createdAt : Date.now())) : Date.now(),
+        isRead: m.isRead !== undefined ? m.isRead : false,
+        readReceipts: m.readReceipts || [],
+      }));
+      
+      if (append && loadedMessages.length > 0) {
+        // Добавляем старые сообщения в начало
+        setMessages(prev => [...loadedMessages, ...prev]);
+        // Сохраняем позицию прокрутки
+        const container = messagesContainerRef.current;
+        if (container) {
+          const scrollHeight = container.scrollHeight;
+          setTimeout(() => {
+            if (container) {
+              container.scrollTop = container.scrollHeight - scrollHeight;
+            }
+          }, 0);
+        }
+      } else {
+        // Заменяем все сообщения (первая загрузка)
+        setMessages(loadedMessages);
+        setTimeout(() => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          }
+        }, 100);
+      }
+      
+      // Обновляем состояние пагинации
+      if (loadedMessages.length < 50) {
+        setHasMoreMessages(false);
+      } else {
+        setHasMoreMessages(true);
+        if (loadedMessages.length > 0) {
+          setOldestMessageId(loadedMessages[0].id);
+        }
+      }
+      
+      if (data.reactions) {
+        const reactionsMap = new Map();
+        data.reactions.forEach((r: any) => {
+          if (!reactionsMap.has(r.messageId)) reactionsMap.set(r.messageId, []);
+          reactionsMap.get(r.messageId).push({ userId: r.userId, emoji: r.emoji });
+        });
+        setReactions(reactionsMap);
+      }
+      
+    } catch (e) {
+      console.error('Failed to load messages:', e);
+      setHasMoreMessages(false);
+    }
+  }, [chatId, selectedThreadId]);
+
+  // Загрузка старых сообщений
+  const loadMoreMessages = useCallback(async () => {
+    if (loadingMoreMessages || !hasMoreMessages || !oldestMessageId) return;
+    
+    setLoadingMoreMessages(true);
+    try {
+      await loadMessages(oldestMessageId, true);
+    } finally {
+      setLoadingMoreMessages(false);
+    }
+  }, [loadMessages, loadingMoreMessages, hasMoreMessages, oldestMessageId]);
+
+  // Обработка прокрутки для автоматической загрузки
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    // Если прокрутили близко к верху (100px), загружаем еще
+    if (container.scrollTop < 100 && hasMoreMessages && !loadingMoreMessages) {
+      loadMoreMessages();
+    }
+  }, [hasMoreMessages, loadingMoreMessages, loadMoreMessages]);
+
+  // Отметить чат как прочитанный
+  const markChatAsRead = useCallback(async () => {
+    if (!chatId) return;
+    try {
+      await api(`/api/chats/${chatId}/read`, 'POST');
+    } catch (e) {
+      // Игнорируем ошибки, это не критично
+    }
+  }, [chatId]);
+  
+  // Отмечаем чат как прочитанный после загрузки сообщений
+  useEffect(() => {
+    if (messages.length > 0 && chatId) {
+      markChatAsRead();
+      // Вызываем callback для обновления счетчика в родительском компоненте
+      if (onMarkAsRead) {
+        onMarkAsRead();
+      }
+    }
+  }, [messages.length, chatId, markChatAsRead, onMarkAsRead]);
+
+  // Загрузка закрепленных сообщений
+  const loadPinnedMessages = useCallback(async () => {
+    if (!chatId) return;
+    try {
+      const data = await api(`/api/chats/${chatId}/pinned`);
+      const pinned = (data.pinned || []).map((p: any) => {
+        const msg = p.message || {};
+        return {
+          ...msg,
+          createdAt: msg.createdAt ? (typeof msg.createdAt === 'string' ? new Date(msg.createdAt).getTime() : (typeof msg.createdAt === 'number' ? msg.createdAt : Date.now())) : Date.now(),
+          pinnedAt: p.pinnedAt ? (typeof p.pinnedAt === 'string' ? new Date(p.pinnedAt).getTime() : (typeof p.pinnedAt === 'number' ? p.pinnedAt : Date.now())) : Date.now(),
+        };
+      });
+      setPinnedMessages(pinned);
+    } catch (e) {
+      console.error('Failed to load pinned messages:', e);
+    }
+  }, [chatId]);
+
+  // Загрузка наборов стикеров
+  const loadStickerPacks = useCallback(async () => {
+    try {
+      const data = await api('/api/sticker-packs');
+      const packs = data.packs || [];
+      setStickerPacks(packs);
+      
+      // Загружаем стикеры из всех наборов для быстрого доступа
+      const allStickers = new Map<string, {url: string, emoji: string}>();
+      for (const pack of packs) {
+        try {
+          const stickersData = await api(`/api/sticker-packs/${pack.id}/stickers`);
+          const packStickers = stickersData.stickers || [];
+          packStickers.forEach((sticker: any) => {
+            allStickers.set(sticker.id, {
+              url: sticker.url,
+              emoji: sticker.emoji
+            });
+          });
+        } catch (e) {
+          console.warn(`Failed to load stickers for pack ${pack.id}:`, e);
+        }
+      }
+      setStickerMap(allStickers);
+    } catch (e) {
+      console.error('Failed to load sticker packs:', e);
+    }
+  }, []);
+
+  // Загрузка тредов
+  const loadThreads = useCallback(async () => {
+    try {
+      const data = await api(`/api/chats/${chatId}/threads`);
+      // Преобразуем формат данных тредов
+      const formattedThreads: Thread[] = (data.threads || []).map((t: any) => ({
+        id: t.id,
+        chatId: t.chatId || t.chat_id,
+        rootMessageId: t.rootMessageId || t.root_message_id,
+        name: t.name || '',
+        createdAt: t.createdAt ? (typeof t.createdAt === 'string' ? new Date(t.createdAt).getTime() : (typeof t.createdAt === 'number' ? t.createdAt : Date.now())) : Date.now(),
+        messageCount: t.messageCount || t.message_count || 0,
+        lastMessage: t.lastMessage ? {
+          id: t.lastMessage.id,
+          text: t.lastMessage.text || '',
+          createdAt: t.lastMessage.createdAt ? (typeof t.lastMessage.createdAt === 'string' ? new Date(t.lastMessage.createdAt).getTime() : (typeof t.lastMessage.createdAt === 'number' ? t.lastMessage.createdAt : Date.now())) : Date.now(),
+        } : undefined,
+        unreadCount: t.unreadCount || t.unread_count || 0,
+      }));
+      setThreads(formattedThreads);
+    } catch (e) {
+      console.error('Failed to load threads:', e);
+    }
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!chatId) return;
+    
+    loadUsers();
+    loadChatInfo();
+    loadMessages();
+    loadPinnedMessages();
+    loadStickerPacks();
+    if (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') {
+      loadThreads();
+    }
+    
+    const socket = getSocket();
+    socketRef.current = socket;
+    
+    if (socket) {
+      // Подписываемся на чат
+      sendWebSocketMessage('subscribe', { chatId });
+
+      const handleMessage = (event: MessageEvent) => {
+        try {
+          // Бэкенд может отправлять несколько JSON через \n
+          const messages = event.data.split('\n').filter(m => m.trim());
+          for (const msgText of messages) {
+            if (!msgText.trim()) continue;
+            try {
+              const data = JSON.parse(msgText);
+              handleWebSocketMessage(data);
+            } catch (e) {
+              console.warn('Failed to parse WebSocket message chunk:', e, msgText);
+            }
+          }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e);
+        }
+      };
+
+      const handleWebSocketMessage = (data: any) => {
+          
+          // Бэкенд отправляет {"type": "message", "data": {...}}
+          const messageData = data.data || data;
+          const msgType = data.type;
+          
+          if (msgType === 'message') {
+            const msgChatId = messageData.chatId || messageData.chat_id || data.chatId;
+            if (msgChatId !== chatId) return;
+            
+            const msg: Message = {
+              id: messageData.id,
+              chatId: msgChatId,
+              senderId: messageData.senderId || messageData.sender_id,
+              text: messageData.text || '',
+              attachmentUrl: messageData.attachmentUrl || messageData.attachment_url,
+              replyTo: messageData.replyTo || messageData.reply_to,
+              replyToMessage: messageData.replyToMessage || messageData.reply_to_message,
+              forwardFrom: messageData.forwardFrom || messageData.forward_from,
+              forwardFromChatId: messageData.forwardFromChatId || messageData.forward_from_chat_id,
+              forwardedMessage: messageData.forwardedMessage || messageData.forwarded_message,
+              threadId: messageData.threadId || messageData.thread_id,
+              stickerId: messageData.stickerId || messageData.sticker_id,
+              editedAt: messageData.editedAt ? (typeof messageData.editedAt === 'string' ? new Date(messageData.editedAt).getTime() : messageData.editedAt) : undefined,
+              deletedAt: messageData.deletedAt ? (typeof messageData.deletedAt === 'string' ? new Date(messageData.deletedAt).getTime() : messageData.deletedAt) : undefined,
+              expiresAt: messageData.expiresAt ? (typeof messageData.expiresAt === 'string' ? new Date(messageData.expiresAt).getTime() : messageData.expiresAt) : undefined,
+              createdAt: messageData.createdAt ? (typeof messageData.createdAt === 'string' ? new Date(messageData.createdAt).getTime() : (typeof messageData.createdAt === 'number' ? messageData.createdAt : Date.now())) : Date.now(),
+            };
+            
+            setMessages(prev => {
+              if (prev.some(m => m.id === msg.id)) return prev;
+              const newMessages = [...prev, msg];
+              // Воспроизводим звук при получении нового сообщения
+              playMessageSound();
+              return newMessages;
+            });
+            
+            setTimeout(() => {
+              if (messagesEndRef.current) {
+                messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+              }
+            }, 100);
+          } else if (msgType === 'message:update' || msgType === 'message_update') {
+            const updateData = data.data || data;
+            const msgChatId = updateData.chatId || updateData.chat_id || data.chatId;
+            if (msgChatId !== chatId) return;
+            
+            const msg: Message = {
+              id: updateData.id || data.id,
+              chatId: msgChatId,
+              senderId: updateData.senderId || updateData.sender_id || data.senderId,
+              text: updateData.text || data.text || '',
+              attachmentUrl: updateData.attachmentUrl || updateData.attachment_url || data.attachmentUrl,
+              editedAt: updateData.editedAt ? new Date(updateData.editedAt).getTime() : undefined,
+              createdAt: updateData.createdAt ? new Date(updateData.createdAt).getTime() : Date.now(),
+            };
+            setMessages(prev => prev.map(m => m.id === msg.id ? msg : m));
+          } else if (msgType === 'message:delete' || msgType === 'message_delete') {
+            const deleteData = data.data || data;
+            const msgChatId = deleteData.chatId || deleteData.chat_id || data.chatId;
+            if (msgChatId !== chatId) return;
+            
+            if (deleteData.deleteForAll || data.deleteForAll) {
+              setMessages(prev => prev.map(m => m.id === (deleteData.messageId || data.messageId) ? { ...m, deletedAt: Date.now(), text: '', attachmentUrl: undefined } : m));
+            } else {
+              setMessages(prev => prev.filter(m => m.id !== (deleteData.messageId || data.messageId)));
+            }
+          } else if (msgType === 'reaction') {
+            const reactionData = data.data || data;
+            const msgChatId = reactionData.chatId || reactionData.chat_id || data.chatId;
+            if (msgChatId !== chatId) return;
+            
+            setReactions(prev => {
+              const newMap = new Map(prev);
+              const messageId = reactionData.messageId || reactionData.message_id || data.messageId;
+              if (!newMap.has(messageId)) newMap.set(messageId, []);
+              const reactions = newMap.get(messageId)! as Array<{userId: string, emoji: string}>;
+              const userId = reactionData.userId || reactionData.user_id || data.userId;
+              const emoji = reactionData.emoji || data.emoji;
+              const existing = reactions.find(r => r.userId === userId && r.emoji === emoji);
+              if (!existing) reactions.push({ userId, emoji });
+              return newMap;
+            });
+          } else if (msgType === 'typing') {
+            const typingData = data.data || data;
+            const msgChatId = typingData.chatId || typingData.chat_id || data.chatId;
+            if (msgChatId !== chatId) return;
+            
+            const userId = typingData.userId || typingData.user_id || data.userId;
+            const isTyping = typingData.isTyping !== undefined ? typingData.isTyping : data.isTyping;
+            
+            if (isTyping) {
+              setTypingUsers(prev => new Set(prev).add(userId));
+            } else {
+              setTypingUsers(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(userId);
+                return newSet;
+              });
+            }
+          } else if (msgType === 'webrtc:offer') {
+            // Входящий звонок
+            const offerData = data.data || data;
+            const fromUserId = offerData.from || data.from;
+            const msgChatId = offerData.chatId || data.chatId;
+            
+            if (msgChatId === chatId && fromUserId && chatInfoRef.current?.type === 'dm' && !inDMCall) {
+              playCallSound();
+              const isVideo = offerData.video !== false; // По умолчанию видео, если не указано
+              const confirmed = window.confirm(`Входящий ${isVideo ? 'видео' : ''}звонок от ${users.get(fromUserId)?.username || fromUserId}. Принять?`);
+              if (confirmed) {
+                setInDMCall({ 
+                  isVideo, 
+                  otherUserId: fromUserId,
+                  isIncoming: true,
+                  offerData: offerData
+                });
+              } else {
+                // Отклоняем звонок
+                sendWebSocketMessage('webrtc:hangup', {
+                  chatId,
+                  to: fromUserId,
+                });
+              }
+            }
+          } else if (msgType === 'webrtc:hangup') {
+            // Звонок завершен
+            const hangupData = data.data || data;
+            const fromUserId = hangupData.from || data.from;
+            if (fromUserId && inDMCall && inDMCall.otherUserId === fromUserId) {
+              setInDMCall(null);
+              showToast('Звонок завершен', 'info');
+            }
+              } else if (msgType === 'message:pinned') {
+                // Сообщение закреплено
+                const pinData = data.data || data;
+                const msgChatId = pinData.chatId || data.chatId;
+                if (msgChatId !== chatId) return;
+                
+                // Перезагружаем закрепленные сообщения
+                loadPinnedMessages();
+                showToast('Сообщение закреплено', 'info');
+              } else if (msgType === 'message:unpinned') {
+                // Сообщение откреплено
+                const unpinData = data.data || data;
+                const msgChatId = unpinData.chatId || data.chatId;
+                if (msgChatId !== chatId) return;
+                
+                // Перезагружаем закрепленные сообщения
+                loadPinnedMessages();
+                showToast('Сообщение откреплено', 'info');
+              } else if (msgType === 'presence') {
+                // Обновление онлайн статуса
+                const presenceData = data.data || data;
+                const userId = presenceData.userId;
+                const status = presenceData.status;
+                const onlineList = presenceData.online || [];
+                
+                // Обновляем статус пользователя в списке
+                if (userId && status) {
+                  setUsers(prev => {
+                    const newMap = new Map(prev);
+                    const user = newMap.get(userId);
+                    if (user) {
+                      newMap.set(userId, { ...user, status: status === 'online' ? 'online' : 'offline' });
+                    }
+                    return newMap;
+                  });
+                }
+              } else if (msgType === 'message:read' || msgType === 'chat:read') {
+                // Обновление статуса прочтения
+                const readData = data.data || data;
+                const msgChatId = readData.chatId || data.chatId;
+                if (msgChatId !== chatId) return;
+                
+                const messageId = readData.messageId || data.messageId;
+                const userId = readData.userId || data.userId;
+                const readAt = readData.readAt ? (typeof readData.readAt === 'string' ? new Date(readData.readAt).getTime() : readData.readAt) : Date.now();
+                
+                if (messageId) {
+                  // Обновляем конкретное сообщение
+                  setMessages(prev => prev.map(m => {
+                    if (m.id === messageId && m.senderId === currentUser.id) {
+                      const receipts = m.readReceipts || [];
+                      if (!receipts.find(r => r.userId === userId)) {
+                        return {
+                          ...m,
+                          readReceipts: [...receipts, { userId, readAt }],
+                        };
+                      }
+                    }
+                    return m;
+                  }));
+                } else {
+                  // Обновляем все сообщения от текущего пользователя в чате
+                  setMessages(prev => prev.map(m => {
+                    if (m.senderId === currentUser.id && m.chatId === msgChatId) {
+                      const receipts = m.readReceipts || [];
+                      if (!receipts.find(r => r.userId === userId)) {
+                        return {
+                          ...m,
+                          readReceipts: [...receipts, { userId, readAt }],
+                        };
+                      }
+                    }
+                    return m;
+                  }));
+                }
+              }
+      };
+
+      socket.addEventListener('message', handleMessage);
+
+      // Проверка истекших сообщений каждую минуту
+      const expireCheckInterval = setInterval(() => {
+        setMessages(prev => {
+          const now = Date.now();
+          return prev.filter(m => !m.expiresAt || m.expiresAt > now);
+        });
+      }, 60000);
+
+      return () => {
+        socket.removeEventListener('message', handleMessage);
+        sendWebSocketMessage('unsubscribe', { chatId });
+        clearInterval(expireCheckInterval);
+      };
+    }
+
+    return () => {
+      sendWebSocketMessage('unsubscribe', { chatId });
+    };
+  }, [chatId, currentUser.id, loadMessages, loadUsers]);
+
+  // Автоскролл
+  useEffect(() => {
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    }, 50);
+  }, [messages]);
+
+  // Отправка сообщения
+  const sendMessage = async (messageText?: string, attachmentUrl?: string, stickerId?: string, expiresMs?: number, threadId?: string) => {
+    // Проверяем, что есть хотя бы текст, вложение или стикер
+    const finalText = messageText !== undefined ? messageText : text.trim();
+    if (!finalText && !attachmentUrl && !stickerId) return;
+
+    try {
+      const payload: any = {
+        text: finalText || null,
+        attachmentUrl: attachmentUrl || null,
+        replyTo: replyingTo?.id || null,
+        stickerId: stickerId || null,
+        expiresMs: expiresMs || null
+      };
+      if (selectedThreadId || threadId) {
+        payload.threadId = threadId || selectedThreadId;
+      }
+      // Оптимистичное обновление - добавляем сообщение сразу
+      const tempId = 'temp-' + Date.now();
+      const optimisticMessage: Message = {
+        id: tempId,
+        chatId,
+        senderId: currentUser.id,
+        text: finalText || '',
+        attachmentUrl: attachmentUrl || undefined,
+        replyTo: replyingTo?.id || undefined,
+        stickerId: stickerId || undefined,
+        createdAt: Date.now(),
+      };
+      setMessages(prev => [...prev, optimisticMessage]);
+      
+      try {
+        const response = await api(`/api/chats/${chatId}/messages`, 'POST', payload);
+        // Заменяем временное сообщение на реальное
+        setMessages(prev => prev.map(m => m.id === tempId ? {
+          ...m,
+          id: response.id,
+          createdAt: typeof response.createdAt === 'string' ? new Date(response.createdAt).getTime() : (typeof response.createdAt === 'number' ? response.createdAt : Date.now()),
+        } : m));
+        setText('');
+        setReplyingTo(null);
+        setEditingMessage(null);
+        sendWebSocketMessage('typing', { chatId, isTyping: false });
+      } catch (e: any) {
+        // Удаляем временное сообщение при ошибке
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        showToast('Ошибка отправки: ' + e.message, 'error');
+        throw e;
+      }
+    } catch (e: any) {
+      showToast('Ошибка отправки: ' + e.message, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Редактирование сообщения
+  const editMessage = async (messageId: string, newText: string) => {
+    if (!newText.trim()) {
+      showToast('Сообщение не может быть пустым', 'warning');
+      return;
+    }
+    try {
+      await api(`/api/messages/${messageId}/edit`, 'POST', { text: newText.trim() });
+      setEditingMessage(null);
+      showToast('Сообщение изменено', 'success');
+      await loadMessages(undefined, false);
+    } catch (e: any) {
+      showToast('Ошибка редактирования: ' + e.message, 'error');
+    }
+  };
+
+  // Удаление сообщения
+  const deleteMessage = async (messageId: string, deleteForAll: boolean = false) => {
+    try {
+      await api(`/api/messages/${messageId}/delete`, 'POST', { deleteForAll });
+      showToast(deleteForAll ? 'Сообщение удалено для всех' : 'Сообщение удалено', 'success');
+      await loadMessages(undefined, false);
+    } catch (e: any) {
+      showToast('Ошибка удаления: ' + e.message, 'error');
+    }
+  };
+
+  // Поиск по сообщениям
+  const searchMessages = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    
+    try {
+      const data = await api(`/api/messages/search?q=${encodeURIComponent(query)}&chatId=${chatId}`);
+      const results = data.messages || [];
+      
+      // Преобразуем результаты в формат Message
+      const formattedResults: Message[] = results.map((msg: any) => ({
+        id: msg.id,
+        chatId: msg.chatId || msg.chat_id || chatId,
+        senderId: msg.senderId || msg.sender_id,
+        text: msg.text || '',
+        attachmentUrl: msg.attachmentUrl || msg.attachment_url,
+        replyTo: msg.replyTo || msg.reply_to,
+        replyToMessage: msg.replyToMessage,
+        forwardFrom: msg.forwardFrom || msg.forward_from,
+        threadId: msg.threadId || msg.thread_id,
+        stickerId: msg.stickerId || msg.sticker_id,
+        gifUrl: msg.gifUrl || msg.gif_url,
+        editedAt: msg.editedAt ? (typeof msg.editedAt === 'string' ? new Date(msg.editedAt).getTime() : msg.editedAt) : undefined,
+        deletedAt: msg.deletedAt ? (typeof msg.deletedAt === 'string' ? new Date(msg.deletedAt).getTime() : msg.deletedAt) : undefined,
+        expiresAt: msg.expiresAt ? (typeof msg.expiresAt === 'string' ? new Date(msg.expiresAt).getTime() : msg.expiresAt) : undefined,
+        createdAt: msg.createdAt ? (typeof msg.createdAt === 'string' ? new Date(msg.createdAt).getTime() : (typeof msg.createdAt === 'number' ? msg.createdAt : Date.now())) : Date.now(),
+      }));
+      
+      setSearchResults(formattedResults);
+    } catch (e: any) {
+      console.error('Failed to search messages:', e);
+      setSearchResults([]);
+      if (e.message && !e.message.includes('bad_request')) {
+        showToast('Ошибка поиска: ' + e.message, 'error');
+      }
+    }
+  };
+
+  // Отправка геолокации
+  const sendLocation = async (lat: number, lng: number, address?: string) => {
+    try {
+      // Сначала отправляем сообщение с текстом локации
+      const locationText = address || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      const msg = await api(`/api/chats/${chatId}/messages`, 'POST', {
+        text: `📍 ${locationText}`
+      });
+      // Затем прикрепляем координаты
+      await api(`/api/messages/${msg.message.id}/location`, 'POST', {
+        lat,
+        lng,
+        address
+      });
+      showToast('Геолокация отправлена', 'success');
+      await loadMessages(undefined, false);
+    } catch (e: any) {
+      showToast('Ошибка отправки геолокации: ' + e.message, 'error');
+    }
+  };
+
+  // Создание треда
+  const createThread = async (name: string) => {
+    try {
+      const data = await api(`/api/chats/${chatId}/threads`, 'POST', {
+        rootMessageId: threadRootMessageId,
+        name: name.trim() || undefined
+      });
+      await loadThreads();
+      setSelectedThreadId(data.thread.id);
+      setShowThreads(true);
+      setShowThreadModal(false);
+      setThreadRootMessageId('');
+      showToast('Тред создан', 'success');
+    } catch (e: any) {
+      showToast('Ошибка создания треда: ' + e.message, 'error');
+    }
+  };
+
+  // Отправка файла
+  const sendFile = async (file: File, isVoiceMessage: boolean = false) => {
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      
+      // Для голосовых сообщений используем специальное имя поля
+      if (isVoiceMessage) {
+        form.append('kind', 'voice');
+      }
+      
+      const rsp = await fetch(`${API_URL}/api/chats/${chatId}/attach`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') },
+        body: form
+      });
+      
+      if (!rsp.ok) {
+        const errorData = await rsp.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.detail || 'upload_error');
+      }
+      
+      const data = await rsp.json();
+      const attachmentUrl = data.url || data.attachmentUrl || data.attachment_url;
+      
+      if (!attachmentUrl) {
+        throw new Error('Не получен URL вложения');
+      }
+      
+      // Отправляем сообщение с вложением
+      await api(`/api/chats/${chatId}/messages`, 'POST', {
+        text: isVoiceMessage ? '' : text.trim() || '', // Для голосовых сообщений без текста
+        attachmentUrl: attachmentUrl
+      });
+      
+      if (!isVoiceMessage) {
+        setText('');
+      }
+      
+      await loadMessages(undefined, false);
+      
+      if (!isVoiceMessage) {
+        showToast('Файл загружен', 'success');
+      }
+    } catch (e: any) {
+      showToast('Ошибка загрузки файла: ' + (e.message || 'unknown'), 'error');
+      throw e; // Пробрасываем ошибку для обработки в вызывающем коде
+    }
+  };
+
+  // Закрепить сообщение
+  const pinMessage = async (messageId: string) => {
+    try {
+      await api(`/api/messages/${messageId}/pin`, 'POST');
+      showToast('Сообщение закреплено', 'success');
+      loadPinnedMessages();
+    } catch (e: any) {
+      showToast('Ошибка закрепления: ' + e.message, 'error');
+    }
+  };
+
+  // Открепить сообщение
+  const unpinMessage = async (messageId: string) => {
+    try {
+      await api(`/api/messages/${messageId}/unpin`, 'POST');
+      showToast('Сообщение откреплено', 'success');
+      loadPinnedMessages();
+    } catch (e: any) {
+      showToast('Ошибка открепления: ' + e.message, 'error');
+    }
+  };
+
+  // Голосовое сообщение
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  
+  const startRecording = async () => {
+    if (!chatId) {
+      showToast('Выберите чат для отправки сообщения', 'warning');
+      return;
+    }
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const chunks: Blob[] = [];
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      
+      mediaRecorder.onstop = async () => {
+        // Останавливаем поток
+        if (recordingStreamRef.current) {
+          recordingStreamRef.current.getTracks().forEach(track => track.stop());
+          recordingStreamRef.current = null;
+        }
+        
+        if (chunks.length > 0) {
+          try {
+            const blob = new Blob(chunks, { type: 'audio/webm' });
+            const file = new File([blob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
+            
+            // Отправляем файл через sendFile с флагом голосового сообщения
+            await sendFile(file, true);
+            showToast('Голосовое сообщение отправлено', 'success');
+          } catch (e: any) {
+            showToast('Ошибка отправки голосового сообщения: ' + (e.message || 'unknown'), 'error');
+          }
+        }
+        
+        setRecordingTime(0);
+      };
+      
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      
+      const startTime = Date.now();
+      recordingIntervalRef.current = window.setInterval(() => {
+        setRecordingTime(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+    } catch (e: any) {
+      showToast('Не удалось начать запись: ' + (e.message || 'unknown'), 'error');
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+    }
+  };
+  
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      // Останавливаем запись
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      
+      // Останавливаем поток
+      if (recordingStreamRef.current) {
+        recordingStreamRef.current.getTracks().forEach(track => track.stop());
+        recordingStreamRef.current = null;
+      }
+      
+      // Останавливаем интервал
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+      
+      setRecordingTime(0);
+      showToast('Запись отменена', 'info');
+    }
+  };
+  
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      // Останавливаем запись
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      
+      // Останавливаем поток
+      if (recordingStreamRef.current) {
+        recordingStreamRef.current.getTracks().forEach(track => track.stop());
+        recordingStreamRef.current = null;
+      }
+      
+      // Останавливаем интервал
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+      
+      setRecordingTime(0);
+      showToast('Запись отменена', 'info');
+    }
+  };
+
+  // Реакция
+  const addReaction = async (messageId: string, emoji: string) => {
+    try {
+      await api(`/api/messages/${messageId}/react`, 'POST', { emoji });
+      await loadMessages(undefined, false);
+    } catch (e: any) {
+      showToast('Ошибка реакции: ' + e.message, 'error');
+    }
+  };
+
+  // Загрузка доступных чатов для пересылки
+  const loadAvailableChats = async () => {
+    try {
+      const data = await api('/api/chats');
+      const chats = (data.chats || []).filter((c: any) => c.id !== chatId);
+      setAvailableChats(chats.map((c: any) => ({
+        id: c.id,
+        name: c.name || c.members?.find((m: any) => m.userId !== currentUser.id)?.user?.username || 'Чат',
+        type: c.type || 'dm'
+      })));
+    } catch (e: any) {
+      showToast('Ошибка загрузки чатов: ' + e.message, 'error');
+    }
+  };
+
+  // Пересылка сообщения
+  const forwardMessage = async (targetChatId: string) => {
+    if (!forwardMessageId) return;
+    try {
+      const message = messages.find(m => m.id === forwardMessageId);
+      if (!message) {
+        showToast('Сообщение не найдено', 'error');
+        return;
+      }
+      
+      await api(`/api/messages/${forwardMessageId}/forward`, 'POST', {
+        targetChatId,
+        comment: forwardComment.trim() || undefined
+      });
+      
+      showToast('Сообщение переслано', 'success');
+      setShowForwardModal(false);
+      setForwardMessageId(null);
+      setForwardComment('');
+    } catch (e: any) {
+      showToast('Ошибка пересылки: ' + e.message, 'error');
+    }
+  };
+
+  // Ввод текста с отслеживанием печати и упоминаний
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    const newCursorPos = e.target.selectionStart || 0;
+    setText(newText);
+    setCursorPosition(newCursorPos);
+    
+    // Проверяем упоминания
+    const textBeforeCursor = newText.slice(0, newCursorPos);
+    const mentionMatch = textBeforeCursor.match(/@([\w.-]*)$/);
+    if (mentionMatch) {
+      setMentionQuery({ query: mentionMatch[1], position: newCursorPos });
+    } else {
+      setMentionQuery(null);
+    }
+
+    if (socketRef.current) {
+      sendWebSocketMessage('typing', { chatId, isTyping: true });
+      setTimeout(() => {
+        sendWebSocketMessage('typing', { chatId, isTyping: false });
+      }, 3000);
+    }
+  };
+
+  // Обработка выбора упоминания
+  const handleMentionSelect = (username: string) => {
+    if (!mentionQuery) return;
+    const textBefore = text.slice(0, mentionQuery.position - mentionQuery.query.length - 1);
+    const textAfter = text.slice(mentionQuery.position);
+    const newText = textBefore + '@' + username + ' ' + textAfter;
+    setText(newText);
+    setMentionQuery(null);
+    setTimeout(() => {
+      if (inputRef.current) {
+        const newPos = textBefore.length + username.length + 2;
+        inputRef.current.setSelectionRange(newPos, newPos);
+        inputRef.current.focus();
+      }
+    }, 0);
+  };
+
+  // Отправка по Enter
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery && (e.key === 'Enter' || e.key === 'Tab')) {
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(text);
+    }
+  };
+
+  // Обработка клика по текстовому полю
+  const handleInputClick = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    const target = e.target as HTMLTextAreaElement;
+    setCursorPosition(target.selectionStart || 0);
+  };
+
+  const handleInputSelectionChange = () => {
+    if (inputRef.current) {
+      setCursorPosition(inputRef.current.selectionStart || 0);
+    }
+  };
+
+  const getUser = (userId: string): User => {
+    return users.get(userId) || { id: userId, username: userId };
+  };
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    if (diff < 60000) return 'только что';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} мин назад`;
+    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Рендеринг текста сообщения с подсветкой упоминаний и форматированием
+  const renderMessageText = (messageText: string) => {
+    const parts: (string | React.ReactElement)[] = [];
+    let lastIndex = 0;
+    
+    // Улучшенный regex для упоминаний - поддерживает @username и @username@domain
+    const mentionRegex = /@([\w.-]+)/g;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const boldRegex = /\*\*(.+?)\*\*/g;
+    const italicRegex = /\*(.+?)\*/g;
+    const codeRegex = /`([^`]+)`/g;
+    
+    const matches: Array<{index: number, length: number, type: string, content: string}> = [];
+    
+    let match;
+    while ((match = mentionRegex.exec(messageText)) !== null) {
+      matches.push({ index: match.index, length: match[0].length, type: 'mention', content: match[1] });
+    }
+    
+    urlRegex.lastIndex = 0;
+    while ((match = urlRegex.exec(messageText)) !== null) {
+      matches.push({ index: match.index, length: match[0].length, type: 'url', content: match[1] });
+    }
+    
+    boldRegex.lastIndex = 0;
+    while ((match = boldRegex.exec(messageText)) !== null) {
+      matches.push({ index: match.index, length: match[0].length, type: 'bold', content: match[1] });
+    }
+    
+    italicRegex.lastIndex = 0;
+    while ((match = italicRegex.exec(messageText)) !== null) {
+      const isPartOfBold = matches.some(m => m.type === 'bold' && match.index >= m.index && match.index < m.index + m.length);
+      if (!isPartOfBold) {
+        matches.push({ index: match.index, length: match[0].length, type: 'italic', content: match[1] });
+      }
+    }
+    
+    codeRegex.lastIndex = 0;
+    while ((match = codeRegex.exec(messageText)) !== null) {
+      matches.push({ index: match.index, length: match[0].length, type: 'code', content: match[1] });
+    }
+    
+    matches.sort((a, b) => a.index - b.index);
+    
+    const priority: Record<string, number> = { code: 5, bold: 4, italic: 3, mention: 2, url: 1 };
+    const filteredMatches = matches.filter((m, i) => {
+      for (let j = 0; j < i; j++) {
+        const other = matches[j];
+        if (m.index < other.index + other.length && m.index + m.length > other.index) {
+          if (priority[other.type] >= priority[m.type]) return false;
+        }
+      }
+      return true;
+    });
+    
+    filteredMatches.forEach(match => {
+      if (match.index > lastIndex) {
+        parts.push(messageText.slice(lastIndex, match.index));
+      }
+      
+      switch (match.type) {
+        case 'mention':
+          // Проверяем, существует ли пользователь с таким username
+          const mentionedUser = Array.from(users.values()).find(u => u.username.toLowerCase() === match.content.toLowerCase());
+          parts.push(
+            <span 
+              key={match.index} 
+              className="mention"
+              style={{
+                background: 'var(--accent-primary)',
+                color: 'white',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+              onClick={() => {
+                if (mentionedUser) {
+                  setShowUserProfile(mentionedUser.id);
+                }
+              }}
+              title={mentionedUser ? `Профиль ${mentionedUser.username}` : `@${match.content}`}
+            >
+              @{match.content}
+            </span>
+          );
+          break;
+        case 'url':
+          parts.push(<a key={match.index} href={match.content} target="_blank" rel="noreferrer" className="message-link">{match.content}</a>);
+          break;
+        case 'bold':
+          parts.push(<strong key={match.index}>{match.content}</strong>);
+          break;
+        case 'italic':
+          parts.push(<em key={match.index}>{match.content}</em>);
+          break;
+        case 'code':
+          parts.push(<code key={match.index} className="message-code">{match.content}</code>);
+          break;
+      }
+      
+      lastIndex = match.index + match.length;
+    });
+    
+    if (lastIndex < messageText.length) {
+      parts.push(messageText.slice(lastIndex));
+    }
+    
+    return parts.length > 0 ? <>{parts}</> : messageText;
+  };
+
+  if (inGroupCall) {
+    return (
+      <GroupVideoCall
+        chatId={chatId}
+        currentUserId={currentUser.id}
+        onClose={() => setInGroupCall(false)}
+      />
+    );
+  }
+
+  if (inDMCall) {
+    const otherMemberId = chatInfoRef.current?.members.find(id => id !== currentUser.id) || inDMCall.otherUserId;
+    if (otherMemberId) {
+      return (
+        <DMCall
+          chatId={chatId}
+          otherUserId={otherMemberId}
+          currentUserId={currentUser.id}
+          isVideo={inDMCall.isVideo}
+          isIncoming={inDMCall.isIncoming}
+          offerData={inDMCall.offerData}
+          onClose={() => setInDMCall(null)}
+        />
+      );
+    }
+  }
+
+  return (
+    <div className="enhanced-chat-window">
+      <div className="chat-header">
+        <div className="chat-title">
+          {chatInfoRef.current ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+              {chatInfoRef.current.type === 'dm' ? '💬' : chatInfoRef.current.type === 'group' ? '👥' : '📢'}
+              <span style={{ fontWeight: '600' }}>
+                {chatInfoRef.current.type === 'dm' ? (() => {
+                  // Для DM показываем ник собеседника
+                  const otherMemberId = chatInfoRef.current.members.find(id => id !== currentUser.id);
+                  if (otherMemberId) {
+                    const otherUser = users.get(otherMemberId);
+                    if (otherUser) {
+                      return otherUser.username;
+                    }
+                  }
+                  return 'Личный чат';
+                })() : (chatInfoRef.current.name || 'Чат')}
+              </span>
+            </div>
+          ) : selectedThreadId ? (
+            <div className="thread-header">
+              <button onClick={() => { setSelectedThreadId(null); setShowThreads(false); }} className="back-btn">
+                ← Назад
+              </button>
+              <span>{threads.find(t => t.id === selectedThreadId)?.name || 'Тред'}</span>
+            </div>
+          ) : replyingTo ? (
+            <div className="reply-preview" style={{
+              padding: 'var(--spacing-sm) var(--spacing-md)',
+              background: 'var(--bg-secondary)',
+              borderRadius: 'var(--radius-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderLeft: '3px solid var(--accent-primary)',
+              marginBottom: 'var(--spacing-sm)'
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '2px', color: 'var(--text-primary)' }}>
+                  Ответ на {users.get(replyingTo.senderId)?.username || 'пользователя'}
+                </div>
+                <div style={{ 
+                  fontSize: '12px', 
+                  color: 'var(--text-secondary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {replyingTo.text ? (replyingTo.text.length > 50 ? replyingTo.text.slice(0, 50) + '...' : replyingTo.text) : 'Сообщение'}
+                </div>
+              </div>
+              <button 
+                onClick={() => setReplyingTo(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  fontSize: '18px',
+                  marginLeft: 'var(--spacing-sm)',
+                  transition: 'var(--transition-base)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'var(--text-primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                }}
+                title="Отменить ответ"
+              >
+                ✕
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="chat-header-actions">
+          <button
+            className="search-btn"
+            onClick={() => setShowSearch(!showSearch)}
+            title="Поиск"
+          >
+            🔍
+          </button>
+          <button
+            className="media-gallery-btn"
+            onClick={() => setShowMediaGallery(true)}
+            title="Медиа галерея"
+          >
+            📷 Медиа
+          </button>
+          {pinnedMessages.length > 0 && (
+            <button
+              className="pinned-btn"
+              onClick={() => setShowPinned(!showPinned)}
+              title="Закрепленные сообщения"
+            >
+              📌 {pinnedMessages.length}
+            </button>
+          )}
+          {(chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') && (
+            <>
+              <button
+                className="threads-btn"
+                onClick={() => setShowThreads(!showThreads)}
+                title="Показать треды"
+              >
+                💬 Треды {threads.length > 0 && `(${threads.length})`}
+              </button>
+              <button
+                className="settings-btn"
+                onClick={() => setShowGroupSettings(true)}
+                title={chatInfoRef.current?.type === 'group' ? 'Настройки группы' : 'Настройки канала'}
+              >
+                ⚙️
+              </button>
+              <button
+                className="video-call-btn"
+                onClick={() => setInGroupCall(true)}
+                title="Начать видеозвонок"
+              >
+                📹 Видеозвонок
+              </button>
+              {(isChatOwner || isPlatformAdmin) && (
+                <button
+                  className="delete-chat-btn"
+                  onClick={async () => {
+                    if (!confirm('Вы уверены, что хотите удалить этот чат? Это действие нельзя отменить.')) {
+                      return;
+                    }
+                    try {
+                      await api(`/api/chats/${chatId}`, 'DELETE');
+                      showToast('Чат удален', 'success');
+                      window.location.href = '/app/chats';
+                    } catch (e: any) {
+                      showToast('Ошибка удаления: ' + e.message, 'error');
+                    }
+                  }}
+                  title="Удалить чат"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    fontSize: '16px',
+                    color: 'var(--danger)',
+                    borderRadius: 'var(--radius-sm)',
+                    transition: 'var(--transition-base)'
+                  }}
+                >
+                  🗑️
+                </button>
+              )}
+            </>
+          )}
+          {chatInfoRef.current?.type === 'dm' && (
+            <>
+              <button
+                className="call-btn"
+                onClick={() => {
+                  const otherMemberId = chatInfoRef.current?.members.find(id => id !== currentUser.id);
+                  if (otherMemberId) {
+                    playCallSound();
+                    setInDMCall({ isVideo: false, otherUserId: otherMemberId });
+                  }
+                }}
+                title="Звонок"
+              >
+                📞
+              </button>
+              <button
+                className="video-call-btn"
+                onClick={() => {
+                  const otherMemberId = chatInfoRef.current?.members.find(id => id !== currentUser.id);
+                  if (otherMemberId) {
+                    playCallSound();
+                    setInDMCall({ isVideo: true, otherUserId: otherMemberId });
+                  }
+                }}
+                title="Видеозвонок"
+              >
+                📹
+              </button>
+            </>
+          )}
+          <button
+            className="settings-btn"
+            onClick={() => {
+              if (chatInfoRef.current?.type === 'dm') {
+                const otherMemberId = chatInfoRef.current.members.find(id => id !== currentUser.id);
+                if (otherMemberId) {
+                  setShowUserProfile(otherMemberId);
+                }
+              } else {
+                setShowGroupSettings(true);
+              }
+            }}
+            title={chatInfoRef.current?.type === 'dm' ? 'Профиль' : 'Настройки'}
+          >
+            {chatInfoRef.current?.type === 'dm' ? '👤' : '⚙️'}
+          </button>
+          {onClose && <button className="close-btn" onClick={onClose}>✕</button>}
+        </div>
+      </div>
+
+      {/* Поиск по сообщениям */}
+      {showSearch && (
+        <div className="message-search">
+          <div className="search-header">
+            <input
+              type="text"
+              placeholder="Поиск по сообщениям..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (e.target.value.trim()) {
+                  searchMessages(e.target.value);
+                } else {
+                  setSearchResults([]);
+                }
+              }}
+              className="search-input"
+            />
+            <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}>
+              ✕
+            </button>
+          </div>
+          {searchQuery.trim() && (
+            <div className="search-results">
+              {searchResults.length > 0 ? (
+                searchResults.map(result => {
+                  const sender = getUser(result.senderId);
+                  const queryLower = searchQuery.toLowerCase();
+                  const textLower = (result.text || '').toLowerCase();
+                  const matchIndex = textLower.indexOf(queryLower);
+                  
+                  // Выделяем найденный текст
+                  const renderHighlightedText = (text: string) => {
+                    if (!text || matchIndex === -1) return text;
+                    const before = text.substring(0, matchIndex);
+                    const match = text.substring(matchIndex, matchIndex + searchQuery.length);
+                    const after = text.substring(matchIndex + searchQuery.length);
+                    return (
+                      <>
+                        {before}
+                        <mark style={{ background: 'var(--accent-primary)', color: 'white', padding: '2px 4px', borderRadius: '4px' }}>
+                          {match}
+                        </mark>
+                        {after}
+                      </>
+                    );
+                  };
+                  
+                  return (
+                    <div
+                      key={result.id}
+                      className="search-result-item"
+                      onClick={async () => {
+                        // Если сообщение не в текущем списке, загружаем сообщения
+                        if (!messages.find(m => m.id === result.id)) {
+                          await loadMessages(undefined, false);
+                        }
+                        
+                        // Прокрутка к сообщению
+                        setTimeout(() => {
+                          const element = document.querySelector(`[data-message-id="${result.id}"]`);
+                          if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            element.classList.add('highlight');
+                            setTimeout(() => element.classList.remove('highlight'), 2000);
+                          }
+                        }, 300);
+                        
+                        setShowSearch(false);
+                      }}
+                    >
+                      <div className="search-result-header">
+                        <div className="search-result-sender">
+                          {sender.avatarUrl ? (
+                            <img src={sender.avatarUrl} alt={sender.username} className="search-result-avatar" />
+                          ) : (
+                            <div className="search-result-avatar-placeholder">
+                              {sender.username[0].toUpperCase()}
+                            </div>
+                          )}
+                          <span className="search-result-username">{sender.username}</span>
+                        </div>
+                        <div className="search-result-time">{formatTime(result.createdAt)}</div>
+                      </div>
+                      <div className="search-result-text">
+                        {result.text ? (
+                          result.text.length > 150 ? (
+                            <>
+                              {renderHighlightedText(result.text.slice(0, 150))}
+                              <span style={{ color: 'var(--text-tertiary)' }}>...</span>
+                            </>
+                          ) : (
+                            renderHighlightedText(result.text)
+                          )
+                        ) : result.attachmentUrl ? (
+                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>📎 Вложение</span>
+                        ) : result.stickerId ? (
+                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>🎨 Стикер</span>
+                        ) : result.gifUrl ? (
+                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>🎬 GIF</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Сообщение без текста</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : searchQuery.trim() && (
+                <div className="search-results-empty">
+                  Ничего не найдено
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Панель закрепленных сообщений */}
+      {showPinned && (
+        <div className="pinned-messages-panel" style={{
+          position: 'absolute',
+          top: '60px',
+          right: '16px',
+          width: '350px',
+          maxHeight: '500px',
+          background: 'rgba(17, 24, 39, 0.95)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
+          <div className="pinned-messages-header" style={{
+            padding: 'var(--spacing-md)',
+            borderBottom: '1px solid var(--border-color)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'var(--bg-secondary)'
+          }}>
+            <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
+              📌 Закрепленные ({pinnedMessages.length})
+            </h4>
+            <button 
+              onClick={() => setShowPinned(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: '20px',
+                padding: '4px 8px',
+                borderRadius: 'var(--radius-sm)',
+                transition: 'var(--transition-base)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-hover)';
+                e.currentTarget.style.color = 'var(--text-primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+              }}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="pinned-messages-list" style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: 'var(--spacing-sm)'
+          }}>
+            {pinnedMessages.length === 0 ? (
+              <div style={{
+                padding: 'var(--spacing-lg)',
+                textAlign: 'center',
+                color: 'var(--text-tertiary)',
+                fontStyle: 'italic'
+              }}>
+                Нет закрепленных сообщений
+              </div>
+            ) : (
+              pinnedMessages.map((pinnedMsg) => {
+                const pinnedSender = getUser(pinnedMsg.senderId);
+                return (
+                  <div
+                    key={pinnedMsg.id}
+                    className="pinned-message-item"
+                    onClick={() => {
+                      // Прокрутка к сообщению
+                      const element = document.querySelector(`[data-message-id="${pinnedMsg.id}"]`);
+                      if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        element.classList.add('highlight');
+                        setTimeout(() => element.classList.remove('highlight'), 2000);
+                      }
+                      setShowPinned(false);
+                    }}
+                    style={{
+                      padding: 'var(--spacing-sm)',
+                      marginBottom: 'var(--spacing-xs)',
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                      transition: 'var(--transition-base)',
+                      position: 'relative'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-hover)';
+                      e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-secondary)';
+                      e.currentTarget.style.borderColor = 'var(--border-color)';
+                    }}
+                  >
+                    <div className="pinned-message-header" style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 'var(--spacing-xs)'
+                    }}>
+                      <div className="pinned-message-sender" style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--spacing-xs)',
+                        flex: 1,
+                        minWidth: 0
+                      }}>
+                        {pinnedSender.avatarUrl ? (
+                          <img 
+                            src={pinnedSender.avatarUrl} 
+                            alt={pinnedSender.username} 
+                            style={{
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: 'var(--accent-primary)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                            color: '#fff'
+                          }}>
+                            {pinnedSender.username[0].toUpperCase()}
+                          </div>
+                        )}
+                        <span style={{
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {pinnedSender.username}
+                        </span>
+                      </div>
+                      <div style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                        flexShrink: 0,
+                        marginLeft: 'var(--spacing-xs)'
+                      }}>
+                        {formatTime(pinnedMsg.createdAt)}
+                      </div>
+                    </div>
+                    <div className="pinned-message-text" style={{
+                      fontSize: '13px',
+                      color: 'var(--text-secondary)',
+                      lineHeight: '1.4',
+                      marginBottom: 'var(--spacing-xs)'
+                    }}>
+                      {pinnedMsg.text ? (
+                        pinnedMsg.text.length > 120 ? (
+                          pinnedMsg.text.slice(0, 120) + '...'
+                        ) : (
+                          pinnedMsg.text
+                        )
+                      ) : pinnedMsg.attachmentUrl ? (
+                        <span style={{ fontStyle: 'italic' }}>📎 Вложение</span>
+                      ) : pinnedMsg.stickerId ? (
+                        <span style={{ fontStyle: 'italic' }}>🎨 Стикер</span>
+                      ) : pinnedMsg.gifUrl ? (
+                        <span style={{ fontStyle: 'italic' }}>🎬 GIF</span>
+                      ) : (
+                        <span style={{ fontStyle: 'italic', color: 'var(--text-tertiary)' }}>Сообщение без текста</span>
+                      )}
+                    </div>
+                    {(isChatOwner || isPlatformAdmin || pinnedMsg.senderId === currentUser.id) && (
+                      <button
+                        className="pinned-unpin-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          unpinMessage(pinnedMsg.id);
+                        }}
+                        title="Открепить"
+                        style={{
+                          position: 'absolute',
+                          top: 'var(--spacing-xs)',
+                          right: 'var(--spacing-xs)',
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-tertiary)',
+                          cursor: 'pointer',
+                          fontSize: '16px',
+                          padding: '4px',
+                          borderRadius: 'var(--radius-sm)',
+                          transition: 'var(--transition-base)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--bg-hover)';
+                          e.currentTarget.style.color = 'var(--accent-primary)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                          e.currentTarget.style.color = 'var(--text-tertiary)';
+                        }}
+                      >
+                        📌
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      <div 
+        ref={messagesContainerRef}
+        className="messages-container chat-messages"
+        onScroll={handleScroll}
+      >
+        {/* Кнопка загрузки старых сообщений */}
+        {hasMoreMessages && (
+          <div style={{ 
+            padding: 'var(--spacing-md)', 
+            textAlign: 'center',
+            borderBottom: '1px solid var(--border-color)'
+          }}>
+            <button
+              onClick={loadMoreMessages}
+              disabled={loadingMoreMessages}
+              style={{
+                padding: 'var(--spacing-sm) var(--spacing-md)',
+                background: loadingMoreMessages ? 'var(--bg-secondary)' : 'var(--accent-primary)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                cursor: loadingMoreMessages ? 'not-allowed' : 'pointer',
+                fontSize: '13px',
+                fontWeight: '500',
+                opacity: loadingMoreMessages ? 0.6 : 1
+              }}
+            >
+              {loadingMoreMessages ? '⏳ Загрузка...' : '⬆️ Загрузить старые сообщения'}
+            </button>
+          </div>
+        )}
+        {messages.map((msg, idx) => {
+          const sender = getUser(msg.senderId);
+          const isMe = msg.senderId === currentUser.id;
+          const msgReactions = (reactions.get(msg.id) || []) as Array<{userId: string, emoji: string}>;
+          const prevMsg = idx > 0 ? messages[idx - 1] : null;
+          const showAvatar = !prevMsg || prevMsg.senderId !== msg.senderId;
+
+          return (
+            <div 
+              key={msg.id} 
+              data-message-id={msg.id} 
+              className={`message-wrapper message ${isMe ? 'message-me me' : ''} ${msg.expiresAt && msg.expiresAt < Date.now() ? 'expired' : ''}`}
+              style={{ animationDelay: `${idx * 0.03}s` }}
+            >
+              {!isMe && showAvatar && (
+                <div 
+                  className="message-avatar"
+                  onClick={() => setShowUserProfile(msg.senderId)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {sender.avatarUrl ? (
+                    <img src={sender.avatarUrl} alt={sender.username} />
+                  ) : (
+                    <div className="avatar-placeholder">{sender.username[0].toUpperCase()}</div>
+                  )}
+                </div>
+              )}
+              <div className="message-content">
+                {!isMe && showAvatar && (
+                  <div className="message-sender">{sender.username}</div>
+                )}
+                {msg.threadId && (
+                  <div className="message-thread-indicator" style={{ 
+                    padding: '4px 8px', 
+                    background: 'var(--bg-secondary)', 
+                    borderRadius: '4px', 
+                    fontSize: '12px', 
+                    color: 'var(--text-secondary)',
+                    marginBottom: '4px',
+                    display: 'inline-block'
+                  }}>
+                    💬 Тред: {threads.find(t => t.id === msg.threadId)?.name || 'Тред'}
+                  </div>
+                )}
+                {msg.replyTo && (
+                  <div 
+                    className="message-reply"
+                    onClick={() => {
+                      // Прокрутка к исходному сообщению
+                      const replyMessage = msg.replyToMessage || messages.find(m => m.id === msg.replyTo);
+                      if (replyMessage) {
+                        const element = document.querySelector(`[data-message-id="${msg.replyTo}"]`);
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          element.classList.add('highlight');
+                          setTimeout(() => element.classList.remove('highlight'), 2000);
+                        }
+                      }
+                    }}
+                    style={{ 
+                      cursor: 'pointer',
+                      padding: '8px 12px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      marginBottom: '8px',
+                      borderLeft: '3px solid var(--accent-primary)',
+                      fontSize: '13px',
+                      color: 'var(--text-secondary)',
+                      transition: 'var(--transition-base)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-tertiary)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-secondary)';
+                    }}
+                  >
+                    <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
+                      {(() => {
+                        const replyMsg = msg.replyToMessage || messages.find(m => m.id === msg.replyTo);
+                        if (replyMsg) {
+                          const replySender = replyMsg.replyToMessage?.sender || users.get(replyMsg.senderId);
+                          return `↩️ Ответ на ${replySender?.username || 'пользователя'}`;
+                        }
+                        return '↩️ Ответ на сообщение';
+                      })()}
+                    </div>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '300px'
+                    }}>
+                      {(() => {
+                        const replyMsg = msg.replyToMessage || messages.find(m => m.id === msg.replyTo);
+                        if (replyMsg) {
+                          if (replyMsg.text) {
+                            return replyMsg.text.length > 50 ? replyMsg.text.slice(0, 50) + '...' : replyMsg.text;
+                          }
+                          if (replyMsg.attachmentUrl) return '📎 Вложение';
+                          if (replyMsg.stickerId) return '🎨 Стикер';
+                          if (replyMsg.gifUrl) return '🎬 GIF';
+                        }
+                        return 'Сообщение';
+                      })()}
+                    </div>
+                  </div>
+                )}
+                {msg.forwardFrom && (
+                  <div className="message-forward" style={{
+                    padding: '8px 12px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-sm)',
+                    marginBottom: '8px',
+                    borderLeft: '3px solid var(--accent-secondary)',
+                    fontSize: '13px',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span>➡️ Переслано</span>
+                    {msg.forwardedMessage && (
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
+                        от {msg.forwardedMessage.sender?.username || 'пользователя'}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {msg.forwardFrom && msg.forwardedMessage && (
+                  <div className="forwarded-message-preview" style={{
+                    padding: '8px 12px',
+                    background: 'var(--bg-tertiary)',
+                    borderRadius: 'var(--radius-sm)',
+                    marginBottom: '8px',
+                    borderLeft: '3px solid var(--accent-secondary)',
+                    fontSize: '13px',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
+                      {msg.forwardedMessage.sender?.username || 'Пользователь'}
+                    </div>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '300px'
+                    }}>
+                      {msg.forwardedMessage.text ? (
+                        msg.forwardedMessage.text.length > 50 ? 
+                          msg.forwardedMessage.text.slice(0, 50) + '...' : 
+                          msg.forwardedMessage.text
+                      ) : msg.forwardedMessage.attachmentUrl ? (
+                        '📎 Вложение'
+                      ) : (
+                        'Сообщение'
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="message-bubble">
+                  {msg.stickerId && (
+                    <div className="message-sticker" style={{
+                      padding: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      {stickerMap.get(msg.stickerId) ? (
+                        <img 
+                          src={stickerMap.get(msg.stickerId)!.url} 
+                          alt={stickerMap.get(msg.stickerId)!.emoji || 'sticker'} 
+                          style={{
+                            maxWidth: '200px',
+                            maxHeight: '200px',
+                            objectFit: 'contain'
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          padding: '16px',
+                          background: 'var(--bg-secondary)',
+                          borderRadius: '8px',
+                          color: 'var(--text-tertiary)',
+                          fontStyle: 'italic'
+                        }}>
+                          Загрузка стикера...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {msg.text && (
+                    <div className="message-text">
+                      {editingMessage?.id === msg.id ? (
+                        <div className="message-edit-input">
+                          <textarea
+                            defaultValue={msg.text}
+                            ref={(el) => {
+                              if (el) {
+                                el.focus();
+                                el.setSelectionRange(el.value.length, el.value.length);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                editMessage(msg.id, e.currentTarget.value);
+                              }
+                              if (e.key === 'Escape') {
+                                setEditingMessage(null);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              if (e.currentTarget.value !== msg.text) {
+                                editMessage(msg.id, e.currentTarget.value);
+                              } else {
+                                setEditingMessage(null);
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        renderMessageText(msg.text)
+                      )}
+                    </div>
+                  )}
+                  {msg.attachmentUrl && (
+                    <div className="message-attachment">
+                      {(() => {
+                        // Формируем полный URL для медиафайла
+                        const attachmentUrl = msg.attachmentUrl.startsWith('http') 
+                          ? msg.attachmentUrl 
+                          : `${API_URL}${msg.attachmentUrl.startsWith('/') ? '' : '/'}${msg.attachmentUrl}`;
+                        
+                        if (msg.attachmentUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+                          return <img src={attachmentUrl} alt="attachment" style={{ maxWidth: '100%', borderRadius: '8px' }} />;
+                        } else if (msg.attachmentUrl.match(/\.(mp4|webm)$/i)) {
+                          return <video src={attachmentUrl} controls style={{ maxWidth: '100%', borderRadius: '8px' }} />;
+                        } else if (msg.attachmentUrl.match(/\.(mp3|wav|ogg|webm)$/i)) {
+                          return (
+                            <div style={{ marginTop: '8px' }}>
+                              <AudioPlayer src={attachmentUrl} />
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <a href={attachmentUrl} target="_blank" rel="noreferrer" download>
+                              📎 {msg.attachmentUrl.split('/').pop()}
+                            </a>
+                          );
+                        }
+                      })()}
+                    </div>
+                  )}
+                  {msg.text && msg.text.includes('📍') && (
+                    <div className="message-location">
+                      <button
+                        className="location-view-btn"
+                        onClick={async () => {
+                          try {
+                            const location = await api(`/api/messages/${msg.id}/location`);
+                            const url = `https://www.openstreetmap.org/?mlat=${location.location.lat}&mlon=${location.location.lng}&zoom=15`;
+                            window.open(url, '_blank');
+                          } catch (e) {
+                            console.error('Failed to load location:', e);
+                          }
+                        }}
+                      >
+                        📍 Показать на карте
+                      </button>
+                    </div>
+                  )}
+                  <div className="message-meta">
+                    <span>{formatTime(msg.createdAt)}</span>
+                    {msg.editedAt && <span className="edited">(изменено)</span>}
+                    {isMe && (
+                      <span className="read-status" title={(() => {
+                        if (msg.readReceipts && msg.readReceipts.length > 0) {
+                          const lastRead = msg.readReceipts[msg.readReceipts.length - 1];
+                          return `Прочитано ${formatTime(lastRead.readAt)}`;
+                        }
+                        return 'Не прочитано';
+                      })()}>
+                        {(() => {
+                          // Для DM чатов показываем простой статус
+                          if (chatInfoRef.current?.type === 'dm') {
+                            if (msg.readReceipts && msg.readReceipts.length > 0) {
+                              return '✓✓'; // Прочитано (двойная галочка)
+                            }
+                            return '✓'; // Доставлено (одна галочка)
+                          }
+                          // Для групповых чатов показываем количество прочитавших
+                          if (msg.readReceipts && msg.readReceipts.length > 0) {
+                            return `✓✓ ${msg.readReceipts.length}`;
+                          }
+                          return '✓';
+                        })()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {msgReactions.length > 0 && (
+                  <div className="message-reactions">
+                    {Array.from(new Set(msgReactions.map(r => r.emoji))).map(emoji => (
+                      <button
+                        key={emoji}
+                        className="reaction-btn"
+                        onClick={() => addReaction(msg.id, emoji)}
+                        title={msgReactions.filter(r => r.emoji === emoji).length + ' ' + emoji}
+                      >
+                        {emoji} {msgReactions.filter(r => r.emoji === emoji).length}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="message-actions">
+                  <button onClick={() => addReaction(msg.id, '👍')}>👍</button>
+                  <button onClick={() => addReaction(msg.id, '❤️')}>❤️</button>
+                  <button onClick={() => setReplyingTo(msg)}>Ответить</button>
+                  <button onClick={() => {
+                    setForwardMessageId(msg.id);
+                    loadAvailableChats();
+                    setShowForwardModal(true);
+                  }} title="Переслать">
+                    ➡️ Переслать
+                  </button>
+                  {isMessageSaved(msg.id) ? (
+                    <button onClick={() => unsaveMessage(msg.id)} title="Удалить из избранного">
+                      ⭐
+                    </button>
+                  ) : (
+                    <button onClick={() => saveMessage(msg.id)} title="Сохранить в избранное">
+                      ☆
+                    </button>
+                  )}
+                  {(() => {
+                    const isPinned = pinnedMessages.some(p => p.id === msg.id);
+                    return isPinned ? (
+                      <button onClick={() => unpinMessage(msg.id)} title="Открепить">
+                        📌
+                      </button>
+                    ) : (
+                      <button onClick={() => pinMessage(msg.id)} title="Закрепить">
+                        📌
+                      </button>
+                    );
+                  })()}
+                  {msg.senderId === currentUser.id && (
+                    <>
+                      <button onClick={() => setEditingMessage(msg)} title="Редактировать">
+                        ✏️
+                      </button>
+                      <button 
+                        onClick={() => setConfirmDelete({ open: true, messageId: msg.id, deleteForAll: true })}
+                        title="Удалить для всех"
+                      >
+                        🗑️
+                      </button>
+                      <button 
+                        onClick={() => setConfirmDelete({ open: true, messageId: msg.id, deleteForAll: false })}
+                        title="Удалить для меня"
+                      >
+                        🗑️
+                      </button>
+                    </>
+                  )}
+                  {(chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') && !msg.threadId && (
+                    <button onClick={() => {
+                      setThreadRootMessageId(msg.id);
+                      setShowThreadModal(true);
+                    }} title="Создать тред">
+                      💬 Тред
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {typingUsers.size > 0 && (
+          <div className="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--subtle)' }}>
+              {Array.from(typingUsers).map((userId: string) => getUser(userId).username).join(', ')} печатает...
+            </span>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Список тредов */}
+      {showThreads && !selectedThreadId && (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') && (
+        <div className="threads-sidebar">
+          <div className="threads-header">
+            <h4>Треды</h4>
+            <button onClick={() => setShowThreads(false)}>✕</button>
+          </div>
+          <div className="threads-list">
+            {threads.length === 0 ? (
+              <div className="empty-threads">Нет тредов</div>
+            ) : (
+              threads.map(thread => (
+                <div
+                  key={thread.id}
+                  className="thread-item"
+                  onClick={() => {
+                    setSelectedThreadId(thread.id);
+                    setShowThreads(false);
+                  }}
+                >
+                  <div className="thread-name">{thread.name}</div>
+                  <div className="thread-meta">
+                    {thread.messageCount || 0} сообщений
+                    {thread.unreadCount > 0 && (
+                      <span className="thread-unread">{thread.unreadCount}</span>
+                    )}
+                  </div>
+                  {thread.lastMessage && (
+                    <div className="thread-preview">{thread.lastMessage.text?.slice(0, 40)}...</div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Медиа галерея */}
+      {showMediaGallery && (
+        <div className="media-gallery-overlay">
+          <MediaGallery
+            chatId={chatId}
+            onClose={() => setShowMediaGallery(false)}
+          />
+        </div>
+      )}
+
+      {/* Профиль пользователя */}
+      {showUserProfile && (
+        <div className="user-profile-overlay">
+          <UserProfile
+            userId={showUserProfile}
+            currentUserId={currentUser.id}
+            onClose={() => setShowUserProfile(null)}
+          />
+        </div>
+      )}
+
+      {/* Настройки группы/канала */}
+      {showGroupSettings && chatInfoRef.current?.type && (chatInfoRef.current.type === 'group' || chatInfoRef.current.type === 'channel') && (
+        <GroupChannelSettings
+          chatId={chatId}
+          chatType={chatInfoRef.current.type}
+          currentUserId={currentUser.id}
+          onClose={() => setShowGroupSettings(false)}
+          onUpdate={() => {
+            loadChatInfo();
+            loadMessages();
+          }}
+        />
+      )}
+
+      {/* Модальное окно создания треда */}
+      <PromptModal
+        isOpen={showThreadModal}
+        onClose={() => {
+          setShowThreadModal(false);
+          setThreadRootMessageId('');
+        }}
+        onConfirm={createThread}
+        title="Создать тред"
+        message="Введите название треда (необязательно):"
+        placeholder="Название треда"
+        defaultValue=""
+        confirmText="Создать"
+        cancelText="Отмена"
+      />
+
+      {/* Модальное окно пересылки */}
+      {showForwardModal && forwardMessageId && (
+        <div className="modal-overlay" onClick={() => setShowForwardModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', width: '90%' }}>
+            <div className="modal-header">
+              <h3>Переслать сообщение</h3>
+              <button onClick={() => setShowForwardModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
+                  Комментарий (необязательно):
+                </label>
+                <textarea
+                  value={forwardComment}
+                  onChange={(e) => setForwardComment(e.target.value)}
+                  placeholder="Добавьте комментарий..."
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border, #333)',
+                    background: 'var(--bg-secondary, #1a1a1a)',
+                    color: 'var(--text, #fff)',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
+                  Выберите чат:
+                </label>
+                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {availableChats.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--subtle, #888)' }}>
+                      Нет доступных чатов
+                    </div>
+                  ) : (
+                    availableChats.map(chat => (
+                      <button
+                        key={chat.id}
+                        onClick={() => forwardMessage(chat.id)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          marginBottom: '8px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border, #333)',
+                          background: 'var(--bg-secondary, #1a1a1a)',
+                          color: 'var(--text, #fff)',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--bg-hover, #2a2a2a)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'var(--bg-secondary, #1a1a1a)';
+                        }}
+                      >
+                        <div style={{ fontWeight: '600' }}>{chat.name}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--subtle, #888)', marginTop: '4px' }}>
+                          {chat.type === 'dm' ? 'Личный чат' : chat.type === 'group' ? 'Группа' : 'Канал'}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowForwardModal(false)}>Отмена</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="chat-input-container">
+        {isRecording && (
+          <div className="recording-indicator" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--spacing-sm)',
+            padding: 'var(--spacing-sm) var(--spacing-md)',
+            background: 'rgba(220, 53, 69, 0.1)',
+            border: '1px solid rgba(220, 53, 69, 0.3)',
+            borderRadius: 'var(--radius-sm)',
+            marginBottom: 'var(--spacing-sm)'
+          }}>
+            <div className="recording-dot" style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              background: '#dc3545',
+              animation: 'pulse 1s infinite'
+            }}></div>
+            <span style={{ fontWeight: '600', color: '#dc3545' }}>
+              {formatRecordingTime(recordingTime)}
+            </span>
+            <button 
+              onClick={stopRecording}
+              style={{
+                padding: 'var(--spacing-xs) var(--spacing-sm)',
+                background: 'var(--accent-primary)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '500'
+              }}
+            >
+              ✓ Отправить
+            </button>
+            <button 
+              onClick={cancelRecording}
+              style={{
+                padding: 'var(--spacing-xs) var(--spacing-sm)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '500'
+              }}
+            >
+              ✕ Отмена
+            </button>
+          </div>
+        )}
+        <div className="chat-input-wrapper">
+          <button
+            className="attach-btn"
+            onClick={() => fileInputRef.current?.click()}
+            title="Прикрепить файл"
+          >
+            📎
+          </button>
+          <button
+            className="emoji-btn"
+            onClick={() => {
+              setShowEmojiPicker(!showEmojiPicker);
+              setShowStickerPicker(false);
+              setShowGifPicker(false);
+              setShowLocationPicker(false);
+            }}
+            title="Эмодзи"
+          >
+            😀
+          </button>
+          <button
+            className="sticker-btn"
+            onClick={() => {
+              setShowStickerPicker(!showStickerPicker);
+              setShowEmojiPicker(false);
+              setShowGifPicker(false);
+              setShowLocationPicker(false);
+            }}
+            title="Стикеры"
+          >
+            🎨
+          </button>
+          <button
+            className="gif-btn"
+            onClick={() => {
+              setShowGifPicker(!showGifPicker);
+              setShowEmojiPicker(false);
+              setShowStickerPicker(false);
+              setShowLocationPicker(false);
+            }}
+            title="GIF"
+          >
+            🎬
+          </button>
+          <button
+            className="location-btn"
+            onClick={() => {
+              setShowLocationPicker(!showLocationPicker);
+              setShowEmojiPicker(false);
+              setShowStickerPicker(false);
+              setShowGifPicker(false);
+            }}
+            title="Геолокация"
+          >
+            📍
+          </button>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <textarea
+              ref={inputRef}
+              className="chat-input"
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              onClick={handleInputClick}
+              onSelect={handleInputSelectionChange}
+              placeholder="Напишите сообщение... (используйте @ для упоминаний)"
+              rows={1}
+            />
+            {mentionQuery && (
+              <MentionAutocomplete
+                text={text}
+                cursorPosition={cursorPosition}
+                onSelect={handleMentionSelect}
+                onClose={() => setMentionQuery(null)}
+                chatMembers={chatMembers || chatInfoRef.current?.members}
+              />
+            )}
+            {showEmojiPicker && (
+              <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: '8px' }}>
+                <EmojiPicker
+                  onSelect={(emoji) => {
+                    setText(prev => prev + emoji);
+                    setShowEmojiPicker(false);
+                    if (inputRef.current) {
+                      inputRef.current.focus();
+                    }
+                  }}
+                  onClose={() => setShowEmojiPicker(false)}
+                />
+              </div>
+            )}
+            {showStickerPicker && (
+              <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: '8px' }}>
+                <StickerPicker
+                  onSelect={(stickerId) => {
+                    sendMessage('', undefined, stickerId);
+                    setShowStickerPicker(false);
+                  }}
+                  onClose={() => setShowStickerPicker(false)}
+                />
+              </div>
+            )}
+            {showGifPicker && (
+              <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: '8px' }}>
+                <GifPicker
+                  onSelect={(gifUrl) => {
+                    sendMessage('', gifUrl);
+                    setShowGifPicker(false);
+                  }}
+                  onClose={() => setShowGifPicker(false)}
+                />
+              </div>
+            )}
+            {showLocationPicker && (
+              <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: '8px' }}>
+                <LocationPicker
+                  onSelect={sendLocation}
+                  onClose={() => setShowLocationPicker(false)}
+                />
+              </div>
+            )}
+          </div>
+          {isRecording ? (
+            <button className="record-btn active" onClick={stopRecording}>
+              ⏹
+            </button>
+          ) : (
+            <button
+              className="record-btn"
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onTouchStart={startRecording}
+              onTouchEnd={stopRecording}
+              title="Голосовое сообщение (удерживайте)"
+            >
+              🎤
+            </button>
+          )}
+          <button 
+            className="send-btn ripple" 
+            onClick={() => sendMessage(text)} 
+            disabled={!text.trim() || isLoading}
+            title="Отправить (Enter)"
+          >
+            {isLoading ? (
+              <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div>
+            ) : (
+              '➤'
+            )}
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            if (e.target.files?.[0]) sendFile(e.target.files[0]);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+

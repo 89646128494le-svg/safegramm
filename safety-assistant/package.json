@@ -1,0 +1,12 @@
+{
+  "name": "safety-assistant",
+  "version": "0.1.0",
+  "description": "Standalone Safety / Safety-X desktop assistant for SafeGram",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^32.0.0"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "safegram-voice-web",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "vite": "^5.4.8"
+  }
+}

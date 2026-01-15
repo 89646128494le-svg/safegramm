@@ -1,0 +1,8 @@
+{
+  "name": "safegram-rn",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "echo \"Use Expo or React Native CLI to bootstrap\" && exit 0"
+  }
+}
