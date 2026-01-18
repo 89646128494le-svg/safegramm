@@ -30,34 +30,49 @@ git remote add origin https://github.com/89646128494le-svg/safegram2
 echo [4/6] Adding files...
 git add .
 
-echo [5/6] Creating commit...
+echo [5/7] Creating commit...
 git commit -m "Initial commit: SafeGram multi-page website with admin panel and service management" 2>nul
 if errorlevel 1 (
     echo WARNING: No changes to commit or commit failed
     echo You may need to configure Git user:
     echo   git config --global user.name "Your Name"
     echo   git config --global user.email "your.email@example.com"
+    echo.
+    echo Continuing anyway...
 )
 
-echo [6/6] Pushing to GitHub...
+echo [6/7] Fetching remote changes...
+git fetch origin main 2>nul
+
+echo [7/7] Merging remote changes (if any)...
 git branch -M main
+git pull origin main --allow-unrelated-histories --no-edit 2>nul
+if errorlevel 1 (
+    echo Warning: Pull failed or conflicts. Trying to continue...
+)
+
+echo [8/8] Pushing to GitHub...
 git push -u origin main
 
 if errorlevel 1 (
     echo.
     echo ERROR: Push failed!
     echo.
-    echo Possible reasons:
-    echo - GitHub repository does not exist
-    echo - Authentication required (need GitHub token)
-    echo - Network connection issue
+    echo The remote repository has changes that conflict with yours.
     echo.
-    echo If authentication is required, you can:
-    echo 1. Use GitHub Desktop
-    echo 2. Use personal access token (PAT)
-    echo 3. Use SSH keys
+    echo Solutions:
+    echo 1. Pull and merge manually:
+    echo    git pull origin main --allow-unrelated-histories
+    echo    git push origin main
+    echo.
+    echo 2. Force push (WARNING: This will overwrite remote changes!):
+    echo    git push -u origin main --force
+    echo.
+    echo 3. Use GitHub Desktop for easier conflict resolution
     echo.
     echo For instructions, see DEPLOY_AND_API_KEYS.md
+    pause
+    exit /b 1
 ) else (
     echo.
     echo ===================================
