@@ -3,9 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { showToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/Modal';
+import ServiceManager from '../../components/ServiceManager';
 
 export default function Admin() {
-  const [tab, setTab] = useState<'users'|'stats'|'mod'|'reports'|'feedback'|'push'|'owner'>('users');
+  const [tab, setTab] = useState<'users'|'stats'|'mod'|'reports'|'feedback'|'push'|'services'|'owner'>('users');
   const [isOwner, setIsOwner] = useState(false);
   const [user, setUser] = useState<any>(null);
 
@@ -118,6 +119,22 @@ export default function Admin() {
         >
           🔔 Уведомления
         </button>
+        {(isOwner || user?.roles?.includes('admin')) && (
+          <button 
+            onClick={()=>setTab('services')} 
+            style={{
+              padding: '10px 16px',
+              fontWeight: tab === 'services' ? '600' : '400',
+              background: tab === 'services' ? 'var(--accent, #3b82f6)' : 'transparent',
+              color: tab === 'services' ? '#fff' : 'var(--fg, #e5e7eb)',
+              border: '1px solid var(--border, #374151)',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            ⚙️ Сервисы
+          </button>
+        )}
       </div>
       {tab==='users' && <UsersTab/>}
       {tab==='stats' && <StatsTab/>}
@@ -125,6 +142,7 @@ export default function Admin() {
       {tab==='reports' && <ReportsTab/>}
       {tab==='feedback' && <FeedbackTab/>}
       {tab==='push' && <PushTab/>}
+      {tab==='services' && (isOwner || user?.roles?.includes('admin')) && <ServiceManager />}
       {tab==='owner' && isOwner && <OwnerTab/>}
     </div>
   );

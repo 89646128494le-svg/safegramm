@@ -1,7 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, Mail, Lock, Cloud, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 import { api } from '../services/api';
+import { useStore } from '../store/useStore';
 import '../styles/register.css';
 
 interface FormData {
@@ -11,6 +13,14 @@ interface FormData {
   needsCloudCode: boolean;
   emailCode: string;
 }
+
+const steps = [
+  { num: 1, title: 'Логин', icon: User },
+  { num: 2, title: 'Email', icon: Mail },
+  { num: 3, title: 'Пароль', icon: Lock },
+  { num: 4, title: 'Облачный код', icon: Cloud },
+  { num: 5, title: 'Подтверждение', icon: CheckCircle }
+];
 
 export default function Register() {
   const [step, setStep] = useState(1);
@@ -25,6 +35,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const nav = useNavigate();
+  const { setToken, setUser } = useStore();
 
   const updateField = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -76,7 +87,6 @@ export default function Register() {
   const nextStep = () => {
     if (validateStep()) {
       if (step === 4 && !formData.needsCloudCode) {
-        // Если не нужен облачный код, пропускаем шаг 5 и сразу регистрируем
         handleSubmit();
       } else {
         setStep(prev => Math.min(prev + 1, 5));
@@ -97,18 +107,16 @@ export default function Register() {
     setErr('');
     
     try {
-      // Регистрация (email и код будут добавлены в будущем к бэкенду)
       const res = await api('/api/auth/register', 'POST', { 
         username: formData.username, 
         password: formData.password 
       });
       
-      localStorage.setItem('token', res.token);
+      setToken(res.token);
+      setUser(res.user);
       
-      // Показываем анимацию успеха
       setShowSuccess(true);
       
-      // После анимации перенаправляем
       setTimeout(() => {
         nav('/app');
       }, 4000);
@@ -122,169 +130,534 @@ export default function Register() {
     return <SuccessAnimation />;
   }
 
-  const steps = [
-    { num: 1, title: 'Логин', icon: '👤' },
-    { num: 2, title: 'Email', icon: '📧' },
-    { num: 3, title: 'Пароль', icon: '🔒' },
-    { num: 4, title: 'Облачный код', icon: '☁️' },
-    { num: 5, title: 'Подтверждение', icon: '✅' }
-  ];
+  const pageVariants = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -20 }
+  };
+
+  const stepVariants = {
+    initial: { opacity: 0, x: 50 },
+    animate: { opacity: 1, x: 0 },
+    exit: { opacity: 0, x: -50 }
+  };
 
   return (
-    <div className="register-container">
-      <div className="register-card slide-in">
-        <div className="register-header">
-          <h1>Регистрация в SafeGram</h1>
-          <div className="step-indicator">
-            {steps.map((s, idx) => (
-              <div key={s.num} className={`step-dot ${step >= s.num ? 'active' : ''} ${step === s.num ? 'current' : ''}`}>
-                {step > s.num ? '✓' : s.num}
-              </div>
-            ))}
+    <motion.div
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      variants={pageVariants}
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Animated background */}
+      <motion.div
+        style={{
+          position: 'absolute',
+          width: '600px',
+          height: '600px',
+          background: 'radial-gradient(circle, rgba(124,108,255,0.3), transparent)',
+          borderRadius: '50%',
+          filter: 'blur(80px)',
+          top: '-200px',
+          left: '-200px'
+        }}
+        animate={{
+          x: [0, 100, 0],
+          y: [0, 50, 0],
+          scale: [1, 1.2, 1]
+        }}
+        transition={{
+          duration: 20,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }}
+      />
+
+      <motion.div
+        className="register-card"
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        style={{
+          maxWidth: '480px',
+          width: '100%',
+          background: 'rgba(11, 16, 32, 0.95)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '24px',
+          padding: '40px',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(124, 108, 255, 0.2)',
+          position: 'relative',
+          zIndex: 1
+        }}
+      >
+        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+          <motion.div
+            style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, rgba(124,108,255,0.3), rgba(61,216,255,0.3))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}
+            animate={{ rotate: [0, 10, -10, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <User size={32} color="#7c6cff" />
+          </motion.div>
+          <h1 style={{
+            fontSize: '28px',
+            fontWeight: 900,
+            margin: '0 0 8px 0',
+            background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text'
+          }}>
+            Регистрация в SafeGram
+          </h1>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '24px' }}>
+            {steps.map((s, idx) => {
+              const Icon = s.icon;
+              return (
+                <motion.div
+                  key={s.num}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: idx * 0.1, type: "spring", stiffness: 400, damping: 15 }}
+                  whileHover={{ scale: 1.1 }}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '12px',
+                    background: step >= s.num
+                      ? 'linear-gradient(135deg, rgba(124,108,255,0.3), rgba(61,216,255,0.3))'
+                      : 'rgba(255, 255, 255, 0.05)',
+                    border: step === s.num
+                      ? '2px solid rgba(124, 108, 255, 0.5)'
+                      : '2px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: step >= s.num ? '#7c6cff' : 'rgba(233, 236, 245, 0.4)',
+                    fontSize: '18px',
+                    fontWeight: 700,
+                    position: 'relative'
+                  }}
+                >
+                  {step > s.num ? (
+                    <CheckCircle size={20} />
+                  ) : (
+                    <Icon size={20} />
+                  )}
+                  {step === s.num && (
+                    <motion.div
+                      layoutId="activeStep"
+                      style={{
+                        position: 'absolute',
+                        inset: '-4px',
+                        border: '2px solid rgba(124, 108, 255, 0.6)',
+                        borderRadius: '14px',
+                        boxShadow: '0 0 20px rgba(124, 108, 255, 0.4)'
+                      }}
+                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    />
+                  )}
+                </motion.div>
+              );
+            })}
           </div>
         </div>
 
-        <div className="register-content fade-in">
-          {step === 1 && (
-            <div className="step-content">
-              <div className="step-icon">👤</div>
-              <h2>Создайте логин</h2>
-              <p>Выберите уникальное имя для вашего аккаунта</p>
-              <input
-                type="text"
-                placeholder="Логин (минимум 3 символа)"
-                value={formData.username}
-                onChange={e => updateField('username', e.target.value)}
-                className="register-input"
-                autoComplete="username"
-                autoFocus
-              />
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="step-content">
-              <div className="step-icon">📧</div>
-              <h2>Укажите email</h2>
-              <p>На этот адрес придет код подтверждения</p>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={formData.email}
-                onChange={e => updateField('email', e.target.value)}
-                className="register-input"
-                autoComplete="email"
-                autoFocus
-              />
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="step-content">
-              <div className="step-icon">🔒</div>
-              <h2>Придумайте пароль</h2>
-              <p>Минимум 4 символа для безопасности</p>
-              <input
-                type="password"
-                placeholder="Пароль (минимум 4 символа)"
-                value={formData.password}
-                onChange={e => updateField('password', e.target.value)}
-                className="register-input"
-                autoComplete="new-password"
-                autoFocus
-              />
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="step-content">
-              <div className="step-icon">☁️</div>
-              <h2>Нужен облачный код?</h2>
-              <p>Облачный код обеспечивает дополнительную безопасность</p>
-              <div className="choice-buttons">
-                <button
-                  className={`choice-btn ${formData.needsCloudCode ? 'active' : ''}`}
-                  onClick={() => updateField('needsCloudCode', true)}
-                >
-                  Да, использовать
-                </button>
-                <button
-                  className={`choice-btn ${!formData.needsCloudCode ? 'active' : ''}`}
-                  onClick={() => updateField('needsCloudCode', false)}
-                >
-                  Нет, пропустить
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 5 && (
-            <div className="step-content">
-              <div className="step-icon">✅</div>
-              <h2>Введите код с почты</h2>
-              <p>Проверьте почту {formData.email} и введите код</p>
-              <input
-                type="text"
-                placeholder="Код подтверждения"
-                value={formData.emailCode}
-                onChange={e => updateField('emailCode', e.target.value)}
-                className="register-input"
-                autoFocus
-                maxLength={6}
-              />
-            </div>
-          )}
-
-          {err && <div className="error-message">{err}</div>}
-
-          <div className="register-actions">
-            {step > 1 && (
-              <button onClick={prevStep} className="btn-secondary" disabled={loading}>
-                Назад
-              </button>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            variants={stepVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            {step === 1 && (
+              <StepContent
+                icon={User}
+                title="Создайте логин"
+                subtitle="Выберите уникальное имя для вашего аккаунта"
+              >
+                <input
+                  type="text"
+                  placeholder="Логин (минимум 3 символа)"
+                  value={formData.username}
+                  onChange={e => updateField('username', e.target.value)}
+                  autoComplete="username"
+                  autoFocus
+                  className="register-input"
+                />
+              </StepContent>
             )}
-            <button 
-              onClick={step === 4 || step === 5 ? handleSubmit : nextStep}
-              className="btn-primary"
-              disabled={loading}
-            >
-              {loading ? 'Загрузка...' : step === 4 || step === 5 ? 'Зарегистрироваться' : 'Далее'}
-            </button>
-          </div>
 
-          <div className="register-footer">
-            <button onClick={() => nav('/login')} className="link-btn">
-              У меня уже есть аккаунт
-            </button>
-          </div>
+            {step === 2 && (
+              <StepContent
+                icon={Mail}
+                title="Укажите email"
+                subtitle="На этот адрес придет код подтверждения"
+              >
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={formData.email}
+                  onChange={e => updateField('email', e.target.value)}
+                  autoComplete="email"
+                  autoFocus
+                  className="register-input"
+                />
+              </StepContent>
+            )}
+
+            {step === 3 && (
+              <StepContent
+                icon={Lock}
+                title="Придумайте пароль"
+                subtitle="Минимум 4 символа для безопасности"
+              >
+                <input
+                  type="password"
+                  placeholder="Пароль (минимум 4 символа)"
+                  value={formData.password}
+                  onChange={e => updateField('password', e.target.value)}
+                  autoComplete="new-password"
+                  autoFocus
+                  className="register-input"
+                />
+              </StepContent>
+            )}
+
+            {step === 4 && (
+              <StepContent
+                icon={Cloud}
+                title="Нужен облачный код?"
+                subtitle="Облачный код обеспечивает дополнительную безопасность"
+              >
+                <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                  <motion.button
+                    className={`choice-btn ${formData.needsCloudCode ? 'active' : ''}`}
+                    onClick={() => updateField('needsCloudCode', true)}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    style={{
+                      flex: 1,
+                      padding: '16px',
+                      background: formData.needsCloudCode
+                        ? 'linear-gradient(135deg, rgba(124,108,255,0.3), rgba(61,216,255,0.3))'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: formData.needsCloudCode
+                        ? '2px solid rgba(124, 108, 255, 0.5)'
+                        : '2px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      color: formData.needsCloudCode ? '#7c6cff' : 'rgba(233, 236, 245, 0.8)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Да, использовать
+                  </motion.button>
+                  <motion.button
+                    className={`choice-btn ${!formData.needsCloudCode ? 'active' : ''}`}
+                    onClick={() => updateField('needsCloudCode', false)}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    style={{
+                      flex: 1,
+                      padding: '16px',
+                      background: !formData.needsCloudCode
+                        ? 'linear-gradient(135deg, rgba(124,108,255,0.3), rgba(61,216,255,0.3))'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: !formData.needsCloudCode
+                        ? '2px solid rgba(124, 108, 255, 0.5)'
+                        : '2px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      color: !formData.needsCloudCode ? '#7c6cff' : 'rgba(233, 236, 245, 0.8)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Нет, пропустить
+                  </motion.button>
+                </div>
+              </StepContent>
+            )}
+
+            {step === 5 && (
+              <StepContent
+                icon={CheckCircle}
+                title="Введите код с почты"
+                subtitle={`Проверьте почту ${formData.email} и введите код`}
+              >
+                <input
+                  type="text"
+                  placeholder="Код подтверждения"
+                  value={formData.emailCode}
+                  onChange={e => updateField('emailCode', e.target.value)}
+                  autoFocus
+                  maxLength={6}
+                  className="register-input"
+                />
+              </StepContent>
+            )}
+          </motion.div>
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {err && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              style={{
+                marginTop: '16px',
+                padding: '12px 16px',
+                background: 'rgba(239, 68, 68, 0.2)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '12px',
+                color: '#fca5a5',
+                fontSize: '14px'
+              }}
+            >
+              {err}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div style={{ display: 'flex', gap: '12px', marginTop: '32px' }}>
+          {step > 1 && (
+            <motion.button
+              onClick={prevStep}
+              disabled={loading}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                flex: 1,
+                padding: '14px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '12px',
+                color: '#e9ecf5',
+                fontSize: '15px',
+                fontWeight: 600,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                opacity: loading ? 0.5 : 1
+              }}
+            >
+              <ArrowLeft size={18} />
+              Назад
+            </motion.button>
+          )}
+          <motion.button
+            onClick={step === 4 || step === 5 ? handleSubmit : nextStep}
+            disabled={loading}
+            whileHover={{ scale: loading ? 1 : 1.02 }}
+            whileTap={{ scale: loading ? 1 : 0.98 }}
+            style={{
+              flex: 1,
+              padding: '14px',
+              background: loading
+                ? 'rgba(124, 108, 255, 0.3)'
+                : 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+              border: 'none',
+              borderRadius: '12px',
+              color: '#0a0e1a',
+              fontSize: '15px',
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              boxShadow: loading ? 'none' : '0 4px 12px rgba(124, 108, 255, 0.4)'
+            }}
+          >
+            {loading ? (
+              '⏳ Загрузка...'
+            ) : (
+              <>
+                {step === 4 || step === 5 ? 'Зарегистрироваться' : 'Далее'}
+                <ArrowRight size={18} />
+              </>
+            )}
+          </motion.button>
         </div>
-      </div>
+
+        <motion.div
+          style={{
+            marginTop: '24px',
+            textAlign: 'center'
+          }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+        >
+          <button
+            onClick={() => nav('/login')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'rgba(233, 236, 245, 0.6)',
+              fontSize: '14px',
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
+          >
+            У меня уже есть аккаунт
+          </button>
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function StepContent({ icon: Icon, title, subtitle, children }: {
+  icon: React.ComponentType<{ size?: number; color?: string }>;
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <motion.div
+        initial={{ scale: 0, rotate: -180 }}
+        animate={{ scale: 1, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 200, damping: 15 }}
+        style={{
+          width: '64px',
+          height: '64px',
+          borderRadius: '16px',
+          background: 'linear-gradient(135deg, rgba(124,108,255,0.2), rgba(61,216,255,0.2))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 20px',
+          color: '#7c6cff'
+        }}
+      >
+        <Icon size={32} />
+      </motion.div>
+      <h2 style={{
+        fontSize: '24px',
+        fontWeight: 800,
+        textAlign: 'center',
+        marginBottom: '8px',
+        color: '#e9ecf5'
+      }}>
+        {title}
+      </h2>
+      <p style={{
+        textAlign: 'center',
+        color: 'rgba(233, 236, 245, 0.6)',
+        fontSize: '14px',
+        marginBottom: '24px'
+      }}>
+        {subtitle}
+      </p>
+      {children}
     </div>
   );
 }
 
 function SuccessAnimation() {
   return (
-    <div className="success-container">
-      <div className="success-animation">
-        <div className="shield">
-          <div className="shield-inner">
-            <div className="lock">
-              <div className="key-hole"></div>
-            </div>
-          </div>
-        </div>
-        <div className="key">
-          <div className="key-head"></div>
-          <div className="key-shaft"></div>
-        </div>
-        <div className="gate-left"></div>
-        <div className="gate-right"></div>
-        <div className="success-text">
-          <h1>Регистрация успешно пройдена!</h1>
-          <p>Добро пожаловать в защищённый мессенджер!!</p>
-        </div>
-      </div>
-    </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)'
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0, rotate: -180 }}
+        animate={{ scale: 1, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 200, damping: 15 }}
+        style={{
+          textAlign: 'center',
+          color: '#e9ecf5'
+        }}
+      >
+        <motion.div
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 10, -10, 0]
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          style={{
+            width: '120px',
+            height: '120px',
+            borderRadius: '24px',
+            background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 32px',
+            boxShadow: '0 20px 60px rgba(124, 108, 255, 0.4)'
+          }}
+        >
+          <CheckCircle size={64} color="#0a0e1a" />
+        </motion.div>
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          style={{
+            fontSize: '36px',
+            fontWeight: 900,
+            marginBottom: '12px',
+            background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text'
+          }}
+        >
+          Регистрация успешна!
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          style={{
+            fontSize: '18px',
+            color: 'rgba(233, 236, 245, 0.7)'
+          }}
+        >
+          Добро пожаловать в SafeGram!
+        </motion.p>
+      </motion.div>
+    </motion.div>
   );
 }

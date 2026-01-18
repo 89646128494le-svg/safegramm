@@ -10,6 +10,12 @@
   --danger: #ef4444;
   --success: #22c55e;
   --glow: 0 12px 60px rgba(124,108,255,0.25);
+  
+  /* Premium additions */
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: blur(20px);
+  --spring-timing: cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 [data-theme="light"] {
   --bg: #f7f9fc;
@@ -52,12 +58,43 @@ button {
   font-weight:800;
   border-radius:12px;
   box-shadow: var(--glow);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+button:hover::before {
+  width: 300px;
+  height: 300px;
+}
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(124,108,255,0.4);
+}
+button:active {
+  transform: translateY(0);
 }
 button.ghost {
   background:transparent;
   border:1px solid var(--stroke);
   color:var(--fg);
   box-shadow:none;
+}
+button.ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--accent);
+  transform: translateY(-1px);
 }
 .app-shell { min-height:100vh; display:flex; flex-direction:column; }
 .app-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--stroke); backdrop-filter: blur(8px); position:sticky; top:0; background:rgba(5,6,12,0.7); z-index:10; }
@@ -102,9 +139,39 @@ button.ghost {
 .toast { position:fixed; right:16px; top:16px; background:var(--panel); border:1px solid var(--stroke); border-radius:12px; padding:10px 14px; box-shadow: var(--glow); z-index:1100; }
 
 /* Animations */
-.list-item, .msg { transition: transform .2s ease, box-shadow .2s ease; }
-.msg { animation: fadeUp .2s ease; }
+.list-item, .msg { 
+  transition: transform .3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow .3s ease; 
+}
+.msg { 
+  animation: fadeUp .3s cubic-bezier(0.4, 0, 0.2, 1); 
+}
 @keyframes fadeUp {
-  from { opacity:0; transform: translateY(4px); }
-  to { opacity:1; transform: translateY(0); }
+  from { opacity:0; transform: translateY(8px) scale(0.95); }
+  to { opacity:1; transform: translateY(0) scale(1); }
+}
+.message-wrapper {
+  animation: messageSlideIn .4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.message-wrapper.message-me {
+  animation: messageSlideInRight .4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+@keyframes messageSlideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
 }

@@ -81,6 +81,42 @@ uploads/*
 server-go/uploads/*
 !server-go/uploads/.gitkeep
 
+# Windows system files
+AppData/
+NTUSER.*
+ntuser.*
+*.regtrans-ms
+*.blf
+*.LOG*
+Desktop/
+Documents/
+Downloads/
+Music/
+Pictures/
+Videos/
+Favorites/
+Links/
+Contacts/
+Searches/
+Saved Games/
+3D Objects/
+OneDrive/
+
+# Personal/system directories (if accidentally added)
+.cache/
+.cargo/
+.codex/
+.cursor/
+.docker/
+.expo/
+.gemini/
+.gradle/
+.keras/
+.local/
+.redhat/
+.rustup/
+.vscode/
+
 # Go specific
 go.work
 go.sum

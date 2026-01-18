@@ -144,6 +144,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/premium", GetPremiumInfo(db)) // Информация о премиум подписке текущего пользователя
 	protected.POST("/premium/subscribe/:id", RequireOwner(db), SubscribePremium(db)) // Активировать премиум (только владелец)
 
+	// Управление сервисами (для admin и owner)
+	protected.GET("/admin/services", RequireAdmin(db), GetServicesStatus(db))
+	protected.POST("/admin/services/:id/start", RequireAdmin(db), StartService(db))
+	protected.POST("/admin/services/:id/stop", RequireAdmin(db), StopService(db))
+	protected.POST("/admin/services/:id/restart", RequireAdmin(db), RestartService(db))
+
 	// WebRTC
 	protected.GET("/rtc/ice", GetICEServers())
 
