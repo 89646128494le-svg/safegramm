@@ -1,10 +1,11 @@
 package api
 
 import (
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"safegram-server/internal/config"
 	"safegram-server/internal/websocket"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // SetupRoutes настраивает все маршруты API
@@ -49,12 +50,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/chats/:id", GetChat(db))
 	protected.GET("/chats/:id/messages", GetMessages(db))
 	protected.POST("/chats/:id/messages", CreateMessage(db, wsHub)) // Альтернативный маршрут для создания сообщений
-	protected.POST("/chats/:id/read", MarkChatRead(db, wsHub)) // Отметить все сообщения в чате как прочитанные
-	protected.GET("/chats/:id/pinned", GetPinnedMessages(db)) // Получить закрепленные сообщения
-	protected.GET("/chats/:id/export", ExportChat(db)) // Экспорт истории чата
-	protected.DELETE("/chats/:id", DeleteChat(db)) // Удалить чат
-	protected.POST("/chats/:id/archive", ArchiveChat(db)) // Архивировать чат
-	protected.POST("/chats/:id/unarchive", UnarchiveChat(db)) // Разархивировать чат
+	protected.POST("/chats/:id/read", MarkChatRead(db, wsHub))      // Отметить все сообщения в чате как прочитанные
+	protected.GET("/chats/:id/pinned", GetPinnedMessages(db))       // Получить закрепленные сообщения
+	protected.GET("/chats/:id/export", ExportChat(db))              // Экспорт истории чата
+	protected.DELETE("/chats/:id", DeleteChat(db))                  // Удалить чат
+	protected.POST("/chats/:id/archive", ArchiveChat(db))           // Архивировать чат
+	protected.POST("/chats/:id/unarchive", UnarchiveChat(db))       // Разархивировать чат
 	protected.POST("/chats/:id/attach", UploadAttachment(db, wsHub))
 	protected.GET("/chats/:id/attachments", GetAttachments(db)) // Получение медиа файлов
 
@@ -66,29 +67,29 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/messages/:id/location", AddLocation(db, wsHub))
 	protected.POST("/messages/:id/read", MarkMessageRead(db, wsHub))
 	protected.GET("/messages/:id/read", GetMessageReadReceipts(db))
-	protected.POST("/messages/:id/pin", PinMessage(db, wsHub)) // Закрепить сообщение
-	protected.POST("/messages/:id/unpin", UnpinMessage(db, wsHub)) // Открепить сообщение
+	protected.POST("/messages/:id/pin", PinMessage(db, wsHub))         // Закрепить сообщение
+	protected.POST("/messages/:id/unpin", UnpinMessage(db, wsHub))     // Открепить сообщение
 	protected.POST("/messages/:id/forward", ForwardMessage(db, wsHub)) // Переслать сообщение
-	protected.POST("/messages/:id/save", SaveMessage(db)) // Сохранить сообщение в избранное
-	protected.POST("/messages/:id/unsave", UnsaveMessage(db)) // Удалить сообщение из избранного
-	protected.GET("/messages/saved", GetSavedMessages(db)) // Получить сохраненные сообщения
-	protected.POST("/messages/:id/poll", CreatePoll(db, wsHub)) // Создать опрос в сообщении
-	protected.POST("/polls/:id/vote", VotePoll(db, wsHub)) // Проголосовать в опросе
-	protected.GET("/polls/:id", GetPoll(db)) // Получить информацию об опросе
-	protected.GET("/search", UniversalSearch(db)) // Универсальный поиск
-	protected.GET("/messages/search", SearchMessages(db)) // Поиск сообщений (старый endpoint)
+	protected.POST("/messages/:id/save", SaveMessage(db))              // Сохранить сообщение в избранное
+	protected.POST("/messages/:id/unsave", UnsaveMessage(db))          // Удалить сообщение из избранного
+	protected.GET("/messages/saved", GetSavedMessages(db))             // Получить сохраненные сообщения
+	protected.POST("/messages/:id/poll", CreatePoll(db, wsHub))        // Создать опрос в сообщении
+	protected.POST("/polls/:id/vote", VotePoll(db, wsHub))             // Проголосовать в опросе
+	protected.GET("/polls/:id", GetPoll(db))                           // Получить информацию об опросе
+	protected.GET("/search", UniversalSearch(db))                      // Универсальный поиск
+	protected.GET("/messages/search", SearchMessages(db))              // Поиск сообщений (старый endpoint)
 
 	// Истории (Stories)
-	protected.POST("/stories", CreateStory(db)) // Создать историю
-	protected.GET("/stories", GetStories(db)) // Получить активные истории
+	protected.POST("/stories", CreateStory(db))        // Создать историю
+	protected.GET("/stories", GetStories(db))          // Получить активные истории
 	protected.POST("/stories/:id/view", ViewStory(db)) // Отметить историю как просмотренную
-	protected.DELETE("/stories/:id", DeleteStory(db)) // Удалить историю
+	protected.DELETE("/stories/:id", DeleteStory(db))  // Удалить историю
 
 	// Push уведомления
 	router.GET("/api/push/vapid_public", GetVAPIDPublicKey()) // Публичный VAPID ключ (без авторизации)
-	protected.POST("/push/subscribe", SubscribePush(db))   // Подписаться на push (полный путь: /api/push/subscribe)
-	protected.POST("/push/unsubscribe", UnsubscribePush(db)) // Отписаться от push (полный путь: /api/push/unsubscribe)
-	protected.POST("/push/test", TestPush(db)) // Тестовое push-уведомление (полный путь: /api/push/test)
+	protected.POST("/push/subscribe", SubscribePush(db))      // Подписаться на push (полный путь: /api/push/subscribe)
+	protected.POST("/push/unsubscribe", UnsubscribePush(db))  // Отписаться от push (полный путь: /api/push/unsubscribe)
+	protected.POST("/push/test", TestPush(db))                // Тестовое push-уведомление (полный путь: /api/push/test)
 
 	// Стикеры
 	protected.GET("/sticker-packs", GetStickerPacks(db))
@@ -141,7 +142,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/owner/premium/stats", RequireOwner(db), GetPremiumStats(db))
 
 	// Премиум подписка
-	protected.GET("/premium", GetPremiumInfo(db)) // Информация о премиум подписке текущего пользователя
+	protected.GET("/premium", GetPremiumInfo(db))                                    // Информация о премиум подписке текущего пользователя
 	protected.POST("/premium/subscribe/:id", RequireOwner(db), SubscribePremium(db)) // Активировать премиум (только владелец)
 
 	// Управление сервисами (для admin и owner)
@@ -162,4 +163,3 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	router.Static("/uploads", "./uploads")
 	router.StaticFile("/favicon.ico", "./favicon.ico")
 }
-
