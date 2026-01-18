@@ -25,7 +25,7 @@ if exist .git (
 
 echo [3/6] Setting up remote...
 git remote remove origin 2>nul
-git remote add origin https://github.com/89646128494le-svg/SafeGram3.git
+git remote add origin https://github.com/89646128494le-svg/safegram2
 
 echo [4/6] Adding files...
 git add .
@@ -64,7 +64,7 @@ if errorlevel 1 (
     echo   SUCCESS! Code pushed to GitHub
     echo ===================================
     echo.
-    echo Repository: https://github.com/89646128494le-svg/SafeGram3
+    echo Repository: https://github.com/89646128494le-svg/safegram2
     echo.
     echo Next steps:
     echo 1. Go to vercel.com
