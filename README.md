@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # SafeGram — Безопасный мессенджер (Beta)
 
 Современный мессенджер с end-to-end шифрованием, голосовыми звонками, группами, каналами и множеством функций.
@@ -43,7 +42,7 @@
 
 2. **Деплой на Vercel:**
    - Перейдите на [vercel.com](https://vercel.com)
-   - Импортируйте репозиторий `89646128494le-svg/SafeGram3`
+   - Импортируйте репозиторий `89646128494le-svg/safegram2`
    - Root Directory: `web`
    - Build Command: `npm run build`
    - Output Directory: `dist`
@@ -56,6 +55,7 @@
 - [`DEPLOY_AND_API_KEYS.md`](./DEPLOY_AND_API_KEYS.md) - Полная инструкция по деплою и получению API ключей
 - [`VERCEL_DEPLOYMENT.md`](./web/VERCEL_DEPLOYMENT.md) - Детальная инструкция по деплою
 - [`INTEGRATION_GUIDE.md`](./INTEGRATION_GUIDE.md) - Интеграции для управления сервисами
+- [`GITHUB_AUTHENTICATION.md`](./GITHUB_AUTHENTICATION.md) - Решение проблем с аутентификацией GitHub
 
 **⚠️ ВАЖНО:** Перед публичным релизом обязательно:
 
@@ -197,6 +197,3 @@ chmod +x init-git.sh
 ---
 
 **Версия:** 1.0.0-beta | **Статус:** Готов к публичному тестированию
-=======
-# safegram2
->>>>>>> 9b129b88539a165ac4975fdd801b18300a233522
