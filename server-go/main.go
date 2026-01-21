@@ -114,6 +114,16 @@ func corsMiddleware() gin.HandlerFunc {
 			"https://safegram.app", // production domain
 		}
 
+		// Разрешаем все Vercel домены
+		isVercelDomain := false
+		if origin != "" {
+			if strings.Contains(origin, ".vercel.app") || 
+			   strings.Contains(origin, ".vercel-dns.com") ||
+			   strings.HasPrefix(origin, "https://") && strings.Contains(origin, "safegram") {
+				isVercelDomain = true
+			}
+		}
+
 		// Получаем дополнительные разрешенные origins из переменной окружения
 		if envOrigins := os.Getenv("ALLOWED_ORIGINS"); envOrigins != "" {
 			additionalOrigins := strings.Split(envOrigins, ",")
@@ -166,7 +176,7 @@ func corsMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		// Разрешаем origin если он в списке, это локальный IP или dev server
+		// Разрешаем origin если он в списке, это локальный IP, dev server или Vercel домен
 		allowed := false
 		for _, allowedOrigin := range allowedOrigins {
 			if origin == allowedOrigin {
@@ -176,13 +186,13 @@ func corsMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		if !allowed && (isLocalIP || isDevServer) {
+		if !allowed && (isLocalIP || isDevServer || isVercelDomain) {
 			c.Header("Access-Control-Allow-Origin", origin)
 			allowed = true
 		}
 
-		// В режиме разработки разрешаем все origins (если установлена переменная окружения)
-		if !allowed && os.Getenv("NODE_ENV") == "development" && os.Getenv("ALLOW_ALL_ORIGINS") == "true" {
+		// Разрешаем все origins если установлена переменная окружения (для разработки)
+		if !allowed && os.Getenv("ALLOW_ALL_ORIGINS") == "true" {
 			if origin != "" {
 				c.Header("Access-Control-Allow-Origin", origin)
 				allowed = true

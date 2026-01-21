@@ -77,7 +77,7 @@ func GetServicesStatus(db *gorm.DB) gin.HandlerFunc {
 func StartService(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		serviceID := c.Param("id")
-		userID, _ := c.Get("userID")
+		_, _ = c.Get("userID") // Получаем userID для будущей проверки прав
 
 		// Проверка прав (только owner/admin)
 		// TODO: Реализовать проверку прав
@@ -102,7 +102,7 @@ func StartService(db *gorm.DB) gin.HandlerFunc {
 func StopService(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		serviceID := c.Param("id")
-		userID, _ := c.Get("userID")
+		_, _ = c.Get("userID") // Получаем userID для будущей проверки прав
 
 		// TODO: Проверка прав и остановка сервиса
 
