@@ -1049,29 +1049,6 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       showToast('Запись отменена', 'info');
     }
   };
-  
-  const cancelRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      // Останавливаем запись
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      
-      // Останавливаем поток
-      if (recordingStreamRef.current) {
-        recordingStreamRef.current.getTracks().forEach(track => track.stop());
-        recordingStreamRef.current = null;
-      }
-      
-      // Останавливаем интервал
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-        recordingIntervalRef.current = null;
-      }
-      
-      setRecordingTime(0);
-      showToast('Запись отменена', 'info');
-    }
-  };
 
   // Реакция
   const addReaction = async (messageId: string, emoji: string) => {
