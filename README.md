@@ -42,7 +42,7 @@
 
 2. **Деплой на Vercel:**
    - Перейдите на [vercel.com](https://vercel.com)
-   - Импортируйте репозиторий `89646128494le-svg/safegram2`
+   - Импортируйте репозиторий `89646128494le-svg/safegramm`
    - Root Directory: `web`
    - Build Command: `npm run build`
    - Output Directory: `dist`

@@ -24,9 +24,9 @@ cd "c:\Users\Lev\Desktop\Проекты\SafeGram перезапуск"
 git init
 
 # 3. Добавьте remote репозиторий
-git remote add origin https://github.com/89646128494le-svg/SafeGram3.git
+git remote add origin https://github.com/89646128494le-svg/safegramm.git
 # Или, если remote уже существует:
-git remote set-url origin https://github.com/89646128494le-svg/SafeGram3.git
+git remote set-url origin https://github.com/89646128494le-svg/safegramm.git
 
 # 4. Добавьте все файлы
 git add .
@@ -44,7 +44,7 @@ git push -u origin main
 1. Перейдите на [vercel.com](https://vercel.com)
 2. Войдите в аккаунт (через GitHub)
 3. Нажмите **"Add New..."** → **"Project"**
-4. Импортируйте репозиторий `89646128494le-svg/SafeGram3`
+4. Импортируйте репозиторий `89646128494le-svg/safegramm`
 5. Настройки проекта:
    - **Framework Preset:** Vite
    - **Root Directory:** `web`
@@ -259,7 +259,7 @@ ALLOWED_ORIGINS=https://your-frontend.vercel.app
 
 1. Перейдите на [railway.app](https://railway.app)
 2. **"New Project"** → **"Deploy from GitHub repo"**
-3. Выберите репозиторий `89646128494le-svg/SafeGram3`
+3. Выберите репозиторий `89646128494le-svg/safegramm`
 4. Настройки:
    - **Root Directory:** `server-go`
    - **Build Command:** `go build -o main .`
