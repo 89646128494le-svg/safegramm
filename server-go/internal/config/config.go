@@ -10,6 +10,7 @@ type Config struct {
 	DatabaseURL string
 	RedisURL    string
 	NodeEnv     string
+	WebhookURL  string
 }
 
 func Load() *Config {
@@ -19,6 +20,7 @@ func Load() *Config {
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://safegram:safegram@localhost:5432/safegram?sslmode=disable"),
 		RedisURL:    getEnv("REDIS_URL", "localhost:6379"),
 		NodeEnv:     getEnv("NODE_ENV", "development"),
+		WebhookURL:  getEnv("WEBHOOK_URL", ""),
 	}
 }
 

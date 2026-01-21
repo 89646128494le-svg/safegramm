@@ -151,6 +151,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/admin/services/:id/stop", RequireAdmin(db), StopService(db))
 	protected.POST("/admin/services/:id/restart", RequireAdmin(db), RestartService(db))
 
+	// Webhook настройки (для admin и owner)
+	protected.GET("/admin/webhook", RequireAdmin(db), GetWebhookSettings)
+	protected.POST("/admin/webhook", RequireAdmin(db), UpdateWebhookSettings(db, cfg))
+	protected.POST("/admin/webhook/test", RequireAdmin(db), TestWebhook)
+	protected.GET("/admin/logs", RequireAdmin(db), GetLogs)
+
 	// WebRTC
 	protected.GET("/rtc/ice", GetICEServers())
 

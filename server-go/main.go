@@ -10,6 +10,7 @@ import (
 	"safegram-server/internal/api"
 	"safegram-server/internal/config"
 	"safegram-server/internal/database"
+	"safegram-server/internal/logger"
 	redis "safegram-server/internal/redis"
 	"safegram-server/internal/websocket"
 )
@@ -26,9 +27,15 @@ func main() {
 	// Инициализация базы данных
 	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
+		logger.Error("Failed to connect to database", err, map[string]interface{}{
+			"service": "database",
+		})
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer database.Close(db)
+	logger.Info("Database connected successfully", map[string]interface{}{
+		"service": "database",
+	})
 
 	// Выполнение миграций
 	if err := database.AutoMigrate(db); err != nil {
@@ -49,6 +56,10 @@ func main() {
 		}
 		defer redis.Close()
 	}
+
+	// Инициализация Logger с webhook
+	logger.Init(cfg.WebhookURL, cfg.WebhookURL != "")
+	defer logger.Flush() // Отправляем все оставшиеся логи при завершении
 
 	// Инициализация WebSocket hub
 	wsHub := websocket.NewHub()
@@ -75,8 +86,17 @@ func main() {
 	}
 
 	log.Printf("🚀 SafeGram Server starting on port %s", port)
+	logger.Info("SafeGram Server starting", map[string]interface{}{
+		"service": "server",
+		"port":    port,
+		"env":     cfg.NodeEnv,
+	})
 	// Используем 0.0.0.0 чтобы слушать на всех интерфейсах (для удаленного доступа)
 	if err := router.Run("0.0.0.0:" + port); err != nil {
+		logger.Error("Failed to start server", err, map[string]interface{}{
+			"service": "server",
+			"port":    port,
+		})
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
