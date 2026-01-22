@@ -114,13 +114,23 @@ func corsMiddleware() gin.HandlerFunc {
 			"https://safegram.app", // production domain
 		}
 
-		// Разрешаем все Vercel домены
+		// Разрешаем все Vercel домены и туннели
 		isVercelDomain := false
+		isTunnelDomain := false
 		if origin != "" {
+			// Vercel домены
 			if strings.Contains(origin, ".vercel.app") || 
 			   strings.Contains(origin, ".vercel-dns.com") ||
-			   strings.HasPrefix(origin, "https://") && strings.Contains(origin, "safegram") {
+			   strings.Contains(origin, "vercel.live") ||
+			   (strings.HasPrefix(origin, "https://") && strings.Contains(origin, "safegram")) {
 				isVercelDomain = true
+			}
+			// LocalTunnel и другие туннели
+			if strings.Contains(origin, ".loca.lt") ||
+			   strings.Contains(origin, ".ngrok.io") ||
+			   strings.Contains(origin, ".ngrok-free.app") ||
+			   strings.Contains(origin, ".trycloudflare.com") {
+				isTunnelDomain = true
 			}
 		}
 
@@ -186,7 +196,7 @@ func corsMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		if !allowed && (isLocalIP || isDevServer || isVercelDomain) {
+		if !allowed && (isLocalIP || isDevServer || isVercelDomain || isTunnelDomain) {
 			c.Header("Access-Control-Allow-Origin", origin)
 			allowed = true
 		}
