@@ -15,6 +15,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// Публичные маршруты (с rate limiting)
 	api.POST("/auth/register", AuthRateLimitMiddleware(), Register(db, cfg))
 	api.POST("/auth/login", AuthRateLimitMiddleware(), Login(db, cfg))
+	api.POST("/auth/send-email-code", AuthRateLimitMiddleware(), SendEmailCode(db))
+	api.POST("/auth/verify-email", AuthRateLimitMiddleware(), VerifyEmail(db))
 
 	// Защищенные маршруты (требуют аутентификации)
 	protected := api.Group("")

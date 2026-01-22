@@ -35,7 +35,7 @@ export default function Login({ onDone }: LoginProps) {
           onDone();
         }
         // Навигация происходит после обновления состояния
-        nav('/app');
+        nav('/app/chats');
       } else {
         console.error('No token in response:', res);
         setErr('Токен не получен от сервера');

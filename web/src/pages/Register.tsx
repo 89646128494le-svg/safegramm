@@ -12,6 +12,8 @@ interface FormData {
   password: string;
   needsCloudCode: boolean;
   emailCode: string;
+  emailVerified: boolean;
+  acceptedTerms: boolean;
 }
 
 const steps = [
@@ -29,8 +31,12 @@ export default function Register() {
     email: '',
     password: '',
     needsCloudCode: false,
-    emailCode: ''
+    emailCode: '',
+    emailVerified: false,
+    acceptedTerms: false
   });
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -79,16 +85,89 @@ export default function Register() {
           setErr('Введите код с почты');
           return false;
         }
+        if (!formData.acceptedTerms) {
+          setErr('Необходимо принять пользовательское соглашение');
+          return false;
+        }
         break;
     }
     return true;
   };
 
-  const nextStep = () => {
-    if (validateStep()) {
-      if (step === 4 && !formData.needsCloudCode) {
-        handleSubmit();
+  const sendEmailCode = async () => {
+    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setErr('Введите корректный email');
+      return;
+    }
+    
+    setSendingCode(true);
+    setErr('');
+    
+    try {
+      await api('/api/auth/send-email-code', 'POST', { email: formData.email });
+      setEmailCodeSent(true);
+      setErr('');
+    } catch (e: any) {
+      setErr(e?.message || 'Ошибка отправки кода');
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const verifyEmailCode = async () => {
+    if (!formData.emailCode.trim()) {
+      setErr('Введите код');
+      return false;
+    }
+    
+    setLoading(true);
+    setErr('');
+    
+    try {
+      const res = await api('/api/auth/verify-email', 'POST', { 
+        email: formData.email,
+        code: formData.emailCode 
+      });
+      
+      if (res.ok) {
+        updateField('emailVerified', true);
+        setLoading(false);
+        return true;
       } else {
+        setErr('Неверный код');
+        setLoading(false);
+        return false;
+      }
+    } catch (e: any) {
+      setErr(e?.message || 'Ошибка проверки кода');
+      setLoading(false);
+      return false;
+    }
+  };
+
+  const nextStep = async () => {
+    if (validateStep()) {
+      // При переходе на шаг 2 (email) отправляем код
+      if (step === 1) {
+        setStep(2);
+        // Автоматически отправляем код при переходе на шаг email
+        setTimeout(() => {
+          sendEmailCode();
+        }, 300);
+      }
+      // При переходе на шаг 5 (код) проверяем код
+      else if (step === 4 && formData.needsCloudCode) {
+        const verified = await verifyEmailCode();
+        if (verified) {
+          setStep(5);
+        }
+      }
+      // Если не нужен облачный код, переходим к финальному шагу
+      else if (step === 4 && !formData.needsCloudCode) {
+        setStep(5);
+      }
+      // Обычный переход на следующий шаг
+      else {
         setStep(prev => Math.min(prev + 1, 5));
         setErr('');
       }
@@ -108,8 +187,11 @@ export default function Register() {
     
     try {
       const res = await api('/api/auth/register', 'POST', { 
-        username: formData.username, 
-        password: formData.password 
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        emailCode: formData.needsCloudCode ? formData.emailCode : undefined,
+        needsCloudCode: formData.needsCloudCode
       });
       
       setToken(res.token);
@@ -118,7 +200,7 @@ export default function Register() {
       setShowSuccess(true);
       
       setTimeout(() => {
-        nav('/app');
+        nav('/app/chats');
       }, 4000);
     } catch (e: any) {
       setErr(e?.message || 'Ошибка регистрации');
@@ -319,11 +401,79 @@ export default function Register() {
                   type="email"
                   placeholder="your@email.com"
                   value={formData.email}
-                  onChange={e => updateField('email', e.target.value)}
+                  onChange={e => {
+                    updateField('email', e.target.value);
+                    setEmailCodeSent(false);
+                    updateField('emailVerified', false);
+                  }}
                   autoComplete="email"
                   autoFocus
                   className="register-input"
+                  disabled={sendingCode}
                 />
+                {!emailCodeSent && !sendingCode && (
+                  <motion.button
+                    onClick={sendEmailCode}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    style={{
+                      marginTop: '12px',
+                      width: '100%',
+                      padding: '12px',
+                      background: 'rgba(124, 108, 255, 0.2)',
+                      border: '1px solid rgba(124, 108, 255, 0.5)',
+                      borderRadius: '12px',
+                      color: '#7c6cff',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Отправить код подтверждения
+                  </motion.button>
+                )}
+                {sendingCode && (
+                  <div style={{ marginTop: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
+                    Отправка кода...
+                  </div>
+                )}
+                {emailCodeSent && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      borderRadius: '12px',
+                      color: '#10b981',
+                      fontSize: '13px',
+                      textAlign: 'center'
+                    }}
+                  >
+                    ✓ Код отправлен на {formData.email}
+                  </motion.div>
+                )}
+                {formData.emailVerified && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      border: '1px solid rgba(16, 185, 129, 0.5)',
+                      borderRadius: '12px',
+                      color: '#10b981',
+                      fontSize: '13px',
+                      textAlign: 'center',
+                      fontWeight: 600
+                    }}
+                  >
+                    ✓ Email подтвержден
+                  </motion.div>
+                )}
               </StepContent>
             )}
 
@@ -407,18 +557,75 @@ export default function Register() {
             {step === 5 && (
               <StepContent
                 icon={CheckCircle}
-                title="Введите код с почты"
-                subtitle={`Проверьте почту ${formData.email} и введите код`}
+                title={formData.needsCloudCode ? "Введите облачный код" : "Примите соглашение"}
+                subtitle={formData.needsCloudCode 
+                  ? `Проверьте почту ${formData.email} и введите код`
+                  : "Для завершения регистрации необходимо принять пользовательское соглашение"
+                }
               >
-                <input
-                  type="text"
-                  placeholder="Код подтверждения"
-                  value={formData.emailCode}
-                  onChange={e => updateField('emailCode', e.target.value)}
-                  autoFocus
-                  maxLength={6}
-                  className="register-input"
-                />
+                {formData.needsCloudCode && (
+                  <input
+                    type="text"
+                    placeholder="Код подтверждения"
+                    value={formData.emailCode}
+                    onChange={e => updateField('emailCode', e.target.value)}
+                    autoFocus
+                    maxLength={6}
+                    className="register-input"
+                    style={{ marginBottom: '20px' }}
+                  />
+                )}
+                <div style={{
+                  padding: '16px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '12px',
+                  marginBottom: '20px'
+                }}>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    lineHeight: 1.6
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.acceptedTerms}
+                      onChange={e => updateField('acceptedTerms', e.target.checked)}
+                      style={{
+                        marginTop: '4px',
+                        width: '18px',
+                        height: '18px',
+                        cursor: 'pointer',
+                        accentColor: '#7c6cff'
+                      }}
+                    />
+                    <span>
+                      Я принимаю{' '}
+                      <a
+                        href="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#7c6cff', textDecoration: 'underline' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Пользовательское соглашение
+                      </a>
+                      {' '}и{' '}
+                      <a
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#7c6cff', textDecoration: 'underline' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Политику конфиденциальности
+                      </a>
+                    </span>
+                  </label>
+                </div>
               </StepContent>
             )}
           </motion.div>
@@ -474,8 +681,8 @@ export default function Register() {
             </motion.button>
           )}
           <motion.button
-            onClick={step === 4 || step === 5 ? handleSubmit : nextStep}
-            disabled={loading}
+            onClick={step === 5 ? handleSubmit : nextStep}
+            disabled={loading || sendingCode}
             whileHover={{ scale: loading ? 1 : 1.02 }}
             whileTap={{ scale: loading ? 1 : 0.98 }}
             style={{

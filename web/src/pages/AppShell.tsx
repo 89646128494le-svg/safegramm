@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Header from '../components/Header';
 import Chats from './chats/Chats';
@@ -116,7 +116,7 @@ export default function AppShell() {
       </motion.div>
       <AnimatePresence mode="wait">
         <Routes>
-          <Route path="/" element={<Chats />} />
+          <Route path="/" element={<Navigate to="/app/chats" replace />} />
           <Route path="chats" element={<Chats />} />
           <Route path="servers" element={<Servers />} />
           <Route path="servers/:id" element={<ServerView />} />

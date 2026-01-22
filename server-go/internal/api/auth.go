@@ -16,9 +16,11 @@ import (
 
 // RegisterRequest структура запроса регистрации
 type RegisterRequest struct {
-	Username string `json:"username" binding:"required,min=3"`
-	Password string `json:"password" binding:"required,min=4"`
-	Email    string `json:"email"`
+	Username     string `json:"username" binding:"required,min=3"`
+	Password     string `json:"password" binding:"required,min=4"`
+	Email        string `json:"email"`
+	EmailCode    string `json:"emailCode"`
+	NeedsCloudCode bool `json:"needsCloudCode"`
 }
 
 // LoginRequest структура запроса входа
@@ -41,6 +43,33 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		if err := db.Where("LOWER(username) = LOWER(?)", req.Username).First(&existingUser).Error; err == nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user_exists"})
 			return
+		}
+
+		// Проверка существования email
+		if req.Email != "" {
+			var existingEmail models.User
+			if err := db.Where("LOWER(email) = LOWER(?)", req.Email).First(&existingEmail).Error; err == nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "email_exists"})
+				return
+			}
+		}
+
+		// Если нужен облачный код, проверяем его
+		if req.NeedsCloudCode && req.Email != "" {
+			if req.EmailCode == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "email_code_required"})
+				return
+			}
+			// Проверяем код
+			valid, err := VerifyEmailCode(req.Email, req.EmailCode)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
+			}
+			if !valid {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_code"})
+				return
+			}
 		}
 
 		// Хеширование пароля
