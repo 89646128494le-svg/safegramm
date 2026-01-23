@@ -1,0 +1,40 @@
+# Альтернативная конфигурация через YAML
+# Если иконки нет, electron-builder создаст дефолтную
+
+appId: com.safegram.desktop
+productName: SafeGram
+directories:
+  output: dist
+files:
+  - "**/*"
+  - "!node_modules/**/*"
+  - "!dist/**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  publisherName: SafeGram
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.social-networking
+
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  category: Network
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

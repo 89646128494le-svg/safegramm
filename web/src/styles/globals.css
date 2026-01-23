@@ -8,6 +8,147 @@
   --subtle: #a0aec0;
   --accent: #6366f1;
   --danger: #ef4444;
+  
+  /* Новые переменные для системы тем */
+  --bg-primary: var(--bg-primary, #0b0e13);
+  --bg-secondary: var(--bg-secondary, #1a1d29);
+  --bg-tertiary: var(--bg-tertiary, #252936);
+  --bg-card: var(--bg-card, rgba(26, 29, 41, 0.8));
+  --text-primary: var(--text-primary, #e5e7eb);
+  --text-secondary: var(--text-secondary, #9ca3af);
+  --accent-primary: var(--accent-primary, #3b82f6);
+  --accent-secondary: var(--accent-secondary, #60a5fa);
+  --border: var(--border, #374151);
+  --success: var(--success, #10b981);
+  --warning: var(--warning, #f59e0b);
+  --danger: var(--danger, #ef4444);
+  --info: var(--info, #3b82f6);
+  
+  /* Настройки шрифта */
+  --font-size-base: var(--font-size-base, 14px);
+  
+  /* Отступы */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* Радиусы */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  
+  /* Переходы */
+  --transition-base: all 0.2s ease;
+  --transition-fast: all 0.1s ease;
+  --transition-slow: all 0.3s ease;
+  
+  /* Тени */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Компактный режим */
+[data-compact="true"] {
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+  --spacing-xl: 16px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+}
+
+/* Отключение анимаций */
+[data-no-animations="true"] * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Анимации для сообщений */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes messageFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes reactionPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes chatTransition {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Применение анимаций (только если не отключены) */
+:not([data-no-animations="true"]) .message-wrapper {
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+:not([data-no-animations="true"]) .reaction {
+  animation: reactionPop 0.3s ease-out;
+}
+
+:not([data-no-animations="true"]) .enhanced-chat-window {
+  animation: chatTransition 0.2s ease-out;
+}
+
+/* Анимация при отправке сообщения */
+@keyframes messageSend {
+  from {
+    opacity: 0.5;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.message-wrapper.sending {
+  animation: messageSend 0.2s ease-out;
+}
+
+/* Анимация при получении сообщения */
+.message-wrapper.received {
+  animation: messageSlideIn 0.3s ease-out;
 }
 
 [data-theme="light"] {
@@ -171,6 +312,77 @@ nav a { margin: 0 8px; }
   word-wrap: break-word;
   white-space: pre-wrap;
   margin-bottom: 6px;
+}
+
+/* Подсветка синтаксиса для кода */
+.message-text code.inline-code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #f92672;
+}
+
+.message-text pre.code-block {
+  background: var(--bg-tertiary);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid var(--border);
+}
+
+.message-text pre.code-block code {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+/* Подсветка синтаксиса */
+.message-text pre.code-block code .keyword {
+  color: #66d9ef;
+  font-weight: 600;
+}
+
+.message-text pre.code-block code .string {
+  color: #e6db74;
+}
+
+.message-text pre.code-block code .comment {
+  color: #75715e;
+  font-style: italic;
+}
+
+.message-text pre.code-block code .number {
+  color: #ae81ff;
+}
+
+.message-text pre.code-block code .literal {
+  color: #f92672;
+}
+
+.message-text pre.code-block code .tag {
+  color: #f92672;
+}
+
+.message-text pre.code-block code .selector {
+  color: #a6e22e;
+}
+
+.message-text pre.code-block code .value {
+  color: #e6db74;
+}
+
+/* Анимация пульсации для записи */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .message-attachment {

@@ -10,6 +10,7 @@ type Server struct {
 	Description string    `json:"description,omitempty"`
 	OwnerID     string    `gorm:"index;not null" json:"ownerId"`
 	IconURL     string    `json:"iconUrl,omitempty"`
+	InviteLink  string    `gorm:"uniqueIndex;column:invite_link" json:"inviteLink,omitempty"` // Ссылка-приглашение на сервер
 	CreatedAt   time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 }
@@ -29,6 +30,8 @@ type ServerMember struct {
 type Channel struct {
 	ID        string    `gorm:"primaryKey" json:"id"`
 	ServerID  string    `gorm:"index;not null" json:"serverId"`
+	CategoryID string   `gorm:"index" json:"categoryId,omitempty"`
+	ChatID    string    `gorm:"index" json:"chatId,omitempty"` // Chat для сообщений в этом канале
 	Name      string    `gorm:"not null" json:"name"`
 	Type      string    `gorm:"default:text" json:"type"`
 	Position  int       `json:"position"`

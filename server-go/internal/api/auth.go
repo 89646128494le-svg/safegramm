@@ -25,8 +25,10 @@ type RegisterRequest struct {
 
 // LoginRequest структура запроса входа
 type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Username  string `json:"username" binding:"required"`
+	Password  string `json:"password" binding:"required"`
+	EmailCode string `json:"emailCode"` // Код подтверждения email
+	CloudCode string `json:"cloudCode"` // Облачный код (PIN)
 }
 
 // Register обрабатывает регистрацию пользователя
@@ -146,6 +148,68 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		if err := bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(req.Password)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_creds"})
 			return
+		}
+
+		// Если у пользователя есть email, требуется подтверждение
+		if user.Email != nil && *user.Email != "" {
+			// Если код email не предоставлен, возвращаем требование подтверждения
+			if req.EmailCode == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error":           "email_verification_required",
+					"message":          "Требуется подтверждение email",
+					"hasEmail":         true,
+					"hasCloudCode":     user.PinHash != "",
+				})
+				return
+			}
+
+			// Проверяем код email
+			valid, err := VerifyEmailCode(*user.Email, req.EmailCode)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
+			}
+			if !valid {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_email_code"})
+				return
+			}
+
+			// Если есть облачный код (PIN), проверяем его
+			if user.PinHash != "" {
+				if req.CloudCode == "" {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":       "cloud_code_required",
+						"message":     "Требуется облачный код",
+						"hasCloudCode": true,
+					})
+					return
+				}
+
+				// Проверяем облачный код (PIN)
+				if err := bcrypt.CompareHashAndPassword([]byte(user.PinHash), []byte(req.CloudCode)); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_cloud_code"})
+					return
+				}
+			}
+		} else {
+			// Если email нет, вход без подтверждения
+			// Но если есть облачный код, все равно требуем его
+			if user.PinHash != "" {
+				if req.CloudCode == "" {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":       "cloud_code_required",
+						"message":     "Требуется облачный код",
+						"hasCloudCode": true,
+					})
+					return
+				}
+
+				// Проверяем облачный код (PIN)
+				if err := bcrypt.CompareHashAndPassword([]byte(user.PinHash), []byte(req.CloudCode)); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_cloud_code"})
+					return
+				}
+			}
 		}
 
 		// Генерация JWT токена

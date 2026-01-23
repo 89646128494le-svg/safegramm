@@ -13,6 +13,7 @@ type Chat struct {
 	Description string    `json:"description,omitempty"`
 	AvatarURL   string    `json:"avatarUrl,omitempty"`
 	CreatedBy   string    `json:"createdBy,omitempty"`
+	InviteLink  string    `gorm:"uniqueIndex;column:invite_link" json:"inviteLink,omitempty"` // Ссылка для приглашения
 	CreatedAt   time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`

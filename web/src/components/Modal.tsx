@@ -179,10 +179,15 @@ export function ConfirmModal({
   onConfirm,
   title,
   message,
-  confirmText = 'Подтвердить',
-  cancelText = 'Отмена',
+  confirmText,
+  cancelText,
   confirmColor = 'primary'
 }: ConfirmModalProps) {
+  // Используем i18n для дефолтных значений
+  const { useTranslation } = require('../i18n');
+  const { t } = useTranslation();
+  const defaultConfirmText = confirmText || t('common.confirm');
+  const defaultCancelText = cancelText || t('common.cancel');
   const handleConfirm = () => {
     onConfirm();
     onClose();
@@ -209,7 +214,7 @@ export function ConfirmModal({
             cursor: 'pointer'
           }}
         >
-          {cancelText}
+          {defaultCancelText}
         </motion.button>
         <motion.button
           onClick={handleConfirm}
@@ -229,7 +234,7 @@ export function ConfirmModal({
             boxShadow: '0 4px 12px rgba(124, 108, 255, 0.3)'
           }}
         >
-          {confirmText}
+          {defaultConfirmText}
         </motion.button>
       </div>
     </Modal>

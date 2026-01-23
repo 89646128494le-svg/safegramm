@@ -1,0 +1,333 @@
+/* Мобильная адаптивность для SafeGram */
+
+/* Базовые мобильные стили */
+@media (max-width: 768px) {
+  /* Общие настройки */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+
+  body {
+    font-size: 14px;
+    overflow-x: hidden;
+  }
+
+  /* Контейнер приложения */
+  .app-container {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Навигация */
+  .nav-sidebar {
+    position: fixed;
+    left: -100%;
+    top: 0;
+    width: 80%;
+    max-width: 320px;
+    height: 100vh;
+    z-index: 1000;
+    transition: left 0.3s ease;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+  }
+
+  .nav-sidebar.open {
+    left: 0;
+  }
+
+  .nav-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+  }
+
+  .nav-overlay.open {
+    display: block;
+  }
+
+  /* Список чатов */
+  .chat-list {
+    width: 100%;
+    height: 100vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-list-item {
+    padding: 12px 16px;
+    min-height: 64px;
+  }
+
+  /* Окно чата */
+  .chat-window {
+    width: 100%;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    background: var(--bg-primary);
+  }
+
+  .chat-window.hidden {
+    display: none;
+  }
+
+  .chat-header {
+    height: 56px;
+    padding: 8px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+  }
+
+  .chat-messages {
+    height: calc(100vh - 56px - 60px); /* Высота минус header и input */
+    padding: 12px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-input-container {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+  }
+
+  .chat-input {
+    min-height: 44px;
+    max-height: 120px;
+    font-size: 16px; /* Предотвращает зум на iOS */
+    padding: 10px 12px;
+  }
+
+  /* Сообщения */
+  .message {
+    max-width: 85%;
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .message-time {
+    font-size: 11px;
+    margin-top: 4px;
+  }
+
+  /* Кнопки */
+  button {
+    min-height: 44px; /* Минимальный размер для touch */
+    min-width: 44px;
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+  }
+
+  /* Модальные окна */
+  .modal-overlay {
+    padding: 16px;
+  }
+
+  .modal-content {
+    width: 100%;
+    max-width: 100%;
+    max-height: 90vh;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    animation: slideUp 0.3s ease;
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  /* Настройки */
+  .settings-container {
+    padding: 16px;
+  }
+
+  .settings-section {
+    margin-bottom: 24px;
+  }
+
+  .settings-item {
+    padding: 16px;
+    min-height: 56px;
+  }
+
+  /* Профиль */
+  .profile-header {
+    padding: 24px 16px;
+  }
+
+  .profile-avatar {
+    width: 80px;
+    height: 80px;
+  }
+
+  /* Звонки */
+  .call-container {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .call-controls {
+    padding: 24px;
+    gap: 16px;
+  }
+
+  .call-button {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+  }
+
+  /* Медиа галерея */
+  .media-gallery {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+
+  /* Поиск */
+  .search-container {
+    padding: 12px;
+  }
+
+  .search-input {
+    font-size: 16px; /* Предотвращает зум на iOS */
+    padding: 12px 16px;
+  }
+
+  /* Toast уведомления */
+  .toast-container {
+    bottom: 80px; /* Выше input */
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+
+  .toast {
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  /* Свайп жесты */
+  .swipeable-item {
+    touch-action: pan-y;
+  }
+
+  /* Безопасная зона для iPhone */
+  @supports (padding: max(0px)) {
+    .chat-input-container {
+      padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+
+    .chat-header {
+      padding-top: max(8px, env(safe-area-inset-top));
+    }
+  }
+}
+
+/* Планшеты */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .chat-list {
+    width: 320px;
+  }
+
+  .chat-window {
+    width: calc(100% - 320px);
+  }
+}
+
+/* Очень маленькие экраны */
+@media (max-width: 360px) {
+  .message {
+    max-width: 90%;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .chat-input {
+    font-size: 14px;
+    padding: 8px 10px;
+  }
+
+  button {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+
+/* Ландшафтная ориентация на мобильных */
+@media (max-width: 768px) and (orientation: landscape) {
+  .chat-messages {
+    height: calc(100vh - 48px - 50px);
+  }
+
+  .chat-header {
+    height: 48px;
+  }
+
+  .chat-input-container {
+    padding: 6px 12px;
+  }
+}
+
+/* Touch оптимизации */
+@media (hover: none) and (pointer: coarse) {
+  /* Увеличиваем области нажатия */
+  button, a, .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Убираем hover эффекты */
+  button:hover, a:hover {
+    transform: none;
+  }
+
+  /* Активные состояния */
+  button:active, a:active {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+
+  /* Улучшаем скроллинг */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Высокая плотность пикселей */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .message {
+    border-width: 0.5px;
+  }
+}

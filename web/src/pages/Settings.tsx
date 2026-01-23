@@ -1,7 +1,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import ThemePicker from '../components/ThemePicker';
+import { playNotificationSound } from '../services/notifications';
+import EnhancedThemePicker from '../components/EnhancedThemePicker';
+import AppearanceSettings from '../components/AppearanceSettings';
+import SessionsManager from '../components/SessionsManager';
+import BackupManager from '../components/BackupManager';
+import BotManager from '../components/BotManager';
+import CalendarIntegration from '../components/CalendarIntegration';
+import TodoIntegration from '../components/TodoIntegration';
+import LanguageSelector from '../components/LanguageSelector';
+import { useTranslation } from '../i18n';
 import '../styles/settings.css';
 
 interface NotificationSettings {
@@ -13,6 +22,25 @@ interface NotificationSettings {
   groupsEnabled: boolean;
   channelsEnabled: boolean;
   soundVolume: number;
+  soundType: 'default' | 'gentle' | 'classic' | 'modern' | 'soft' | 'alert' | 'bell' | 'chime' | 'pop' | 'ding' | 'whoosh' | 'bubble';
+  // Разные звуки для разных типов
+  soundMessage?: string;
+  soundCall?: string;
+  soundMention?: string;
+  soundGroup?: string;
+  soundChannel?: string;
+  // Громкость для разных типов
+  volumeMessage?: number;
+  volumeCall?: number;
+  volumeMention?: number;
+  volumeGroup?: number;
+  volumeChannel?: number;
+  // Do Not Disturb
+  dndEnabled?: boolean;
+  dndStart?: string; // HH:mm
+  dndEnd?: string; // HH:mm
+  // Приоритеты
+  priorityHigh?: boolean; // Высокий приоритет для всех уведомлений
 }
 
 interface PrivacySettings {
@@ -31,7 +59,8 @@ interface SecuritySettings {
 }
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'appearance'>('notifications');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'appearance' | 'tools'>('notifications');
+  const [showBackupManager, setShowBackupManager] = useState(false);
   const [notifications, setNotifications] = useState<NotificationSettings>({
     pushEnabled: true,
     soundEnabled: true,
@@ -40,7 +69,22 @@ export default function Settings() {
     previewEnabled: true,
     groupsEnabled: true,
     channelsEnabled: true,
-    soundVolume: 80
+    soundVolume: 80,
+    soundType: 'default',
+    soundMessage: 'default',
+    soundCall: 'alert',
+    soundMention: 'alert',
+    soundGroup: 'gentle',
+    soundChannel: 'chime',
+    volumeMessage: 80,
+    volumeCall: 100,
+    volumeMention: 100,
+    volumeGroup: 60,
+    volumeChannel: 60,
+    dndEnabled: false,
+    dndStart: '22:00',
+    dndEnd: '08:00',
+    priorityHigh: false
   });
   const [privacy, setPrivacy] = useState<PrivacySettings>({
     showBio: true,
@@ -56,6 +100,11 @@ export default function Settings() {
     activeSessions: []
   });
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showAppearanceSettings, setShowAppearanceSettings] = useState(false);
+  const [showSessionsManager, setShowSessionsManager] = useState(false);
+  const [showBotManager, setShowBotManager] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showTodos, setShowTodos] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -214,15 +263,18 @@ export default function Settings() {
     audio.play().catch(() => {});
   };
 
+  const { t } = useTranslation();
+
   return (
     <div className="settings-container">
       <div className="settings-header">
-        <h1>Настройки</h1>
+        <h1>{t('settings.title')}</h1>
+        <LanguageSelector />
         {saveStatus === 'success' && (
-          <div className="settings-status success">✓ Сохранено</div>
+          <div className="settings-status success">✓ {t('common.success')}</div>
         )}
         {saveStatus === 'error' && (
-          <div className="settings-status error">✗ Ошибка сохранения</div>
+          <div className="settings-status error">✗ {t('errors.unknownError')}</div>
         )}
       </div>
 
@@ -299,23 +351,168 @@ export default function Settings() {
               </label>
 
               {notifications.soundEnabled && (
-                <div className="settings-item">
-                  <div className="settings-item-label">
-                    <span>Громкость звука</span>
-                    <span className="settings-item-description">{notifications.soundVolume}%</span>
+                <>
+                  <div className="settings-item">
+                    <div className="settings-item-label">
+                      <span>Общий тип звука</span>
+                      <span className="settings-item-description">Используется по умолчанию для всех типов</span>
+                    </div>
+                    <select
+                      value={notifications.soundType}
+                      onChange={e => setNotifications(prev => ({ ...prev, soundType: e.target.value as any }))}
+                      style={{ width: '100%', padding: '8px', marginTop: 8, borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5' }}
+                    >
+                      <option value="default">По умолчанию</option>
+                      <option value="gentle">Мягкий</option>
+                      <option value="classic">Классический</option>
+                      <option value="modern">Современный</option>
+                      <option value="soft">Тихий</option>
+                      <option value="alert">Предупреждающий</option>
+                      <option value="bell">Колокольчик</option>
+                      <option value="chime">Мелодичный звон</option>
+                      <option value="pop">Короткий "поп"</option>
+                      <option value="ding">Одиночный "динг"</option>
+                      <option value="whoosh">Свист</option>
+                      <option value="bubble">Пузырьки</option>
+                    </select>
                   </div>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={notifications.soundVolume}
-                      onChange={e => setNotifications(prev => ({ ...prev, soundVolume: Number(e.target.value) }))}
-                      style={{ flex: 1 }}
-                    />
-                    <button onClick={testSound} className="settings-button-small">🎵 Тест</button>
+                  
+                  <div className="settings-item">
+                    <div className="settings-item-label">
+                      <span>Звуки для разных событий</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ width: 120, fontSize: 13 }}>Сообщения:</span>
+                        <select
+                          value={notifications.soundMessage || 'default'}
+                          onChange={e => setNotifications(prev => ({ ...prev, soundMessage: e.target.value as any }))}
+                          style={{ flex: 1, padding: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5', fontSize: 13 }}
+                        >
+                          <option value="default">По умолчанию</option>
+                          <option value="gentle">Мягкий</option>
+                          <option value="pop">Короткий</option>
+                          <option value="ding">Динг</option>
+                        </select>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={notifications.volumeMessage || 80}
+                          onChange={e => setNotifications(prev => ({ ...prev, volumeMessage: Number(e.target.value) }))}
+                          style={{ width: 80 }}
+                        />
+                        <span style={{ width: 40, fontSize: 12 }}>{notifications.volumeMessage || 80}%</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ width: 120, fontSize: 13 }}>Звонки:</span>
+                        <select
+                          value={notifications.soundCall || 'alert'}
+                          onChange={e => setNotifications(prev => ({ ...prev, soundCall: e.target.value as any }))}
+                          style={{ flex: 1, padding: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5', fontSize: 13 }}
+                        >
+                          <option value="alert">Предупреждающий</option>
+                          <option value="bell">Колокольчик</option>
+                          <option value="chime">Мелодичный</option>
+                        </select>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={notifications.volumeCall || 100}
+                          onChange={e => setNotifications(prev => ({ ...prev, volumeCall: Number(e.target.value) }))}
+                          style={{ width: 80 }}
+                        />
+                        <span style={{ width: 40, fontSize: 12 }}>{notifications.volumeCall || 100}%</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ width: 120, fontSize: 13 }}>Упоминания:</span>
+                        <select
+                          value={notifications.soundMention || 'alert'}
+                          onChange={e => setNotifications(prev => ({ ...prev, soundMention: e.target.value as any }))}
+                          style={{ flex: 1, padding: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5', fontSize: 13 }}
+                        >
+                          <option value="alert">Предупреждающий</option>
+                          <option value="bell">Колокольчик</option>
+                          <option value="whoosh">Свист</option>
+                        </select>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={notifications.volumeMention || 100}
+                          onChange={e => setNotifications(prev => ({ ...prev, volumeMention: Number(e.target.value) }))}
+                          style={{ width: 80 }}
+                        />
+                        <span style={{ width: 40, fontSize: 12 }}>{notifications.volumeMention || 100}%</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ width: 120, fontSize: 13 }}>Группы:</span>
+                        <select
+                          value={notifications.soundGroup || 'gentle'}
+                          onChange={e => setNotifications(prev => ({ ...prev, soundGroup: e.target.value as any }))}
+                          style={{ flex: 1, padding: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5', fontSize: 13 }}
+                        >
+                          <option value="gentle">Мягкий</option>
+                          <option value="soft">Тихий</option>
+                          <option value="default">По умолчанию</option>
+                        </select>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={notifications.volumeGroup || 60}
+                          onChange={e => setNotifications(prev => ({ ...prev, volumeGroup: Number(e.target.value) }))}
+                          style={{ width: 80 }}
+                        />
+                        <span style={{ width: 40, fontSize: 12 }}>{notifications.volumeGroup || 60}%</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ width: 120, fontSize: 13 }}>Каналы:</span>
+                        <select
+                          value={notifications.soundChannel || 'chime'}
+                          onChange={e => setNotifications(prev => ({ ...prev, soundChannel: e.target.value as any }))}
+                          style={{ flex: 1, padding: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5', fontSize: 13 }}
+                        >
+                          <option value="chime">Мелодичный</option>
+                          <option value="bell">Колокольчик</option>
+                          <option value="gentle">Мягкий</option>
+                        </select>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={notifications.volumeChannel || 60}
+                          onChange={e => setNotifications(prev => ({ ...prev, volumeChannel: Number(e.target.value) }))}
+                          style={{ width: 80 }}
+                        />
+                        <span style={{ width: 40, fontSize: 12 }}>{notifications.volumeChannel || 60}%</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                  
+                  <div className="settings-item">
+                    <div className="settings-item-label">
+                      <span>Общая громкость звука</span>
+                      <span className="settings-item-description">{notifications.soundVolume}%</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={notifications.soundVolume}
+                        onChange={e => setNotifications(prev => ({ ...prev, soundVolume: Number(e.target.value) }))}
+                        style={{ flex: 1 }}
+                      />
+                      <button onClick={testSound} className="settings-button-small">🎵 Тест</button>
+                    </div>
+                  </div>
+                </>
               )}
 
               <label className="settings-item">
@@ -382,6 +579,61 @@ export default function Settings() {
                   type="checkbox"
                   checked={notifications.mentionsOnly}
                   onChange={e => setNotifications(prev => ({ ...prev, mentionsOnly: e.target.checked }))}
+                  className="settings-toggle"
+                />
+              </label>
+            </div>
+
+            <div className="settings-group">
+              <h3>Режим "Не беспокоить"</h3>
+              <label className="settings-item">
+                <div className="settings-item-label">
+                  <span>Включить Do Not Disturb</span>
+                  <span className="settings-item-description">Не показывать уведомления в указанное время (кроме упоминаний)</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={notifications.dndEnabled || false}
+                  onChange={e => setNotifications(prev => ({ ...prev, dndEnabled: e.target.checked }))}
+                  className="settings-toggle"
+                />
+              </label>
+
+              {notifications.dndEnabled && (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Начало (ЧЧ:ММ)</label>
+                    <input
+                      type="time"
+                      value={notifications.dndStart || '22:00'}
+                      onChange={e => setNotifications(prev => ({ ...prev, dndStart: e.target.value }))}
+                      style={{ width: '100%', padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Конец (ЧЧ:ММ)</label>
+                    <input
+                      type="time"
+                      value={notifications.dndEnd || '08:00'}
+                      onChange={e => setNotifications(prev => ({ ...prev, dndEnd: e.target.value }))}
+                      style={{ width: '100%', padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5' }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="settings-group">
+              <h3>Дополнительно</h3>
+              <label className="settings-item">
+                <div className="settings-item-label">
+                  <span>Высокий приоритет</span>
+                  <span className="settings-item-description">Всегда показывать уведомления с высоким приоритетом</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={notifications.priorityHigh || false}
+                  onChange={e => setNotifications(prev => ({ ...prev, priorityHigh: e.target.checked }))}
                   className="settings-toggle"
                 />
               </label>
@@ -524,14 +776,7 @@ export default function Settings() {
               🎨 Выбрать тему
             </button>
             {showThemePicker && (
-              <div className="settings-modal-overlay" onClick={() => setShowThemePicker(false)}>
-                <div className="settings-modal" onClick={e => e.stopPropagation()}>
-                  <ThemePicker
-                    onSelect={() => setShowThemePicker(false)}
-                    onClose={() => setShowThemePicker(false)}
-                  />
-                </div>
-              </div>
+              <EnhancedThemePicker onClose={() => setShowThemePicker(false)} />
             )}
           </div>
         )}
@@ -586,25 +831,87 @@ export default function Settings() {
                     Управление устройствами, на которых выполнен вход
                   </span>
                 </div>
+                <button
+                  onClick={() => setShowSessionsManager(true)}
+                  className="settings-button primary"
+                >
+                  Управление сессиями
+                </button>
               </div>
-              {security.activeSessions.length === 0 ? (
-                <div className="settings-empty">
-                  <p>Нет активных сессий</p>
-                  <small>Все активные сессии будут отображаться здесь</small>
+            </div>
+            
+            {showSessionsManager && (
+              <SessionsManager onClose={() => setShowSessionsManager(false)} />
+            )}
+          </div>
+        )}
+
+        {activeTab === 'tools' && (
+          <div className="settings-section">
+            <h2>Функции и инструменты</h2>
+            
+            <div className="settings-group">
+              <h3>Экспорт и резервное копирование</h3>
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Резервное копирование</span>
+                  <span className="settings-item-description">
+                    Создайте резервную копию всех ваших чатов и сообщений
+                  </span>
                 </div>
-              ) : (
-                <div className="settings-sessions">
-                  {security.activeSessions.map(session => (
-                    <div key={session.id} className="settings-session-item">
-                      <div>
-                        <strong>{session.device}</strong>
-                        <small>Последняя активность: {new Date(session.lastActivity).toLocaleString('ru-RU')}</small>
-                      </div>
-                      <button className="settings-button-small danger">Завершить</button>
-                    </div>
-                  ))}
+                <button
+                  onClick={() => setShowBackupManager(true)}
+                  className="settings-button primary"
+                >
+                  💾 Управление резервными копиями
+                </button>
+              </div>
+            </div>
+
+            <div className="settings-group">
+              <h3>Интеграции</h3>
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Боты</span>
+                  <span className="settings-item-description">
+                    Управление ботами для автоматизации
+                  </span>
                 </div>
-              )}
+                <button
+                  onClick={() => setShowBotManager(true)}
+                  className="settings-button primary"
+                >
+                  🤖 Управление ботами
+                </button>
+              </div>
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Календарь</span>
+                  <span className="settings-item-description">
+                    Управление событиями и напоминаниями
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowCalendar(true)}
+                  className="settings-button primary"
+                >
+                  📅 Календарь
+                </button>
+              </div>
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Задачи</span>
+                  <span className="settings-item-description">
+                    Управление задачами и todo списками
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowTodos(true)}
+                  className="settings-button primary"
+                >
+                  ✅ Задачи
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -612,58 +919,105 @@ export default function Settings() {
         {activeTab === 'appearance' && (
           <div className="settings-section">
             <h2>Внешний вид</h2>
+            <p className="settings-description">
+              Настройте размер шрифта, компактный режим, анимации и другие параметры интерфейса.
+            </p>
+            <button
+              onClick={() => setShowAppearanceSettings(true)}
+              className="settings-save-button"
+            >
+              🖼️ Настройки внешнего вида
+            </button>
+            {showAppearanceSettings && (
+              <AppearanceSettings onClose={() => setShowAppearanceSettings(false)} />
+            )}
+          </div>
+        )}
+
+        {activeTab === 'tools' && (
+          <div className="settings-section">
+            <h2>Функции и инструменты</h2>
             
             <div className="settings-group">
-              <h3>Интерфейс</h3>
+              <h3>Экспорт и резервное копирование</h3>
               <div className="settings-item">
                 <div className="settings-item-label">
-                  <span>Компактный режим</span>
-                  <span className="settings-item-description">Более компактное отображение элементов</span>
+                  <span>Резервное копирование</span>
+                  <span className="settings-item-description">
+                    Создайте резервную копию всех ваших чатов и сообщений
+                  </span>
                 </div>
-                <label className="settings-toggle-wrapper">
-                  <input type="checkbox" className="settings-toggle" />
-                  <span className="settings-toggle-slider"></span>
-                </label>
-              </div>
-
-              <div className="settings-item">
-                <div className="settings-item-label">
-                  <span>Показывать аватары в списке чатов</span>
-                  <span className="settings-item-description">Отображать фото профилей в списке чатов</span>
-                </div>
-                <label className="settings-toggle-wrapper">
-                  <input type="checkbox" defaultChecked className="settings-toggle" />
-                  <span className="settings-toggle-slider"></span>
-                </label>
-              </div>
-
-              <div className="settings-item">
-                <div className="settings-item-label">
-                  <span>Анимации</span>
-                  <span className="settings-item-description">Включить плавные анимации интерфейса</span>
-                </div>
-                <label className="settings-toggle-wrapper">
-                  <input type="checkbox" defaultChecked className="settings-toggle" />
-                  <span className="settings-toggle-slider"></span>
-                </label>
+                <button
+                  onClick={() => setShowBackupManager(true)}
+                  className="settings-button primary"
+                >
+                  💾 Управление резервными копиями
+                </button>
               </div>
             </div>
 
             <div className="settings-group">
-              <h3>Язык</h3>
+              <h3>Интеграции</h3>
               <div className="settings-item">
                 <div className="settings-item-label">
-                  <span>Язык интерфейса</span>
+                  <span>Боты</span>
+                  <span className="settings-item-description">
+                    Управление ботами для автоматизации
+                  </span>
                 </div>
-                <select className="settings-select" defaultValue="ru">
-                  <option value="ru">Русский</option>
-                  <option value="en">English</option>
-                </select>
+                <button
+                  onClick={() => setShowBotManager(true)}
+                  className="settings-button primary"
+                >
+                  🤖 Управление ботами
+                </button>
+              </div>
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Календарь</span>
+                  <span className="settings-item-description">
+                    Управление событиями и напоминаниями
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowCalendar(true)}
+                  className="settings-button primary"
+                >
+                  📅 Календарь
+                </button>
+              </div>
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Задачи</span>
+                  <span className="settings-item-description">
+                    Управление задачами и todo списками
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowTodos(true)}
+                  className="settings-button primary"
+                >
+                  ✅ Задачи
+                </button>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Модальные окна для инструментов */}
+      {showBackupManager && (
+        <BackupManager onClose={() => setShowBackupManager(false)} />
+      )}
+      {showBotManager && (
+        <BotManager onClose={() => setShowBotManager(false)} />
+      )}
+      {showCalendar && (
+        <CalendarIntegration onClose={() => setShowCalendar(false)} />
+      )}
+      {showTodos && (
+        <TodoIntegration onClose={() => setShowTodos(false)} />
+      )}
     </div>
   );
 }

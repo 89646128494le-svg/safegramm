@@ -22,9 +22,10 @@ func CreatePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 
 		var req struct {
-			Question   string                `json:"question" binding:"required"`
-			Options    []models.PollOption   `json:"options" binding:"required,min=2,max=10"`
-			AllowsMulti bool                 `json:"allowsMulti"`
+			Question   string   `json:"question" binding:"required"`
+			Options    []struct {
+				Text string `json:"text" binding:"required"`
+			} `json:"options" binding:"required,min=2,max=10"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -53,33 +54,51 @@ func CreatePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 
 		// Создаем опрос
 		poll := models.Poll{
-			ID:         uuid.New().String(),
-			MessageID:  messageID,
-			Question:   req.Question,
-			AllowsMulti: req.AllowsMulti,
+			ID:        uuid.New().String(),
+			ChatID:    message.ChatID,
+			MessageID: messageID,
+			Question:  req.Question,
+			CreatedBy: userIDStr,
 		}
-
-		if err := poll.SetOptions(req.Options); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-			return
+		
+		// Создаем опции
+		for i, opt := range req.Options {
+			if opt.Text != "" {
+				poll.Options = append(poll.Options, models.PollOption{
+					ID:     uuid.New().String(),
+					PollID: poll.ID,
+					Text:   opt.Text,
+					Order:  i,
+				})
+			}
 		}
 
 		if err := db.Create(&poll).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
+		
+		// Обновляем сообщение с pollID
+		message.PollID = poll.ID
+		db.Save(&message)
 
 		// Загружаем опрос с голосами
-		db.Preload("Votes").Preload("Votes.User").First(&poll, "id = ?", poll.ID)
+		db.Preload("Options").Preload("Votes").Preload("Votes.User").First(&poll, "id = ?", poll.ID)
 
 		// Формируем ответ
-		options, _ := poll.GetOptions()
+		optionsData := make([]gin.H, len(poll.Options))
+		for i, opt := range poll.Options {
+			optionsData[i] = gin.H{
+				"id":   opt.ID,
+				"text": opt.Text,
+			}
+		}
+		
 		response := gin.H{
 			"id":         poll.ID,
 			"messageId":  poll.MessageID,
 			"question":   poll.Question,
-			"options":    options,
-			"allowsMulti": poll.AllowsMulti,
+			"options":    optionsData,
 			"createdAt":  poll.CreatedAt.Unix() * 1000,
 			"votes":      make([]gin.H, len(poll.Votes)),
 		}
@@ -98,6 +117,120 @@ func CreatePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 					"avatarUrl": vote.User.AvatarURL,
 				}
 			}
+		}
+
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+// VotePollByMessage голосует в опросе по messageId
+func VotePollByMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		messageID := c.Param("id")
+		userID, _ := c.Get("userID")
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+
+		var req struct {
+			OptionID string `json:"optionId" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
+			return
+		}
+
+		// Находим сообщение и опрос
+		var message models.Message
+		if err := db.First(&message, "id = ?", messageID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+
+		if message.PollID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "not_a_poll"})
+			return
+		}
+
+		// Вызываем VotePoll с pollID
+		pollID := message.PollID
+		var poll models.Poll
+		if err := db.Preload("Options").First(&poll, "id = ?", pollID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "poll_not_found"})
+			return
+		}
+
+		// Проверяем, что опция существует
+		optionExists := false
+		for _, opt := range poll.Options {
+			if opt.ID == req.OptionID {
+				optionExists = true
+				break
+			}
+		}
+
+		if !optionExists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_option"})
+			return
+		}
+
+		// Проверяем существующий голос
+		var existingVote models.PollVote
+		if err := db.Where("poll_id = ? AND user_id = ?", pollID, userIDStr).First(&existingVote).Error; err == nil {
+			if existingVote.OptionID == req.OptionID {
+				c.JSON(http.StatusConflict, gin.H{"error": "already_voted"})
+				return
+			}
+			// Обновляем голос
+			existingVote.OptionID = req.OptionID
+			if err := db.Save(&existingVote).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
+			}
+		} else {
+			// Создаем новый голос
+			vote := models.PollVote{
+				ID:       uuid.New().String(),
+				PollID:   pollID,
+				UserID:   userIDStr,
+				OptionID: req.OptionID,
+			}
+			if err := db.Create(&vote).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
+			}
+		}
+
+		// Загружаем обновленный опрос
+		db.Preload("Options").Preload("Votes").Preload("Votes.User").First(&poll, "id = ?", pollID)
+
+		// Формируем ответ
+		totalVotes := int64(len(poll.Votes))
+		optionsWithVotes := make([]gin.H, 0)
+		for _, opt := range poll.Options {
+			voteCount := int64(0)
+			voters := make([]string, 0)
+			for _, vote := range poll.Votes {
+				if vote.OptionID == opt.ID {
+					voteCount++
+					voters = append(voters, vote.UserID)
+				}
+			}
+			optionsWithVotes = append(optionsWithVotes, gin.H{
+				"id":     opt.ID,
+				"text":   opt.Text,
+				"votes":  voteCount,
+				"voters": voters,
+			})
+		}
+
+		response := gin.H{
+			"id":         poll.ID,
+			"question":   poll.Question,
+			"options":    optionsWithVotes,
+			"totalVotes": totalVotes,
 		}
 
 		c.JSON(http.StatusOK, response)
@@ -131,10 +264,12 @@ func VotePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			return
 		}
 
+		// Загружаем опции
+		db.Preload("Options").First(&poll, "id = ?", pollID)
+		
 		// Проверяем, что опция существует
-		options, _ := poll.GetOptions()
 		optionExists := false
-		for _, opt := range options {
+		for _, opt := range poll.Options {
 			if opt.ID == req.OptionID {
 				optionExists = true
 				break
@@ -146,26 +281,22 @@ func VotePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем существующий голос
+		// Проверяем существующий голос (для одиночного выбора - обновляем, для множественного - создаем новый)
 		var existingVote models.PollVote
 		if err := db.Where("poll_id = ? AND user_id = ?", pollID, userIDStr).First(&existingVote).Error; err == nil {
-			if poll.AllowsMulti {
-				// Для множественного выбора проверяем, не голосовал ли уже за эту опцию
-				if existingVote.OptionID == req.OptionID {
-					c.JSON(http.StatusConflict, gin.H{"error": "already_voted"})
-					return
-				}
-				// Создаем новый голос
-			} else {
-				// Для одиночного выбора обновляем голос
-				existingVote.OptionID = req.OptionID
-				if err := db.Save(&existingVote).Error; err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-					return
-				}
-				c.JSON(http.StatusOK, gin.H{"ok": true, "voteId": existingVote.ID})
+			// Если уже голосовал за эту опцию - ошибка
+			if existingVote.OptionID == req.OptionID {
+				c.JSON(http.StatusConflict, gin.H{"error": "already_voted"})
 				return
 			}
+			// Обновляем голос на новую опцию
+			existingVote.OptionID = req.OptionID
+			if err := db.Save(&existingVote).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"ok": true, "voteId": existingVote.ID})
+			return
 		}
 
 		// Создаем новый голос
@@ -182,16 +313,22 @@ func VotePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 
 		// Загружаем обновленный опрос
-		db.Preload("Votes").Preload("Votes.User").First(&poll, "id = ?", pollID)
+		db.Preload("Options").Preload("Votes").Preload("Votes.User").First(&poll, "id = ?", pollID)
 
 		// Формируем ответ
-		options, _ = poll.GetOptions()
+		optionsData := make([]gin.H, len(poll.Options))
+		for i, opt := range poll.Options {
+			optionsData[i] = gin.H{
+				"id":   opt.ID,
+				"text": opt.Text,
+			}
+		}
+		
 		response := gin.H{
 			"id":         poll.ID,
 			"messageId":  poll.MessageID,
 			"question":   poll.Question,
-			"options":    options,
-			"allowsMulti": poll.AllowsMulti,
+			"options":    optionsData,
 			"createdAt":  poll.CreatedAt.Unix() * 1000,
 			"votes":      make([]gin.H, len(poll.Votes)),
 		}
@@ -227,13 +364,22 @@ func GetPoll(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		options, _ := poll.GetOptions()
+		// Загружаем опции
+		db.Preload("Options").First(&poll, "id = ?", pollID)
+		
+		optionsData := make([]gin.H, len(poll.Options))
+		for i, opt := range poll.Options {
+			optionsData[i] = gin.H{
+				"id":   opt.ID,
+				"text": opt.Text,
+			}
+		}
+		
 		response := gin.H{
 			"id":         poll.ID,
 			"messageId":  poll.MessageID,
 			"question":   poll.Question,
-			"options":    options,
-			"allowsMulti": poll.AllowsMulti,
+			"options":    optionsData,
 			"createdAt":  poll.CreatedAt.Unix() * 1000,
 			"votes":      make([]gin.H, len(poll.Votes)),
 		}

@@ -5,9 +5,15 @@ import { showToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/Modal';
 import ServiceManager from '../../components/ServiceManager';
 import WebhookManager from '../../components/WebhookManager';
+import AnalyticsDashboard from '../../components/admin/AnalyticsDashboard';
+import BanMuteManager from '../../components/admin/BanMuteManager';
+import MaintenanceManager from '../../components/admin/MaintenanceManager';
+import BroadcastManager from '../../components/admin/BroadcastManager';
+import AdminLogs from '../../components/admin/AdminLogs';
+import SystemMonitor from '../../components/admin/SystemMonitor';
 
 export default function Admin() {
-  const [tab, setTab] = useState<'users'|'stats'|'mod'|'reports'|'feedback'|'push'|'services'|'webhook'|'owner'>('users');
+  const [tab, setTab] = useState<'users'|'analytics'|'bans'|'maintenance'|'broadcast'|'logs'|'monitor'|'mod'|'reports'|'feedback'|'push'|'services'|'webhook'|'owner'>('users');
   const [isOwner, setIsOwner] = useState(false);
   const [user, setUser] = useState<any>(null);
 
@@ -51,18 +57,88 @@ export default function Admin() {
           👥 Пользователи
         </button>
         <button 
-          onClick={()=>setTab('stats')} 
+          onClick={()=>setTab('analytics')} 
           style={{
             padding: '10px 16px',
-            fontWeight: tab === 'stats' ? '600' : '400',
-            background: tab === 'stats' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'stats' ? '#fff' : 'var(--fg, #e5e7eb)',
+            fontWeight: tab === 'analytics' ? '600' : '400',
+            background: tab === 'analytics' ? 'var(--accent, #3b82f6)' : 'transparent',
+            color: tab === 'analytics' ? '#fff' : 'var(--fg, #e5e7eb)',
             border: '1px solid var(--border, #374151)',
             borderRadius: '8px',
             cursor: 'pointer'
           }}
         >
-          📊 Статистика
+          📊 Аналитика
+        </button>
+        <button 
+          onClick={()=>setTab('bans')} 
+          style={{
+            padding: '10px 16px',
+            fontWeight: tab === 'bans' ? '600' : '400',
+            background: tab === 'bans' ? 'var(--accent, #3b82f6)' : 'transparent',
+            color: tab === 'bans' ? '#fff' : 'var(--fg, #e5e7eb)',
+            border: '1px solid var(--border, #374151)',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          🚫 Баны и муты
+        </button>
+        <button 
+          onClick={()=>setTab('maintenance')} 
+          style={{
+            padding: '10px 16px',
+            fontWeight: tab === 'maintenance' ? '600' : '400',
+            background: tab === 'maintenance' ? 'var(--accent, #3b82f6)' : 'transparent',
+            color: tab === 'maintenance' ? '#fff' : 'var(--fg, #e5e7eb)',
+            border: '1px solid var(--border, #374151)',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          🔧 Техработы
+        </button>
+        <button 
+          onClick={()=>setTab('broadcast')} 
+          style={{
+            padding: '10px 16px',
+            fontWeight: tab === 'broadcast' ? '600' : '400',
+            background: tab === 'broadcast' ? 'var(--accent, #3b82f6)' : 'transparent',
+            color: tab === 'broadcast' ? '#fff' : 'var(--fg, #e5e7eb)',
+            border: '1px solid var(--border, #374151)',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          📢 Рассылка
+        </button>
+        <button 
+          onClick={()=>setTab('logs')} 
+          style={{
+            padding: '10px 16px',
+            fontWeight: tab === 'logs' ? '600' : '400',
+            background: tab === 'logs' ? 'var(--accent, #3b82f6)' : 'transparent',
+            color: tab === 'logs' ? '#fff' : 'var(--fg, #e5e7eb)',
+            border: '1px solid var(--border, #374151)',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          📜 Логи
+        </button>
+        <button 
+          onClick={()=>setTab('monitor')} 
+          style={{
+            padding: '10px 16px',
+            fontWeight: tab === 'monitor' ? '600' : '400',
+            background: tab === 'monitor' ? 'var(--accent, #3b82f6)' : 'transparent',
+            color: tab === 'monitor' ? '#fff' : 'var(--fg, #e5e7eb)',
+            border: '1px solid var(--border, #374151)',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          🖥️ Мониторинг
         </button>
         <button 
           onClick={()=>setTab('mod')} 
@@ -154,7 +230,12 @@ export default function Admin() {
         )}
       </div>
       {tab==='users' && <UsersTab/>}
-      {tab==='stats' && <StatsTab/>}
+      {tab==='analytics' && <AnalyticsDashboard />}
+      {tab==='bans' && <BanMuteManager />}
+      {tab==='maintenance' && (isOwner || user?.roles?.includes('admin')) && <MaintenanceManager />}
+      {tab==='broadcast' && (isOwner || user?.roles?.includes('admin')) && <BroadcastManager />}
+      {tab==='logs' && <AdminLogs />}
+      {tab==='monitor' && (isOwner || user?.roles?.includes('admin')) && <SystemMonitor />}
       {tab==='mod' && <ModTab/>}
       {tab==='reports' && <ReportsTab/>}
       {tab==='feedback' && <FeedbackTab/>}

@@ -242,6 +242,11 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 			Preload("Reactions.User").
 			Order("created_at DESC").
 			Limit(limit)
+
+		// Фильтрация мод-очереди: обычные участники видят только approved и свои pending/rejected
+		if member.Role != "owner" && member.Role != "admin" && member.Role != "moderator" {
+			query = query.Where("(moderation_status = 'approved' OR sender_id = ?)", userIDStr)
+		}
 		
 		if beforeID != "" {
 			// Загружаем сообщения до указанного ID
@@ -279,7 +284,7 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 			readMap[receipt.MessageID] = true
 		}
 
-		// Формируем ответ с информацией о replyToMessage
+		// Формируем ответ с информацией о replyToMessage и новых типах
 		result := make([]gin.H, len(messages))
 		for i, msg := range messages {
 			msgData := gin.H{
@@ -287,6 +292,9 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 				"chatId":        msg.ChatID,
 				"senderId":      msg.SenderID,
 				"text":          msg.Text,
+				"ciphertext":    msg.Ciphertext,
+				"moderationStatus": msg.ModerationStatus,
+				"moderationReason": msg.ModerationReason,
 				"attachmentUrl": msg.AttachmentURL,
 				"replyTo":       msg.ReplyTo,
 				"forwardFrom":   msg.ForwardFrom,
@@ -296,6 +304,66 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 				"locationLat":   msg.LocationLat,
 				"locationLon":    msg.LocationLon,
 				"createdAt":     msg.CreatedAt,
+			}
+			
+			// Загружаем опрос если есть
+			if msg.PollID != "" {
+				var poll models.Poll
+				if err := db.Preload("Options").Preload("Votes").Preload("Votes.User").First(&poll, "id = ?", msg.PollID).Error; err == nil {
+					totalVotes := int64(len(poll.Votes))
+					optionsWithVotes := make([]gin.H, 0)
+					for _, opt := range poll.Options {
+						voteCount := int64(0)
+						voters := make([]string, 0)
+						for _, vote := range poll.Votes {
+							if vote.OptionID == opt.ID {
+								voteCount++
+								voters = append(voters, vote.UserID)
+							}
+						}
+						optionsWithVotes = append(optionsWithVotes, gin.H{
+							"id":     opt.ID,
+							"text":   opt.Text,
+							"votes":  voteCount,
+							"voters": voters,
+						})
+					}
+					msgData["pollId"] = poll.ID
+					msgData["poll"] = gin.H{
+						"id":         poll.ID,
+						"question":   poll.Question,
+						"options":    optionsWithVotes,
+						"totalVotes": totalVotes,
+					}
+				}
+			}
+			
+			// Парсим JSON для календарного события, контакта и документа
+			if msg.CalendarEventJSON != "" {
+				var calendarEventData gin.H
+				if err := json.Unmarshal([]byte(msg.CalendarEventJSON), &calendarEventData); err == nil {
+					msgData["calendarEvent"] = calendarEventData
+				}
+			}
+			if msg.ContactJSON != "" {
+				var contactData gin.H
+				if err := json.Unmarshal([]byte(msg.ContactJSON), &contactData); err == nil {
+					msgData["contact"] = contactData
+				}
+			}
+			if msg.DocumentJSON != "" {
+				var documentData gin.H
+				if err := json.Unmarshal([]byte(msg.DocumentJSON), &documentData); err == nil {
+					msgData["document"] = documentData
+				}
+			}
+			
+			// Парсим историю редактирования
+			if msg.EditHistoryJSON != "" {
+				var editHistory []gin.H
+				if err := json.Unmarshal([]byte(msg.EditHistoryJSON), &editHistory); err == nil {
+					msgData["editHistory"] = editHistory
+				}
 			}
 			if msg.EditedAt != nil {
 				msgData["editedAt"] = msg.EditedAt

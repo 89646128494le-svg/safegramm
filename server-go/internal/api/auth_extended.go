@@ -153,6 +153,77 @@ func SendEmailCode(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// SendLoginEmailCode отправляет код на email при входе (по username)
+func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Username string `json:"username" binding:"required"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": err.Error()})
+			return
+		}
+
+		// Находим пользователя
+		var user models.User
+		if err := db.Where("LOWER(username) = LOWER(?)", req.Username).First(&user).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user_not_found"})
+			return
+		}
+
+		// Проверяем, есть ли email
+		if user.Email == nil || *user.Email == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_email"})
+			return
+		}
+
+		// Генерируем 6-значный код
+		code := generateRandomCode(6)
+		
+		// Сохраняем код (действителен 10 минут)
+		StoreEmailCode(*user.Email, code, 10*time.Minute)
+
+		// Отправляем email
+		err := email.SendVerificationCode(*user.Email, code)
+		if err != nil {
+			// Если отправка не удалась, все равно возвращаем успех
+			// но в development режиме показываем код
+			nodeEnv := os.Getenv("NODE_ENV")
+			if nodeEnv == "development" || nodeEnv == "" {
+				c.JSON(http.StatusOK, gin.H{
+					"ok": true,
+					"message": "Код отправлен на email (или ошибка отправки - проверьте настройки)",
+					"error": err.Error(),
+					"code": code, // Только для development
+					"hasCloudCode": user.PinHash != "",
+				})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed_to_send_email",
+				"detail": "Не удалось отправить email. Проверьте настройки SMTP.",
+			})
+			return
+		}
+
+		// Успешная отправка
+		nodeEnv := os.Getenv("NODE_ENV")
+		response := gin.H{
+			"ok": true,
+			"message": "Код отправлен на email",
+			"hasCloudCode": user.PinHash != "",
+		}
+		
+		// В development режиме показываем код для тестирования
+		if nodeEnv == "development" || nodeEnv == "" {
+			response["code"] = code
+		}
+		
+		c.JSON(http.StatusOK, response)
+	}
+}
+
 // VerifyEmail проверяет email код
 func VerifyEmail(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

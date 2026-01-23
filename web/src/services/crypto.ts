@@ -81,3 +81,18 @@ export async function unwrapKeyFromEnvelope(encrypted: string, senderPubJwk: any
   const rawB64 = await decryptCiphertext(shared, encrypted);
   return await importRawKey(rawB64);
 }
+
+// Проверка отпечатков ключей (fingerprint verification)
+export async function getKeyFingerprint(publicKeyJwk: JsonWebKey): Promise<string> {
+  // Вычисляем SHA-256 от публичного ключа
+  const keyJson = JSON.stringify(publicKeyJwk, Object.keys(publicKeyJwk).sort());
+  const hash = await crypto.subtle.digest('SHA-256', strToBuf(keyJson));
+  const hashArray = Array.from(new Uint8Array(hash));
+  // Возвращаем первые 16 байт в hex формате (32 символа)
+  return hashArray.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+export async function getMyKeyFingerprint(): Promise<string> {
+  const myPubKey = await getMyPublicJwk();
+  return await getKeyFingerprint(myPubKey);
+}

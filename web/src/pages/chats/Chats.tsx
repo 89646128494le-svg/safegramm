@@ -5,6 +5,10 @@ import { getSocket } from '../../services/websocket';
 import EnhancedChatWindow from '../../components/EnhancedChatWindow';
 import { showToast } from '../../components/Toast';
 import { PromptModal } from '../../components/Modal';
+import ChatFilters, { ChatFilter } from '../../components/ChatFilters';
+import GlobalChatSearch from '../../components/GlobalChatSearch';
+import ChatListItem from '../../components/ChatListItem';
+import { keyboardShortcuts, defaultChatShortcuts } from '../../utils/keyboardShortcuts';
 
 // Функция для воспроизведения звука звонка
 const playCallSound = () => {
@@ -71,10 +75,33 @@ export default function Chats() {
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [starredChats, setStarredChats] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadUser();
     loadUsers();
+    loadStarredChats();
+    
+    // Регистрируем горячие клавиши
+    defaultChatShortcuts.forEach(shortcut => {
+      keyboardShortcuts.register(shortcut);
+    });
+    
+    // Горячая клавиша для глобального поиска
+    keyboardShortcuts.register({
+      key: 'k',
+      ctrl: true,
+      callback: () => setShowGlobalSearch(true),
+      description: 'Глобальный поиск',
+    });
+    
+    return () => {
+      defaultChatShortcuts.forEach(shortcut => {
+        keyboardShortcuts.unregister(shortcut);
+      });
+    };
   }, []);
 
   useEffect(() => {
@@ -343,6 +370,34 @@ export default function Chats() {
     return chat.name || (chat.type === 'group' ? 'Группа' : 'Канал');
   };
 
+  const loadStarredChats = () => {
+    const stored = localStorage.getItem('starredChats');
+    if (stored) {
+      try {
+        setStarredChats(new Set(JSON.parse(stored)));
+      } catch (e) {
+        console.error('Failed to load starred chats:', e);
+      }
+    }
+  };
+
+  const saveStarredChats = (starred: Set<string>) => {
+    localStorage.setItem('starredChats', JSON.stringify(Array.from(starred)));
+    setStarredChats(starred);
+  };
+
+  const toggleStarChat = (chatId: string) => {
+    const newStarred = new Set(starredChats);
+    if (newStarred.has(chatId)) {
+      newStarred.delete(chatId);
+      showToast('Чат удален из закладок', 'success');
+    } else {
+      newStarred.add(chatId);
+      showToast('Чат добавлен в закладки', 'success');
+    }
+    saveStarredChats(newStarred);
+  };
+
   const getChatPreview = (chat: Chat) => {
     if (chat.lastMessage) {
       if (chat.lastMessage.text) {
@@ -365,40 +420,68 @@ export default function Chats() {
     return '';
   };
 
-  // Фильтрация чатов по поисковому запросу
+  // Фильтрация чатов по поисковому запросу и активному фильтру
   const filteredChats = chats.filter(chat => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    const chatName = getChatName(chat).toLowerCase();
-    if (chatName.includes(query)) return true;
+    // Фильтр по типу
+    if (activeFilter === 'groups' && chat.type !== 'group') return false;
+    if (activeFilter === 'channels' && chat.type !== 'channel') return false;
+    if (activeFilter === 'unread' && (!(chat as any).unreadCount || (chat as any).unreadCount === 0)) return false;
+    if (activeFilter === 'starred' && !starredChats.has(chat.id)) return false;
     
-    // Поиск по имени пользователя в DM
-    if (chat.type === 'dm') {
-      const otherMemberId = chat.members.find(id => id !== currentUser?.id);
-      if (otherMemberId) {
-        const otherUser = users.get(otherMemberId);
-        if (otherUser && otherUser.username.toLowerCase().includes(query)) {
-          return true;
+    // Фильтр по архивированным
+    if (showArchived && !chat.archivedAt) return false;
+    if (!showArchived && chat.archivedAt) return false;
+    
+    // Поиск по запросу
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const chatName = getChatName(chat).toLowerCase();
+      if (chatName.includes(query)) return true;
+      
+      // Поиск по имени пользователя в DM
+      if (chat.type === 'dm') {
+        const otherMemberId = chat.members.find(id => id !== currentUser?.id);
+        if (otherMemberId) {
+          const otherUser = users.get(otherMemberId);
+          if (otherUser && otherUser.username.toLowerCase().includes(query)) {
+            return true;
+          }
         }
       }
+      
+      // Поиск по последнему сообщению
+      const preview = getChatPreview(chat).toLowerCase();
+      if (preview.includes(query)) {
+        return true;
+      }
+      
+      return false;
     }
     
-    // Поиск по последнему сообщению
-    const preview = getChatPreview(chat).toLowerCase();
-    if (preview.includes(query)) {
-      return true;
-    }
-    
-    return false;
+    return true;
   });
+
+  // Подсчет статистики для фильтров
+  const unreadCount = chats.filter(c => (c as any).unreadCount > 0).length;
+  const starredCount = starredChats.size;
 
   if (!currentUser) {
     return (
       <div className="container">
-        <div className="empty">Загрузка...</div>
-      </div>
-    );
-  }
+        <div className="empty">Загрузка...      </div>
+      
+      {/* Глобальный поиск */}
+      <GlobalChatSearch
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
+        onSelectChat={(chatId) => {
+          setSelectedChatId(chatId);
+          setShowGlobalSearch(false);
+        }}
+      />
+    </div>
+  );
+}
 
   return (
     <div className="container">
@@ -445,10 +528,35 @@ export default function Chats() {
 
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)'}}>
           <h2 className="title" style={{fontSize: '20px', fontWeight: '700'}}>Мои чаты</h2>
-          <span className="badge">{chats.length}</span>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={() => setShowGlobalSearch(true)}
+              title="Глобальный поиск (Ctrl+K)"
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              🔍
+            </button>
+            <span className="badge">{filteredChats.length}</span>
+          </div>
         </div>
+        
+        {/* Фильтры чатов */}
+        <ChatFilters
+          activeFilter={activeFilter}
+          onFilterChange={setActiveFilter}
+          unreadCount={unreadCount}
+          starredCount={starredCount}
+        />
         <div style={{ margin: 'var(--spacing-md) 0', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
           <button 
+            data-new-chat
             onClick={() => setShowDMModal(true)}
             className="btn btn-primary"
             style={{ width: '100%' }}
@@ -474,6 +582,7 @@ export default function Chats() {
         {/* Поиск по чатам */}
         <div style={{ marginBottom: 'var(--spacing-sm)', padding: '0 var(--spacing-sm)' }}>
           <input
+            data-chat-search
             type="text"
             placeholder="🔍 Поиск чатов..."
             value={searchQuery}
@@ -530,136 +639,33 @@ export default function Chats() {
             )}
             <div className="chat-list">
               {filteredChats.map(chat => {
-                const preview = getChatPreview(chat);
-                // Для DM показываем онлайн статус собеседника
-                let onlineStatus = null;
-                if (chat.type === 'dm') {
-                  const otherMemberId = chat.members.find(id => id !== currentUser?.id);
-                  if (otherMemberId) {
-                    const otherUser = users.get(otherMemberId);
-                    if (otherUser) {
-                      onlineStatus = otherUser.status === 'online' ? '🟢' : '⚫';
-                    }
-                  }
-                }
-                const isArchived = !!chat.archivedAt;
+                const isStarred = starredChats.has(chat.id);
                 return (
-                  <div
+                  <ChatListItem
                     key={chat.id}
-                    className={`chat-item ${selectedChatId === chat.id ? 'active' : ''}`}
-                    onClick={(e) => {
-                      // Если клик по кнопке архивирования, не открываем чат
-                      if ((e.target as HTMLElement).closest('.archive-btn')) {
-                        return;
-                      }
-                      setSelectedChatId(chat.id);
+                    chat={{
+                      ...chat,
+                      isStarred,
+                      unreadCount: (chat as any).unreadCount || 0,
                     }}
-                    style={{ position: 'relative' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-xs)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', flex: 1, minWidth: 0 }}>
-                        {isArchived && <span style={{ fontSize: '12px' }}>📁</span>}
-                        <div className="chat-item-name" style={{ fontWeight: '600', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {getChatName(chat)}
-                        </div>
-                        {onlineStatus && <span style={{ fontSize: '10px', flexShrink: 0 }}>{onlineStatus}</span>}
-                      </div>
-                      {/* Счетчик непрочитанных */}
-                      {(chat as any).unreadCount > 0 && (
-                        <div style={{
-                          background: 'var(--accent-primary)',
-                          color: '#fff',
-                          borderRadius: '50%',
-                          minWidth: '20px',
-                          height: '20px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '11px',
-                          fontWeight: 'bold',
-                          padding: '0 6px',
-                          marginRight: '4px'
-                        }}>
-                          {(chat as any).unreadCount > 99 ? '99+' : (chat as any).unreadCount}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          className="archive-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isArchived) {
-                              unarchiveChat(chat.id);
-                            } else {
-                              archiveChat(chat.id);
-                            }
-                          }}
-                          title={isArchived ? 'Разархивировать' : 'Архивировать'}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: '4px 8px',
-                            fontSize: '16px',
-                            color: 'var(--text-secondary)',
-                            borderRadius: 'var(--radius-sm)',
-                            transition: 'var(--transition-base)'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'var(--bg-hover)';
-                            e.currentTarget.style.color = 'var(--text-primary)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                            e.currentTarget.style.color = 'var(--text-secondary)';
-                          }}
-                        >
-                          {isArchived ? '📂' : '📁'}
-                        </button>
-                        {(chat.type === 'group' || chat.type === 'channel') && (
-                          <button
-                            className="delete-chat-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteChat(chat.id);
-                            }}
-                            title="Удалить чат"
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: '4px 8px',
-                              fontSize: '16px',
-                              color: 'var(--danger)',
-                              borderRadius: 'var(--radius-sm)',
-                              transition: 'var(--transition-base)'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'var(--bg-hover)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'transparent';
-                            }}
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  {preview && (
-                    <div className="chat-item-preview" style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {preview}
-                    </div>
-                  )}
-                  {!preview && (
-                    <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
-                      Нет сообщений
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    isSelected={selectedChatId === chat.id}
+                    onClick={() => setSelectedChatId(chat.id)}
+                    onArchive={() => {
+                      if (chat.archivedAt) {
+                        unarchiveChat(chat.id);
+                      } else {
+                        archiveChat(chat.id);
+                      }
+                    }}
+                    onDelete={() => deleteChat(chat.id)}
+                    onStar={() => toggleStarChat(chat.id)}
+                    onUnstar={() => toggleStarChat(chat.id)}
+                    getChatName={getChatName}
+                    getChatPreview={getChatPreview}
+                  />
+                );
+              })}
+            </div>
           </>
         )}
       </div>

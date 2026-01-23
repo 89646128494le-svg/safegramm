@@ -16,7 +16,11 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	api.POST("/auth/register", AuthRateLimitMiddleware(), Register(db, cfg))
 	api.POST("/auth/login", AuthRateLimitMiddleware(), Login(db, cfg))
 	api.POST("/auth/send-email-code", AuthRateLimitMiddleware(), SendEmailCode(db))
+	api.POST("/auth/send-login-email-code", AuthRateLimitMiddleware(), SendLoginEmailCode(db))
 	api.POST("/auth/verify-email", AuthRateLimitMiddleware(), VerifyEmail(db))
+	
+	// Тестовый endpoint для просмотра всех email шаблонов (только development)
+	api.POST("/test/email", AuthRateLimitMiddleware(), TestEmailTemplates(db))
 
 	// Защищенные маршруты (требуют аутентификации)
 	protected := api.Group("")
@@ -45,6 +49,31 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/users/me/2fa/disable", Disable2FA(db))
 	protected.POST("/users/me/recovery", GenerateRecoveryCodes(db))
 	protected.POST("/users/me/pin", SetPIN(db))
+	
+	// Сессии
+	protected.GET("/users/me/sessions", GetSessions(db))
+	protected.DELETE("/users/me/sessions/:id", TerminateSession(db))
+	protected.POST("/users/me/sessions/terminate-all", TerminateAllOtherSessions(db))
+
+	// Статистика
+	protected.GET("/chats/:id/statistics", GetChatStatistics(db))
+
+	// Боты
+	protected.GET("/bots", GetBots(db))
+	protected.POST("/bots", CreateBot(db))
+	protected.POST("/bots/:id/toggle", ToggleBot(db))
+	protected.DELETE("/bots/:id", DeleteBot(db))
+
+	// Календарь
+	protected.GET("/calendar/events", GetCalendarEvents(db))
+	protected.POST("/calendar/events", CreateCalendarEvent(db))
+	protected.DELETE("/calendar/events/:id", DeleteCalendarEvent(db))
+
+	// Задачи
+	protected.GET("/todos", GetTodos(db))
+	protected.POST("/todos", CreateTodo(db))
+	protected.PATCH("/todos/:id", UpdateTodo(db))
+	protected.DELETE("/todos/:id", DeleteTodo(db))
 
 	// Чаты
 	protected.GET("/chats", GetChats(db))
@@ -76,7 +105,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/messages/:id/unsave", UnsaveMessage(db))          // Удалить сообщение из избранного
 	protected.GET("/messages/saved", GetSavedMessages(db))             // Получить сохраненные сообщения
 	protected.POST("/messages/:id/poll", CreatePoll(db, wsHub))        // Создать опрос в сообщении
-	protected.POST("/polls/:id/vote", VotePoll(db, wsHub))             // Проголосовать в опросе
+	protected.POST("/polls/:id/vote", VotePoll(db, wsHub))             // Проголосовать в опросе (по pollId)
+	protected.POST("/messages/:id/poll/vote", VotePollByMessage(db, wsHub)) // Проголосовать в опросе (по messageId)
 	protected.GET("/polls/:id", GetPoll(db))                           // Получить информацию об опросе
 	protected.GET("/search", UniversalSearch(db))                      // Универсальный поиск
 	protected.GET("/messages/search", SearchMessages(db))              // Поиск сообщений (старый endpoint)
@@ -92,6 +122,15 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/push/subscribe", SubscribePush(db))      // Подписаться на push (полный путь: /api/push/subscribe)
 	protected.POST("/push/unsubscribe", UnsubscribePush(db))  // Отписаться от push (полный путь: /api/push/unsubscribe)
 	protected.POST("/push/test", TestPush(db))                // Тестовое push-уведомление (полный путь: /api/push/test)
+
+	// Звонки
+	protected.POST("/calls", CreateCall(db))                    // Создать запись о звонке
+	protected.GET("/calls", GetCallHistory(db))                 // Получить историю звонков
+	protected.GET("/calls/missed", GetMissedCalls(db))          // Получить пропущенные звонки
+	protected.POST("/calls/:id/read", MarkCallAsRead(db))       // Отметить звонок как прочитанный
+	protected.POST("/calls/recordings", UploadCallRecording(db)) // Загрузить запись звонка
+	protected.POST("/calls/group", CreateGroupCall(db))         // Создать запись о групповом звонке
+	protected.GET("/calls/group", GetGroupCallHistory(db))      // Получить историю групповых звонков
 
 	// Стикеры
 	protected.GET("/sticker-packs", GetStickerPacks(db))
@@ -109,9 +148,18 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/servers/:id/channels", CreateChannel(db))
 	protected.GET("/servers/:id/channels", GetChannels(db))
 	protected.DELETE("/servers/:id/channels/:channelId", DeleteChannel(db))
+	protected.PATCH("/servers/:id/channels/:channelId/category", SetChannelCategory(db))
+	protected.POST("/servers/:id/categories", CreateChannelCategory(db))
+	protected.GET("/servers/:id/categories", GetChannelCategories(db))
+	protected.DELETE("/servers/:id/categories/:categoryId", DeleteChannelCategory(db))
 	protected.GET("/servers/:id/members", GetServerMembers(db))
+	protected.POST("/servers/:id/members/bulk", BulkAddServerMembers(db))
+	protected.PATCH("/servers/:id/members/:userId/role", SetServerMemberRole(db))
 	protected.POST("/servers/:id/join", JoinServer(db))
 	protected.POST("/servers/:id/leave", LeaveServer(db))
+	protected.POST("/servers/:id/invite-link", GenerateServerInviteLink(db))
+	protected.POST("/servers/join/:link", JoinByServerInviteLink(db))
+	protected.GET("/servers/:id/history", GetServerMemberHistory(db))
 	protected.GET("/servers/:id", GetServer(db))
 
 	// Группы
@@ -119,8 +167,37 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/groups/:id/join", JoinGroup(db))
 	protected.POST("/groups/:id/leave", LeaveGroup(db))
 	protected.POST("/groups/:id/members", AddGroupMember(db))
+	protected.POST("/groups/:id/members/bulk", BulkAddGroupMembers(db))
+	protected.PATCH("/groups/:id/members/:userId/role", SetGroupMemberRole(db))
 	protected.DELETE("/groups/:id/members/:userId", RemoveGroupMember(db))
 	protected.PATCH("/groups/:id", UpdateGroup(db))
+	protected.GET("/groups/:id/history", GetGroupMemberHistory(db))
+	protected.GET("/groups/:id/stats", GetGroupStats(db))
+
+	// Модерация чатов (группы/каналы)
+	protected.GET("/chats/:id/moderation/settings", GetChatModerationSettings(db))
+	protected.POST("/chats/:id/moderation/settings", UpdateChatModerationSettings(db))
+	protected.GET("/chats/:id/moderation/queue", GetModerationQueue(db))
+	protected.GET("/chats/:id/moderation/logs", GetModerationLogs(db))
+	protected.POST("/chats/:id/moderation/ban", BanUser(db))
+	protected.POST("/chats/:id/moderation/unban", UnbanUser(db))
+	protected.POST("/messages/:id/moderation/approve", ApproveMessage(db, wsHub))
+	protected.POST("/messages/:id/moderation/reject", RejectMessage(db))
+
+	// Интеграции (вебхуки) для чатов
+	protected.GET("/chats/:id/webhooks", GetChatWebhooks(db))
+	protected.POST("/chats/:id/webhooks", CreateChatWebhook(db))
+	protected.DELETE("/chats/:id/webhooks/:webhookId", DeleteChatWebhook(db))
+	
+	// Приглашения по ссылке
+	protected.POST("/chats/:id/invite-link", GenerateInviteLink(db))
+	protected.POST("/chats/join/:link", JoinByInviteLink(db))
+	
+	// Групповое E2EE
+	protected.GET("/chats/:id/group-key", GetGroupKey(db))
+	protected.POST("/chats/:id/group-key/init", InitializeGroupKey(db))
+	protected.POST("/chats/:id/group-key/update", UpdateGroupKey(db))
+	protected.GET("/chats/:id/group-key/version", GetGroupKeyVersion(db))
 
 	// Админ панель
 	protected.GET("/admin/users", RequireAdmin(db), GetAdminUsers(db))

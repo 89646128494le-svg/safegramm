@@ -76,6 +76,28 @@ func JoinServer(db *gorm.DB) gin.HandlerFunc {
 		}
 		db.Create(&member)
 
+		// Добавляем пользователя во все чаты каналов сервера
+		var channels []models.Channel
+		db.Where("server_id = ?", serverID).Find(&channels)
+		for _, ch := range channels {
+			if ch.ChatID == "" {
+				continue
+			}
+			// пропускаем если уже есть
+			var cm models.ChatMember
+			if err := db.Where("chat_id = ? AND user_id = ?", ch.ChatID, userIDStr).First(&cm).Error; err == nil {
+				continue
+			}
+			db.Create(&models.ChatMember{
+				ID:     uuid.New().String(),
+				ChatID: ch.ChatID,
+				UserID: userIDStr,
+				Role:   "member",
+			})
+		}
+
+		logMemberEvent(db, "server", serverID, userIDStr, userIDStr, "join", nil)
+
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
@@ -104,6 +126,7 @@ func LeaveServer(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		db.Delete(&member)
+		logMemberEvent(db, "server", serverID, userIDStr, userIDStr, "leave", nil)
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
@@ -154,10 +177,41 @@ func CreateChannel(db *gorm.DB) gin.HandlerFunc {
 			Position: req.Position,
 		}
 
+		// Создаем чат для сообщений канала
+		channelChat := models.Chat{
+			ID:        uuid.New().String(),
+			Type:      "channel",
+			Name:      req.Name,
+			CreatedBy: userIDStr,
+		}
+		if err := db.Create(&channelChat).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		channel.ChatID = channelChat.ID
+
 		if err := db.Create(&channel).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
+
+		// Добавляем всех участников сервера в чат канала
+		var members []models.ServerMember
+		db.Where("server_id = ?", serverID).Find(&members)
+		for _, m := range members {
+			role := "member"
+			if m.Role == "owner" || m.Role == "admin" {
+				role = m.Role
+			}
+			db.Create(&models.ChatMember{
+				ID:     uuid.New().String(),
+				ChatID: channelChat.ID,
+				UserID: m.UserID,
+				Role:   role,
+			})
+		}
+
+		logModeration(db, "", serverID, userIDStr, "channel_create", "", "", gin.H{"channelId": channel.ID, "name": channel.Name})
 
 		c.JSON(http.StatusOK, gin.H{"channel": channel})
 	}
@@ -212,7 +266,14 @@ func DeleteChannel(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		var channel models.Channel
+		_ = db.First(&channel, "id = ? AND server_id = ?", channelID, serverID).Error
 		db.Delete(&models.Channel{}, "id = ? AND server_id = ?", channelID, serverID)
+		if channel.ChatID != "" {
+			db.Delete(&models.ChatMember{}, "chat_id = ?", channel.ChatID)
+			db.Delete(&models.Chat{}, "id = ?", channel.ChatID)
+		}
+		logModeration(db, "", serverID, userIDStr, "channel_delete", "", "", gin.H{"channelId": channelID})
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }

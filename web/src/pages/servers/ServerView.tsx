@@ -4,20 +4,32 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { showToast } from '../../components/Toast';
 import { ConfirmModal, PromptModal } from '../../components/Modal';
+import EnhancedChatWindow from '../../components/EnhancedChatWindow';
+import { useStore } from '../../store/useStore';
 
 interface Server {
   id: string;
   name: string;
   description?: string;
   ownerId: string;
+  inviteLink?: string;
   createdAt: number;
 }
 
 interface Channel {
   id: string;
   serverId: string;
+  categoryId?: string;
+  chatId?: string;
   name: string;
   type: 'text' | 'voice';
+  position: number;
+}
+
+interface Category {
+  id: string;
+  serverId: string;
+  name: string;
   position: number;
 }
 
@@ -31,14 +43,19 @@ interface Member {
 export default function ServerView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useStore();
   const [server, setServer] = useState<Server | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChannelId, setSelectedChannelId] = useState<string>('');
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelType, setNewChannelType] = useState<'text' | 'voice'>('text');
+  const [showCreateCategory, setShowCreateCategory] = useState(false);
+  const [serverHistory, setServerHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{open: boolean, channelId: string, channelName: string}>({
     open: false,
     channelId: '',
@@ -49,6 +66,7 @@ export default function ServerView() {
     if (id) {
       loadServer();
       loadChannels();
+      loadCategories();
       loadMembers();
     }
   }, [id]);
@@ -74,6 +92,16 @@ export default function ServerView() {
     } catch (e: any) {
       console.error('Failed to load channels:', e);
       showToast('Ошибка загрузки каналов: ' + e.message, 'error');
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const data = await api(`/api/servers/${id}/categories`);
+      setCategories(data.categories || []);
+    } catch (e: any) {
+      // категории не обязательны
+      setCategories([]);
     }
   };
 
@@ -104,6 +132,43 @@ export default function ServerView() {
       await loadChannels();
     } catch (e: any) {
       showToast('Ошибка создания канала: ' + e.message, 'error');
+    }
+  };
+
+  const createCategory = async (name: string) => {
+    if (!name.trim()) return;
+    try {
+      await api(`/api/servers/${id}/categories`, 'POST', { name: name.trim(), position: categories.length });
+      showToast('Категория создана', 'success');
+      await loadCategories();
+    } catch (e: any) {
+      showToast('Ошибка создания категории: ' + e.message, 'error');
+    } finally {
+      setShowCreateCategory(false);
+    }
+  };
+
+  const exportMembers = () => {
+    const data = {
+      serverId: id,
+      exportedAt: new Date().toISOString(),
+      members,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `safegram_server_${id}_members.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadHistory = async () => {
+    try {
+      const data = await api(`/api/servers/${id}/history`);
+      setServerHistory(data.events || []);
+    } catch (e: any) {
+      showToast('Ошибка истории: ' + e.message, 'error');
     }
   };
 
@@ -155,6 +220,8 @@ export default function ServerView() {
 
   const textChannels = channels.filter(c => c.type === 'text').sort((a, b) => a.position - b.position);
   const voiceChannels = channels.filter(c => c.type === 'voice').sort((a, b) => a.position - b.position);
+  const categoriesSorted = categories.slice().sort((a, b) => a.position - b.position);
+  const uncategorized = textChannels.filter(c => !c.categoryId);
 
   return (
     <div className="container">
@@ -166,6 +233,41 @@ export default function ServerView() {
               {server.description}
             </div>
           )}
+          {server.inviteLink && (
+            <div style={{marginTop: 12}}>
+              <div className="small" style={{color: 'var(--subtle, #9ca3af)', marginBottom: 6}}>Приглашение</div>
+              <div style={{display: 'flex', gap: 8}}>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/app/servers/join/${server.inviteLink}`;
+                    navigator.clipboard.writeText(url);
+                    showToast('Ссылка скопирована', 'success');
+                  }}
+                  style={{padding: '6px 10px', fontSize: 12}}
+                >
+                  📋 Копировать
+                </button>
+                <button onClick={exportMembers} style={{padding: '6px 10px', fontSize: 12}}>💾 Экспорт</button>
+                <button
+                  onClick={async () => {
+                    const next = !showHistory;
+                    setShowHistory(next);
+                    if (next) await loadHistory();
+                  }}
+                  style={{padding: '6px 10px', fontSize: 12}}
+                >
+                  🕓 История
+                </button>
+              </div>
+              <div style={{marginTop: 10}}>
+                <img
+                  alt="QR server invite"
+                  style={{width: 140, height: 140, borderRadius: 8, background: '#fff', padding: 6}}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=170x170&data=${encodeURIComponent(`${window.location.origin}/app/servers/join/${server.inviteLink}`)}`}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{marginBottom: '20px'}}>
@@ -173,8 +275,16 @@ export default function ServerView() {
             <div className="small" style={{color: 'var(--subtle, #9ca3af)', fontWeight: '600', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.5px'}}>
               ТЕКСТОВЫЕ КАНАЛЫ
             </div>
-            <button
-              onClick={() => setShowCreateChannel(true)}
+            <div style={{display: 'flex', gap: 8}}>
+              <button
+                onClick={() => setShowCreateCategory(true)}
+                style={{background: 'none', border: 'none', color: 'var(--subtle, #9ca3af)', cursor: 'pointer', fontSize: '16px', padding: '0', width: '20px', height: '20px'}}
+                title="Создать категорию"
+              >
+                ▦
+              </button>
+              <button
+                onClick={() => setShowCreateChannel(true)}
               style={{
                 background: 'none',
                 border: 'none',
@@ -189,41 +299,70 @@ export default function ServerView() {
             >
               +
             </button>
+            </div>
           </div>
           {textChannels.length === 0 ? (
             <div className="small" style={{color: 'var(--subtle, #9ca3af)', fontStyle: 'italic', padding: '8px'}}>
               Нет каналов
             </div>
           ) : (
-            textChannels.map(channel => (
-              <div
-                key={channel.id}
-                onClick={() => setSelectedChannelId(channel.id)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  background: selectedChannelId === channel.id ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                  color: selectedChannelId === channel.id ? 'var(--accent, #3b82f6)' : 'var(--fg, #e5e7eb)',
-                  marginBottom: '4px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedChannelId !== channel.id) {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedChannelId !== channel.id) {
-                    e.currentTarget.style.background = 'transparent';
-                  }
-                }}
-              >
-                <span># {channel.name}</span>
-              </div>
-            ))
+            <div>
+              {categoriesSorted.map(cat => {
+                const catChannels = textChannels.filter(ch => ch.categoryId === cat.id);
+                if (catChannels.length === 0) return null;
+                return (
+                  <div key={cat.id} style={{marginBottom: 8}}>
+                    <div className="small" style={{color: 'var(--subtle, #9ca3af)', fontWeight: 600, padding: '6px 8px'}}>
+                      {cat.name.toUpperCase()}
+                    </div>
+                    {catChannels.map(channel => (
+                      <div
+                        key={channel.id}
+                        onClick={() => setSelectedChannelId(channel.id)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          background: selectedChannelId === channel.id ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                          color: selectedChannelId === channel.id ? 'var(--accent, #3b82f6)' : 'var(--fg, #e5e7eb)',
+                          marginBottom: '4px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span># {channel.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              {uncategorized.length > 0 && (
+                <div>
+                  {categoriesSorted.length > 0 && (
+                    <div className="small" style={{color: 'var(--subtle, #9ca3af)', fontWeight: 600, padding: '6px 8px'}}>
+                      БЕЗ КАТЕГОРИИ
+                    </div>
+                  )}
+                  {uncategorized.map(channel => (
+                    <div
+                      key={channel.id}
+                      onClick={() => setSelectedChannelId(channel.id)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        background: selectedChannelId === channel.id ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                        color: selectedChannelId === channel.id ? 'var(--accent, #3b82f6)' : 'var(--fg, #e5e7eb)',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      <span># {channel.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -309,12 +448,26 @@ export default function ServerView() {
             borderRadius: '12px',
             height: '100%'
           }}>
-            <div style={{fontSize: '24px', fontWeight: '600', marginBottom: '16px'}}>
+            <div style={{fontSize: '20px', fontWeight: '600', marginBottom: '12px'}}>
               Канал: #{channels.find(c => c.id === selectedChannelId)?.name || 'Неизвестный'}
             </div>
-            <div className="empty" style={{padding: '48px'}}>
-              Чат в каналах серверов будет добавлен в следующих версиях
-            </div>
+            {(() => {
+              const ch = channels.find(c => c.id === selectedChannelId);
+              if (!ch?.chatId) {
+                return <div className="empty" style={{padding: '48px'}}>У канала нет chatId (переоткройте сервер/пересоздайте канал)</div>;
+              }
+              if (!user) {
+                return <div className="empty" style={{padding: '48px'}}>Нужно войти</div>;
+              }
+              return (
+                <div style={{height: 'calc(100% - 48px)'}}>
+                  <EnhancedChatWindow
+                    chatId={ch.chatId}
+                    currentUser={{ id: user.id, username: user.username, avatarUrl: user.avatarUrl, status: user.status } as any}
+                  />
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="empty" style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px'}}>
@@ -360,6 +513,41 @@ export default function ServerView() {
         defaultValue=""
         confirmText="Создать"
         cancelText="Отмена"
+      />
+
+      <PromptModal
+        isOpen={showCreateCategory}
+        onClose={() => setShowCreateCategory(false)}
+        onConfirm={(name) => createCategory(name)}
+        title="Создать категорию"
+        message="Введите название категории:"
+        placeholder="Название категории"
+        defaultValue=""
+        confirmText="Создать"
+        cancelText="Отмена"
+      />
+
+      <ConfirmModal
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        onConfirm={() => setShowHistory(false)}
+        title="История участников"
+        message={
+          <div style={{maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8}}>
+            {serverHistory.length === 0 ? (
+              <div className="small">Нет событий</div>
+            ) : (
+              serverHistory.slice(0, 100).map((ev: any, idx: number) => (
+                <div key={ev.id || idx} style={{padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.05)'}}>
+                  <div style={{fontWeight: 600, fontSize: 13}}>{ev.action} — {ev.userId}</div>
+                  <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>{ev.createdAt ? new Date(ev.createdAt).toLocaleString('ru-RU') : ''}</div>
+                </div>
+              ))
+            )}
+          </div>
+        }
+        confirmText="Закрыть"
+        cancelText="Закрыть"
       />
 
       <ConfirmModal

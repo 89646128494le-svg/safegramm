@@ -2,6 +2,35 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { api, API_URL } from '../services/api';
 import { getSocket, sendWebSocketMessage, closeSocket } from '../services/websocket';
+import { sendWebSocketMessage as sendOptimized } from '../services/websocketOptimized';
+import { notifyNewMessage, notifyCall, hasNotificationPermission } from '../services/notifications';
+import { useStore } from '../store/useStore';
+import { parseMarkdown, isVideoUrl } from '../utils/markdown';
+import { exportChatToJSON, exportChatToTXT } from '../utils/exportChat';
+import ExportChatDialog from './ExportChatDialog';
+import ChatStatistics from './ChatStatistics';
+import BackupManager from './BackupManager';
+import BotManager from './BotManager';
+import CalendarIntegration from './CalendarIntegration';
+import TodoIntegration from './TodoIntegration';
+import { addToOfflineQueue, isOnline, onOnlineStatusChange, processOfflineQueue } from '../utils/offlineQueue';
+import { sendWebSocketMessage as sendOptimized, flushWebSocketBatch } from '../services/websocketOptimized';
+import { compressImage, shouldCompressImage } from '../utils/imageCompression';
+import LinkPreview from './LinkPreview';
+import VideoEmbed from './VideoEmbed';
+import Poll from './Poll';
+import MessagePreview from './MessagePreview';
+import CallHistory from './CallHistory';
+import { 
+  generateGroupKey, 
+  wrapKeyForUser, 
+  unwrapKeyFromEnvelope, 
+  encryptPlaintext, 
+  decryptCiphertext,
+  getMyPublicJwk,
+  exportRawKey,
+  importRawKey
+} from '../services/crypto';
 import MentionAutocomplete from './MentionAutocomplete';
 import GroupVideoCall from './GroupVideoCall';
 import DMCall from './DMCall';
@@ -15,6 +44,8 @@ import GroupChannelSettings from './GroupChannelSettings';
 import AudioPlayer from './AudioPlayer';
 import { showToast } from './Toast';
 import { ConfirmModal, PromptModal } from './Modal';
+import { getChatBackground, getChatColor } from '../services/appearance';
+import AppearanceSettings from './AppearanceSettings';
 
 interface Message {
   id: string;
@@ -33,6 +64,37 @@ interface Message {
       avatarUrl?: string;
     };
   };
+  pollId?: string;
+  poll?: {
+    id: string;
+    question: string;
+    options: Array<{ id: string; text: string; votes: number; voters: string[] }>;
+    totalVotes: number;
+  };
+  calendarEvent?: {
+    title: string;
+    startTime: string;
+    endTime?: string;
+    location?: string;
+    description?: string;
+  };
+  contact?: {
+    name: string;
+    phone?: string;
+    email?: string;
+    avatar?: string;
+  };
+  document?: {
+    name: string;
+    type: string;
+    size: number;
+    previewUrl?: string;
+  };
+  editHistory?: Array<{
+    text: string;
+    editedAt: number;
+  }>;
+  uploadProgress?: number;
   forwardFrom?: string;
   forwardFromChatId?: string;
   forwardedMessage?: {
@@ -167,6 +229,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [lastSentMessage, setLastSentMessage] = useState<{id: string, timestamp: number} | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
   const [users, setUsers] = useState<Map<string, User>>(new Map());
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -194,6 +258,17 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
+  const [showExpirePicker, setShowExpirePicker] = useState(false);
+  const [showPollCreator, setShowPollCreator] = useState(false);
+  const [showCalendarCreator, setShowCalendarCreator] = useState(false);
+  const [showContactCreator, setShowContactCreator] = useState(false);
+  const [showMessagePreview, setShowMessagePreview] = useState(false);
+  const [previewText, setPreviewText] = useState('');
+  const [previewAttachment, setPreviewAttachment] = useState<string | undefined>();
+  const [selectedExpireTime, setSelectedExpireTime] = useState<number | null>(null);
+  const [groupKey, setGroupKey] = useState<CryptoKey | null>(null);
+  const [groupKeyVersion, setGroupKeyVersion] = useState<number>(0);
+  const [isE2EEEnabled, setIsE2EEEnabled] = useState<boolean>(false);
   const [confirmDelete, setConfirmDelete] = useState<{open: boolean, messageId: string, deleteForAll: boolean}>({
     open: false,
     messageId: '',
@@ -213,6 +288,39 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
   const [oldestMessageId, setOldestMessageId] = useState<string | null>(null);
+  const [showCallHistory, setShowCallHistory] = useState(false);
+  const [showAppearanceSettings, setShowAppearanceSettings] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showStatistics, setShowStatistics] = useState(false);
+  const [showBackupManager, setShowBackupManager] = useState(false);
+  const [showBotManager, setShowBotManager] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showTodos, setShowTodos] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState<{
+    soundEnabled: boolean;
+    desktopEnabled: boolean;
+    soundVolume: number;
+    soundType: 'default' | 'gentle' | 'classic' | 'modern' | 'soft' | 'alert' | 'bell' | 'chime' | 'pop' | 'ding' | 'whoosh' | 'bubble';
+    soundMessage?: string;
+    soundCall?: string;
+    soundMention?: string;
+    soundGroup?: string;
+    soundChannel?: string;
+    volumeMessage?: number;
+    volumeCall?: number;
+    volumeMention?: number;
+    volumeGroup?: number;
+    volumeChannel?: number;
+    dndEnabled?: boolean;
+    dndStart?: string;
+    dndEnd?: string;
+  }>({
+    soundEnabled: true,
+    desktopEnabled: true,
+    soundVolume: 80,
+    soundType: 'default'
+  });
+  const [isPageVisible, setIsPageVisible] = useState(!document.hidden);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -221,6 +329,48 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   const recordingIntervalRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const chatInfoRef = useRef<{members: string[], type: string} | null>(null);
+  const incomingCallTimerRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const { ui } = useStore();
+
+  // Загрузка настроек уведомлений
+  const loadNotificationSettings = useCallback(async () => {
+    try {
+      const notifData = await api('/api/users/me/notifications');
+      setNotificationSettings({
+        soundEnabled: notifData.soundEnabled !== false,
+        desktopEnabled: notifData.desktopEnabled !== false,
+        soundVolume: notifData.soundVolume || 80,
+        soundType: notifData.soundType || 'default',
+        soundMessage: notifData.soundMessage,
+        soundCall: notifData.soundCall,
+        soundMention: notifData.soundMention,
+        soundGroup: notifData.soundGroup,
+        soundChannel: notifData.soundChannel,
+        volumeMessage: notifData.volumeMessage,
+        volumeCall: notifData.volumeCall,
+        volumeMention: notifData.volumeMention,
+        volumeGroup: notifData.volumeGroup,
+        volumeChannel: notifData.volumeChannel,
+        dndEnabled: notifData.dndEnabled,
+        dndStart: notifData.dndStart,
+        dndEnd: notifData.dndEnd,
+      });
+    } catch (e) {
+      console.log('Notification settings not found, using defaults');
+    }
+  }, []);
+
+  // Отслеживание видимости страницы
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsPageVisible(!document.hidden);
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Загрузка пользователей
   const loadUsers = useCallback(async () => {
@@ -235,6 +385,119 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   }, []);
 
   // Загрузка информации о чате
+  // Инициализация группового E2EE ключа
+  const initializeGroupE2EE = useCallback(async () => {
+    if (!chatId || !chatInfoRef.current) return;
+    if (chatInfoRef.current.type !== 'group' && chatInfoRef.current.type !== 'channel') return;
+    
+    try {
+      // Проверяем версию ключа
+      const versionData = await api(`/api/chats/${chatId}/group-key/version`);
+      const serverVersion = versionData.keyVersion || 0;
+      
+      if (serverVersion === 0) {
+        // Ключа нет - нужно инициализировать (только для owner/admin)
+        const chatData = await api(`/api/chats/${chatId}`);
+        const isOwnerOrAdmin = chatData.members?.find((m: any) => 
+          m.userId === currentUser.id && (m.role === 'owner' || m.role === 'admin')
+        );
+        
+        if (!isOwnerOrAdmin) {
+          setIsE2EEEnabled(false);
+          return; // Не owner/admin - не можем инициализировать
+        }
+        
+        // Генерируем групповой ключ
+        const newGroupKey = await generateGroupKey();
+        
+        // Получаем публичные ключи всех участников
+        const wrappedKeys: Record<string, string> = {};
+        for (const memberId of chatInfoRef.current.members) {
+          try {
+            const userKey = await api(`/api/users/${memberId}/public_key`);
+            if (userKey.publicKeyJwk) {
+              const wrapped = await wrapKeyForUser(newGroupKey, userKey.publicKeyJwk);
+              wrappedKeys[memberId] = wrapped;
+            }
+          } catch (e) {
+            console.warn(`Failed to get key for user ${memberId}:`, e);
+          }
+        }
+        
+        // Отправляем на сервер
+        await api(`/api/chats/${chatId}/group-key/init`, 'POST', { wrappedKeys });
+        setGroupKey(newGroupKey);
+        setGroupKeyVersion(1);
+        setIsE2EEEnabled(true);
+        showToast('E2EE для группы инициализирован', 'success');
+      } else {
+        // Ключ существует - загружаем его
+        await loadGroupKey();
+      }
+    } catch (e: any) {
+      console.error('Failed to initialize group E2EE:', e);
+      setIsE2EEEnabled(false);
+    }
+  }, [chatId, currentUser.id]);
+
+  // Загрузка группового ключа
+  const loadGroupKey = useCallback(async () => {
+    if (!chatId) return;
+    
+    try {
+      const keyData = await api(`/api/chats/${chatId}/group-key`);
+      if (keyData.wrappedKey) {
+        // Получаем публичный ключ того, кто создал ключ
+        const creatorKey = await api(`/api/users/${keyData.createdBy}/public_key`);
+        if (creatorKey.publicKeyJwk) {
+          const unwrappedKey = await unwrapKeyFromEnvelope(keyData.wrappedKey, creatorKey.publicKeyJwk);
+          setGroupKey(unwrappedKey);
+          setGroupKeyVersion(keyData.keyVersion || 0);
+          setIsE2EEEnabled(true);
+        }
+      }
+    } catch (e: any) {
+      if (e.message?.includes('key_not_found')) {
+        // Ключа нет - попробуем инициализировать
+        await initializeGroupE2EE();
+      } else {
+        console.error('Failed to load group key:', e);
+        setIsE2EEEnabled(false);
+      }
+    }
+  }, [chatId, initializeGroupE2EE]);
+
+  // Обновление группового ключа (при изменении состава)
+  const updateGroupKey = useCallback(async () => {
+    if (!chatId || !chatInfoRef.current) return;
+    
+    try {
+      const newGroupKey = await generateGroupKey();
+      
+      // Получаем публичные ключи всех участников
+      const wrappedKeys: Record<string, string> = {};
+      for (const memberId of chatInfoRef.current.members) {
+        try {
+          const userKey = await api(`/api/users/${memberId}/public_key`);
+          if (userKey.publicKeyJwk) {
+            const wrapped = await wrapKeyForUser(newGroupKey, userKey.publicKeyJwk);
+            wrappedKeys[memberId] = wrapped;
+          }
+        } catch (e) {
+          console.warn(`Failed to get key for user ${memberId}:`, e);
+        }
+      }
+      
+      await api(`/api/chats/${chatId}/group-key/update`, 'POST', { wrappedKeys });
+      setGroupKey(newGroupKey);
+      setGroupKeyVersion(prev => prev + 1);
+      showToast('Групповой ключ обновлён (forward secrecy)', 'success');
+    } catch (e: any) {
+      console.error('Failed to update group key:', e);
+      showToast('Ошибка обновления ключа: ' + e.message, 'error');
+    }
+  }, [chatId]);
+
   const loadChatInfo = useCallback(async () => {
     if (!currentUser?.id) return;
     try {
@@ -328,7 +591,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       console.error('Failed to load messages:', e);
       setHasMoreMessages(false);
     }
-  }, [chatId, selectedThreadId]);
+  }, [chatId, selectedThreadId, groupKey]);
 
   // Загрузка старых сообщений
   const loadMoreMessages = useCallback(async () => {
@@ -445,14 +708,60 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
     }
   }, [chatId]);
 
+  // Применение фона и цвета чата
+  useEffect(() => {
+    if (!chatId) return;
+    
+    const chatBg = getChatBackground(chatId);
+    const chatColor = getChatColor(chatId);
+    
+    // Используем ref для контейнера чата
+    const chatWindowElement = document.querySelector('.enhanced-chat-window') as HTMLElement;
+    if (chatWindowElement) {
+      if (chatBg) {
+        chatWindowElement.style.backgroundImage = `url(${chatBg})`;
+        chatWindowElement.style.backgroundSize = 'cover';
+        chatWindowElement.style.backgroundPosition = 'center';
+        chatWindowElement.style.backgroundRepeat = 'no-repeat';
+        chatWindowElement.style.backgroundAttachment = 'fixed';
+      } else {
+        chatWindowElement.style.backgroundImage = '';
+        chatWindowElement.style.backgroundAttachment = '';
+      }
+      
+      if (chatColor) {
+        chatWindowElement.style.setProperty('--accent-primary', chatColor);
+        chatWindowElement.style.setProperty('--accent', chatColor);
+      } else {
+        chatWindowElement.style.removeProperty('--accent-primary');
+        chatWindowElement.style.removeProperty('--accent');
+      }
+    }
+    
+    return () => {
+      if (chatWindowElement) {
+        chatWindowElement.style.backgroundImage = '';
+        chatWindowElement.style.backgroundAttachment = '';
+        chatWindowElement.style.removeProperty('--accent-primary');
+        chatWindowElement.style.removeProperty('--accent');
+      }
+    };
+  }, [chatId]);
+
   useEffect(() => {
     if (!chatId) return;
     
     loadUsers();
-    loadChatInfo();
+    loadChatInfo().then(() => {
+      // Инициализируем E2EE для групп после загрузки информации о чате
+      if (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') {
+        initializeGroupE2EE();
+      }
+    });
     loadMessages();
     loadPinnedMessages();
     loadStickerPacks();
+    loadNotificationSettings();
     if (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') {
       loadThreads();
     }
@@ -462,7 +771,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
     
     if (socket) {
       // Подписываемся на чат
-      sendWebSocketMessage('subscribe', { chatId });
+      sendOptimized('subscribe', { chatId }, true); // immediate для подписки
 
       const handleMessage = (event: MessageEvent) => {
         try {
@@ -514,8 +823,72 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
             setMessages(prev => {
               if (prev.some(m => m.id === msg.id)) return prev;
               const newMessages = [...prev, msg];
-              // Воспроизводим звук при получении нового сообщения
-              playMessageSound();
+              
+              // Добавляем класс анимации для входящего сообщения
+              setTimeout(() => {
+                const messageElement = document.querySelector(`[data-message-id="${msg.id}"]`);
+                if (messageElement) {
+                  messageElement.classList.add('received');
+                }
+              }, 0);
+              
+              // Показываем уведомление только если:
+              // 1. Сообщение не от текущего пользователя
+              // 2. Страница не видна ИЛИ уведомления включены
+              // 3. Настройки уведомлений разрешают
+              if (msg.senderId !== currentUser?.id && 
+                  ui.notificationsEnabled && 
+                  notificationSettings.desktopEnabled &&
+                  (!isPageVisible || document.hidden)) {
+                
+                const sender = users.get(msg.senderId);
+                const senderName = sender?.username || 'Неизвестный';
+                const chatName = chatInfoRef.current?.name || (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel' 
+                  ? chatInfoRef.current.type 
+                  : undefined);
+                const chatType = chatInfoRef.current?.type as 'dm' | 'group' | 'channel' | undefined;
+                
+                // Проверяем упоминание
+                const isMention = currentUser && msg.text?.includes(`@${currentUser.username}`);
+                
+                // Определяем звук и громкость в зависимости от типа
+                let soundType = notificationSettings.soundType;
+                let volume = notificationSettings.soundVolume / 100;
+                
+                if (isMention && notificationSettings.soundMention) {
+                  soundType = notificationSettings.soundMention as any;
+                  volume = (notificationSettings.volumeMention || notificationSettings.soundVolume) / 100;
+                } else if (chatType === 'group' && notificationSettings.soundGroup) {
+                  soundType = notificationSettings.soundGroup as any;
+                  volume = (notificationSettings.volumeGroup || notificationSettings.soundVolume) / 100;
+                } else if (chatType === 'channel' && notificationSettings.soundChannel) {
+                  soundType = notificationSettings.soundChannel as any;
+                  volume = (notificationSettings.volumeChannel || notificationSettings.soundVolume) / 100;
+                } else if (notificationSettings.soundMessage) {
+                  soundType = notificationSettings.soundMessage as any;
+                  volume = (notificationSettings.volumeMessage || notificationSettings.soundVolume) / 100;
+                }
+                
+                notifyNewMessage(
+                  senderName,
+                  msg.text || (msg.attachmentUrl ? '📎 Вложение' : 'Сообщение'),
+                  chatName,
+                  chatId,
+                  sender?.avatarUrl,
+                  notificationSettings.soundEnabled,
+                  volume,
+                  soundType,
+                  msg.attachmentUrl, // imageUrl для превью
+                  isMention,
+                  chatType,
+                  notificationSettings.dndStart,
+                  notificationSettings.dndEnd
+                ).catch(err => console.warn('Failed to show notification:', err));
+              } else if (msg.senderId !== currentUser?.id && notificationSettings.soundEnabled) {
+                // Если уведомления не показываем, но звук включен - играем звук
+                playMessageSound();
+              }
+              
               return newMessages;
             });
             
@@ -589,8 +962,37 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
             const msgChatId = offerData.chatId || data.chatId;
             
             if (msgChatId === chatId && fromUserId && chatInfoRef.current?.type === 'dm' && !inDMCall) {
-              playCallSound();
               const isVideo = offerData.video !== false; // По умолчанию видео, если не указано
+              
+              // Показываем уведомление о звонке
+              if (ui.notificationsEnabled && notificationSettings.desktopEnabled) {
+                const caller = users.get(fromUserId);
+                const callerName = caller?.username || 'Неизвестный';
+                
+                const callSoundType = (notificationSettings.soundCall || 'alert') as any;
+                const callVolume = (notificationSettings.volumeCall || notificationSettings.soundVolume) / 100;
+                notifyCall(
+                  callerName,
+                  isVideo,
+                  chatId,
+                  caller?.avatarUrl,
+                  notificationSettings.soundEnabled,
+                  callVolume,
+                  callSoundType
+                ).catch(err => console.warn('Failed to show call notification:', err));
+              } else if (notificationSettings.soundEnabled) {
+                playCallSound();
+              }
+              // Сохраняем время начала входящего звонка для возможного сохранения как пропущенного
+              const incomingCallStartTime = Date.now();
+              const callKey = `${chatId}-${fromUserId}`;
+              
+              // Очищаем предыдущий таймер если есть
+              const existingTimer = incomingCallTimerRef.current.get(callKey);
+              if (existingTimer) {
+                clearTimeout(existingTimer);
+              }
+              
               const confirmed = window.confirm(`Входящий ${isVideo ? 'видео' : ''}звонок от ${users.get(fromUserId)?.username || fromUserId}. Принять?`);
               if (confirmed) {
                 setInDMCall({ 
@@ -599,13 +1001,45 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                   isIncoming: true,
                   offerData: offerData
                 });
+                // Очищаем таймер, так как звонок принят
+                incomingCallTimerRef.current.delete(callKey);
               } else {
-                // Отклоняем звонок
-                sendWebSocketMessage('webrtc:hangup', {
+                // Отклоняем звонок и сохраняем как пропущенный
+                sendOptimized('webrtc:hangup', {
                   chatId,
                   to: fromUserId,
                 });
+                // Сохраняем как пропущенный
+                api('/api/calls', 'POST', {
+                  chatId,
+                  otherUserId: fromUserId,
+                  type: isVideo ? 'video' : 'voice',
+                  status: 'missed',
+                  duration: 0,
+                  startedAt: incomingCallStartTime,
+                  endedAt: Date.now(),
+                }).catch(e => console.error('Failed to save missed call:', e));
+                incomingCallTimerRef.current.delete(callKey);
               }
+              
+              // Если пользователь не ответит в течение 30 секунд, сохраняем как пропущенный
+              const timer = setTimeout(() => {
+                // Проверяем, что звонок все еще входящий и не был принят
+                if (!inDMCall || inDMCall.otherUserId !== fromUserId || !inDMCall.isIncoming) {
+                  // Звонок не был принят - сохраняем как пропущенный
+                  api('/api/calls', 'POST', {
+                    chatId,
+                    otherUserId: fromUserId,
+                    type: isVideo ? 'video' : 'voice',
+                    status: 'missed',
+                    duration: 0,
+                    startedAt: incomingCallStartTime,
+                    endedAt: Date.now(),
+                  }).catch(e => console.error('Failed to save missed call:', e));
+                }
+                incomingCallTimerRef.current.delete(callKey);
+              }, 30000);
+              incomingCallTimerRef.current.set(callKey, timer);
             }
           } else if (msgType === 'webrtc:hangup') {
             // Звонок завершен
@@ -705,13 +1139,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
 
       return () => {
         socket.removeEventListener('message', handleMessage);
-        sendWebSocketMessage('unsubscribe', { chatId });
+        sendOptimized('unsubscribe', { chatId }, true); // immediate для отписки
         clearInterval(expireCheckInterval);
       };
     }
 
     return () => {
-      sendWebSocketMessage('unsubscribe', { chatId });
+      sendOptimized('unsubscribe', { chatId }, true); // immediate для отписки
     };
   }, [chatId, currentUser.id, loadMessages, loadUsers]);
 
@@ -723,6 +1157,76 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       }
     }, 50);
   }, [messages]);
+
+  // Автосохранение черновиков
+  useEffect(() => {
+    if (text.trim() && chatId) {
+      const draftKey = `draft_${chatId}`;
+      localStorage.setItem(draftKey, text);
+    }
+  }, [text, chatId]);
+
+  // Загрузка черновика при открытии чата
+  useEffect(() => {
+    if (chatId) {
+      const draftKey = `draft_${chatId}`;
+      const draft = localStorage.getItem(draftKey);
+      if (draft) {
+        setText(draft);
+      }
+    }
+  }, [chatId]);
+
+  // Отмена отправки сообщения
+  const undoSendMessage = async () => {
+    if (!lastSentMessage || !canUndo) return;
+    
+    const timeSinceSend = Date.now() - lastSentMessage.timestamp;
+    if (timeSinceSend > 5000) {
+      setCanUndo(false);
+      return;
+    }
+    
+    try {
+      await api(`/api/messages/${lastSentMessage.id}/delete`, 'POST', { deleteForAll: true });
+      setMessages(prev => prev.filter(m => m.id !== lastSentMessage.id));
+      setLastSentMessage(null);
+      setCanUndo(false);
+      showToast('Сообщение отменено', 'success');
+    } catch (e: any) {
+      showToast('Не удалось отменить отправку', 'error');
+    }
+  };
+
+  // Обработка офлайн очереди при восстановлении связи
+  useEffect(() => {
+    const unsubscribe = onOnlineStatusChange((online) => {
+      if (online && chatId) {
+        // Синхронизируем очередь при восстановлении связи
+        processOfflineQueue(async (message) => {
+          if (message.chatId === chatId) {
+            try {
+              await api(`/api/chats/${chatId}/messages`, 'POST', {
+                text: message.text,
+                attachmentUrl: message.attachmentUrl,
+                replyToId: message.replyToId,
+                type: message.type,
+                ...message.data
+              });
+              // Удаляем из очереди после успешной отправки
+              const { removeFromOfflineQueue } = require('../utils/offlineQueue');
+              removeFromOfflineQueue(message.id);
+            } catch (e) {
+              console.error('Failed to sync message:', e);
+              // Сообщение останется в очереди для повторной попытки
+            }
+          }
+        }).catch(e => console.error('Failed to sync offline queue:', e));
+      }
+    });
+
+    return unsubscribe;
+  }, [chatId]);
 
   // Отправка сообщения
   const sendMessage = async (messageText?: string, attachmentUrl?: string, stickerId?: string, expiresMs?: number, threadId?: string) => {
@@ -738,6 +1242,20 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
         stickerId: stickerId || null,
         expiresMs: expiresMs || null
       };
+      
+      // Шифруем текст для групп с E2EE
+      if (isE2EEEnabled && groupKey && finalText && (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel')) {
+        try {
+          const ciphertext = await encryptPlaintext(groupKey, finalText);
+          payload.ciphertext = ciphertext;
+          payload.text = null; // Не отправляем открытый текст
+        } catch (e) {
+          console.error('Failed to encrypt message:', e);
+          showToast('Ошибка шифрования сообщения', 'error');
+          return;
+        }
+      }
+      
       if (selectedThreadId || threadId) {
         payload.threadId = threadId || selectedThreadId;
       }
@@ -748,6 +1266,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
         chatId,
         senderId: currentUser.id,
         text: finalText || '',
+        uploadProgress: 0,
         attachmentUrl: attachmentUrl || undefined,
         replyTo: replyingTo?.id || undefined,
         stickerId: stickerId || undefined,
@@ -755,18 +1274,84 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       };
       setMessages(prev => [...prev, optimisticMessage]);
       
+      // Добавляем класс для анимации отправки
+      setTimeout(() => {
+        const messageElement = document.querySelector(`[data-message-id="${tempId}"]`);
+        if (messageElement) {
+          messageElement.classList.add('sending');
+        }
+      }, 0);
+      
       try {
+        // Проверяем онлайн статус
+        if (!isOnline()) {
+          // Добавляем в офлайн очередь
+          const queueId = addToOfflineQueue({
+            chatId,
+            text: messageText,
+            attachmentUrl,
+            replyToId: replyingTo?.id,
+            type: attachmentUrl ? 'media' : 'text',
+            data: payload
+          });
+          
+          // Показываем оптимистичное сообщение
+          const optimisticMessage: Message = {
+            id: queueId,
+            chatId,
+            senderId: currentUser.id,
+            text: messageText,
+            attachmentUrl,
+            replyTo: replyingTo?.id,
+            replyToMessage: replyingTo,
+            threadId,
+            createdAt: Date.now(),
+            uploadProgress: 100,
+            sending: true
+          };
+          
+          setMessages(prev => [...prev, optimisticMessage]);
+          showToast('Сообщение будет отправлено при восстановлении связи', 'info');
+          return;
+        }
+
         const response = await api(`/api/chats/${chatId}/messages`, 'POST', payload);
+        const realId = response.id;
         // Заменяем временное сообщение на реальное
         setMessages(prev => prev.map(m => m.id === tempId ? {
           ...m,
-          id: response.id,
+          id: realId,
           createdAt: typeof response.createdAt === 'string' ? new Date(response.createdAt).getTime() : (typeof response.createdAt === 'number' ? response.createdAt : Date.now()),
         } : m));
+        
+        // Убираем класс отправки и добавляем класс получения
+        setTimeout(() => {
+          const messageElement = document.querySelector(`[data-message-id="${realId}"]`);
+          if (messageElement) {
+            messageElement.classList.remove('sending');
+            messageElement.classList.add('received');
+          }
+        }, 0);
+        
+        // Сохраняем для возможности отмены
+        setLastSentMessage({ id: realId, timestamp: Date.now() });
+        setCanUndo(true);
+        setTimeout(() => setCanUndo(false), 5000);
+        
+        // Очищаем черновик
+        if (chatId) {
+          localStorage.removeItem(`draft_${chatId}`);
+        }
         setText('');
         setReplyingTo(null);
         setEditingMessage(null);
-        sendWebSocketMessage('typing', { chatId, isTyping: false });
+        sendOptimized('typing', { chatId, isTyping: false });
+        
+        // Удаляем сообщение из офлайн очереди, если оно там было
+        if (optimisticMessage.id.startsWith('offline_')) {
+          const { removeFromOfflineQueue } = require('../utils/offlineQueue');
+          removeFromOfflineQueue(optimisticMessage.id);
+        }
       } catch (e: any) {
         // Удаляем временное сообщение при ошибке
         setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -886,53 +1471,195 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
     }
   };
 
-  // Отправка файла
+  // Отправка файла с прогрессом и сжатием
   const sendFile = async (file: File, isVoiceMessage: boolean = false) => {
     try {
+      let fileToUpload = file;
+      
+      // Сжимаем изображения если нужно
+      if (!isVoiceMessage && file.type.startsWith('image/') && shouldCompressImage(file)) {
+        try {
+          fileToUpload = await compressImage(file, { maxSizeKB: 500, quality: 0.8 });
+          showToast('Изображение сжато', 'info');
+        } catch (e) {
+          console.warn('Failed to compress image, using original:', e);
+        }
+      }
+      
       const form = new FormData();
-      form.append('file', file);
+      form.append('file', fileToUpload);
       
       // Для голосовых сообщений используем специальное имя поля
       if (isVoiceMessage) {
         form.append('kind', 'voice');
       }
       
-      const rsp = await fetch(`${API_URL}/api/chats/${chatId}/attach`, {
+      // Создаем временное сообщение с прогрессом
+      const tempId = 'temp-upload-' + Date.now();
+      const tempMessage: Message = {
+        id: tempId,
+        chatId,
+        senderId: currentUser.id,
+        text: '',
+        attachmentUrl: URL.createObjectURL(fileToUpload),
+        uploadProgress: 0,
+        createdAt: Date.now(),
+      };
+      setMessages(prev => [...prev, tempMessage]);
+      
+      const xhr = new XMLHttpRequest();
+      
+      // Отслеживаем прогресс
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          setMessages(prev => prev.map(m => 
+            m.id === tempId ? { ...m, uploadProgress: progress } : m
+          ));
+        }
+      });
+      
+      xhr.addEventListener('load', async () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            const attachmentUrl = data.url || data.attachmentUrl || data.attachment_url;
+            
+            if (!attachmentUrl) {
+              throw new Error('Не получен URL вложения');
+            }
+            
+            // Удаляем временное сообщение
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+            
+            // Отправляем сообщение с вложением
+            await api(`/api/chats/${chatId}/messages`, 'POST', {
+              text: isVoiceMessage ? '' : text.trim() || '', // Для голосовых сообщений без текста
+              attachmentUrl: attachmentUrl,
+              replyTo: replyingTo?.id || null
+            });
+            
+            if (!isVoiceMessage) {
+              setText('');
+              setReplyingTo(null);
+            }
+            
+            await loadMessages(undefined, false);
+            
+            if (!isVoiceMessage) {
+              showToast('Файл загружен', 'success');
+            }
+          } catch (e: any) {
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+            throw e;
+          }
+        } else {
+          setMessages(prev => prev.filter(m => m.id !== tempId));
+          const errorData = JSON.parse(xhr.responseText || '{}');
+          throw new Error(errorData.error || errorData.detail || 'upload_error');
+        }
+      });
+      
+      xhr.addEventListener('error', () => {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        showToast('Ошибка отправки файла', 'error');
+      });
+      
+      xhr.open('POST', `${API_URL}/api/chats/${chatId}/attach`);
+      xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.getItem('token'));
+      xhr.send(form);
+    } catch (e: any) {
+      showToast('Ошибка загрузки файла: ' + (e.message || 'unknown'), 'error');
+    }
+  };
+
+  // Создание опроса
+  const createPoll = async (question: string, options: string[]) => {
+    try {
+      const response = await api(`/api/chats/${chatId}/messages`, 'POST', {
+        poll: {
+          question: question.trim(),
+          options: options.filter(opt => opt.trim()).map(opt => ({ text: opt.trim() }))
+        }
+      });
+      await loadMessages(undefined, false);
+      showToast('Опрос создан', 'success');
+    } catch (e: any) {
+      showToast('Ошибка создания опроса: ' + e.message, 'error');
+    }
+  };
+  
+  // Создание календарного события
+  const createCalendarEvent = async (title: string, startTime: string, endTime?: string, location?: string, description?: string) => {
+    try {
+      await api(`/api/chats/${chatId}/messages`, 'POST', {
+        calendarEvent: {
+          title: title.trim(),
+          startTime,
+          endTime,
+          location,
+          description
+        }
+      });
+      await loadMessages(undefined, false);
+      showToast('Событие создано', 'success');
+    } catch (e: any) {
+      showToast('Ошибка создания события: ' + e.message, 'error');
+    }
+  };
+  
+  // Отправка контакта
+  const sendContact = async (name: string, phone?: string, email?: string, avatar?: string) => {
+    try {
+      await api(`/api/chats/${chatId}/messages`, 'POST', {
+        contact: {
+          name: name.trim(),
+          phone,
+          email,
+          avatar
+        }
+      });
+      await loadMessages(undefined, false);
+      showToast('Контакт отправлен', 'success');
+    } catch (e: any) {
+      showToast('Ошибка отправки контакта: ' + e.message, 'error');
+    }
+  };
+  
+  // Отправка документа
+  const sendDocument = async (file: File) => {
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('kind', 'document');
+      
+      const response = await fetch(`${API_URL}/api/chats/${chatId}/attach`, {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') },
         body: form
       });
       
-      if (!rsp.ok) {
-        const errorData = await rsp.json().catch(() => ({}));
-        throw new Error(errorData.error || errorData.detail || 'upload_error');
+      if (!response.ok) {
+        throw new Error('Ошибка загрузки документа');
       }
       
-      const data = await rsp.json();
-      const attachmentUrl = data.url || data.attachmentUrl || data.attachment_url;
+      const data = await response.json();
+      const attachmentUrl = data.url || data.attachmentUrl;
       
-      if (!attachmentUrl) {
-        throw new Error('Не получен URL вложения');
-      }
-      
-      // Отправляем сообщение с вложением
       await api(`/api/chats/${chatId}/messages`, 'POST', {
-        text: isVoiceMessage ? '' : text.trim() || '', // Для голосовых сообщений без текста
-        attachmentUrl: attachmentUrl
+        document: {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          previewUrl: attachmentUrl
+        },
+        attachmentUrl
       });
       
-      if (!isVoiceMessage) {
-        setText('');
-      }
-      
       await loadMessages(undefined, false);
-      
-      if (!isVoiceMessage) {
-        showToast('Файл загружен', 'success');
-      }
+      showToast('Документ отправлен', 'success');
     } catch (e: any) {
-      showToast('Ошибка загрузки файла: ' + (e.message || 'unknown'), 'error');
-      throw e; // Пробрасываем ошибку для обработки в вызывающем коде
+      showToast('Ошибка отправки документа: ' + e.message, 'error');
     }
   };
 
@@ -1116,9 +1843,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
     }
 
     if (socketRef.current) {
-      sendWebSocketMessage('typing', { chatId, isTyping: true });
+      sendOptimized('typing', { chatId, isTyping: true });
       setTimeout(() => {
-        sendWebSocketMessage('typing', { chatId, isTyping: false });
+        sendOptimized('typing', { chatId, isTyping: false });
       }, 3000);
     }
   };
@@ -1270,7 +1997,16 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
           );
           break;
         case 'url':
-          parts.push(<a key={match.index} href={match.content} target="_blank" rel="noreferrer" className="message-link">{match.content}</a>);
+          // Проверяем, является ли это видео URL
+          if (isVideoUrl(match.content)) {
+            parts.push(
+              <div key={match.index} style={{ marginTop: '8px' }}>
+                <VideoEmbed url={match.content} />
+              </div>
+            );
+          } else {
+            parts.push(<a key={match.index} href={match.content} target="_blank" rel="noreferrer" className="message-link">{match.content}</a>);
+          }
           break;
         case 'bold':
           parts.push(<strong key={match.index}>{match.content}</strong>);
@@ -1279,7 +2015,21 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
           parts.push(<em key={match.index}>{match.content}</em>);
           break;
         case 'code':
-          parts.push(<code key={match.index} className="message-code">{match.content}</code>);
+          parts.push(
+            <code 
+              key={match.index} 
+              className="message-code"
+              style={{
+                background: 'var(--bg-tertiary)',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontFamily: 'monospace',
+                fontSize: '0.9em'
+              }}
+            >
+              {match.content}
+            </code>
+          );
           break;
       }
       
@@ -1322,26 +2072,38 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
 
   return (
     <div className="enhanced-chat-window">
-      <div className="chat-header">
-        <div className="chat-title">
-          {chatInfoRef.current ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-              {chatInfoRef.current.type === 'dm' ? '💬' : chatInfoRef.current.type === 'group' ? '👥' : '📢'}
-              <span style={{ fontWeight: '600' }}>
-                {chatInfoRef.current.type === 'dm' ? (() => {
-                  // Для DM показываем ник собеседника
-                  const otherMemberId = chatInfoRef.current.members.find(id => id !== currentUser.id);
-                  if (otherMemberId) {
-                    const otherUser = users.get(otherMemberId);
-                    if (otherUser) {
-                      return otherUser.username;
+        <div className="chat-header">
+          <div className="chat-title">
+            {chatInfoRef.current ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                {chatInfoRef.current.type === 'dm' ? '💬' : chatInfoRef.current.type === 'group' ? '👥' : '📢'}
+                <span style={{ fontWeight: '600' }}>
+                  {chatInfoRef.current.type === 'dm' ? (() => {
+                    // Для DM показываем ник собеседника
+                    const otherMemberId = chatInfoRef.current.members.find(id => id !== currentUser.id);
+                    if (otherMemberId) {
+                      const otherUser = users.get(otherMemberId);
+                      if (otherUser) {
+                        return otherUser.username;
+                      }
                     }
-                  }
-                  return 'Личный чат';
-                })() : (chatInfoRef.current.name || 'Чат')}
-              </span>
-            </div>
-          ) : selectedThreadId ? (
+                    return 'Личный чат';
+                  })() : (chatInfoRef.current.name || 'Чат')}
+                </span>
+                {isE2EEEnabled && (chatInfoRef.current.type === 'group' || chatInfoRef.current.type === 'channel') && (
+                  <span 
+                    title="End-to-End Encryption активен"
+                    style={{
+                      fontSize: '14px',
+                      color: '#10b981',
+                      marginLeft: '4px'
+                    }}
+                  >
+                    🔒
+                  </span>
+                )}
+              </div>
+            ) : selectedThreadId ? (
             <div className="thread-header">
               <button onClick={() => { setSelectedThreadId(null); setShowThreads(false); }} className="back-btn">
                 ← Назад
@@ -1413,6 +2175,123 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
           >
             📷 Медиа
           </button>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              className="export-btn"
+              onClick={() => setShowExportDialog(true)}
+              title="Экспорт истории чата"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '8px',
+                fontSize: '16px',
+                color: 'var(--text-primary)',
+                borderRadius: 'var(--radius-sm)',
+                transition: 'var(--transition-base)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-secondary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              💾
+            </button>
+            <button
+              onClick={() => setShowStatistics(true)}
+              title="Статистика чата"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '8px',
+                fontSize: '16px',
+                color: 'var(--text-primary)',
+                borderRadius: 'var(--radius-sm)',
+                transition: 'var(--transition-base)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-secondary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              📊
+            </button>
+            {(chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') && (
+              <>
+                <button
+                  onClick={() => setShowBotManager(true)}
+                  title="Боты"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    fontSize: '16px',
+                    color: 'var(--text-primary)',
+                    borderRadius: 'var(--radius-sm)',
+                    transition: 'var(--transition-base)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-secondary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  🤖
+                </button>
+                <button
+                  onClick={() => setShowCalendar(true)}
+                  title="Календарь"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    fontSize: '16px',
+                    color: 'var(--text-primary)',
+                    borderRadius: 'var(--radius-sm)',
+                    transition: 'var(--transition-base)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-secondary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  📅
+                </button>
+                <button
+                  onClick={() => setShowTodos(true)}
+                  title="Задачи"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    fontSize: '16px',
+                    color: 'var(--text-primary)',
+                    borderRadius: 'var(--radius-sm)',
+                    transition: 'var(--transition-base)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-secondary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  ✅
+                </button>
+              </>
+            )}
+          </div>
           {pinnedMessages.length > 0 && (
             <button
               className="pinned-btn"
@@ -1507,6 +2386,52 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
               </button>
             </>
           )}
+          <button
+            className="call-history-btn"
+            onClick={() => setShowCallHistory(true)}
+            title="История звонков"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '8px',
+              fontSize: '16px',
+              color: 'var(--text-primary)',
+              borderRadius: 'var(--radius-sm)',
+              transition: 'var(--transition-base)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-secondary)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            📞
+          </button>
+          <button
+            className="appearance-btn"
+            onClick={() => setShowAppearanceSettings(true)}
+            title="Внешний вид чата"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '8px',
+              fontSize: '16px',
+              color: 'var(--text-primary)',
+              borderRadius: 'var(--radius-sm)',
+              transition: 'var(--transition-base)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-secondary)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            🎨
+          </button>
           <button
             className="settings-btn"
             onClick={() => {
@@ -1910,7 +2835,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
             <div 
               key={msg.id} 
               data-message-id={msg.id} 
-              className={`message-wrapper message ${isMe ? 'message-me me' : ''} ${msg.expiresAt && msg.expiresAt < Date.now() ? 'expired' : ''}`}
+              className={`message-wrapper message ${isMe ? 'message-me me' : ''} ${msg.expiresAt && msg.expiresAt < Date.now() ? 'expired' : ''} ${msg.senderId === currentUser.id ? 'sending' : 'received'}`}
               style={{ animationDelay: `${idx * 0.03}s` }}
             >
               {!isMe && showAvatar && (
@@ -2123,8 +3048,182 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                           />
                         </div>
                       ) : (
-                        renderMessageText(msg.text)
+                        <>
+                          <div 
+                            dangerouslySetInnerHTML={{ __html: parseMarkdown(msg.text) }}
+                            style={{ wordWrap: 'break-word' }}
+                          />
+                          {/* Превью ссылок */}
+                          {(() => {
+                            const urlRegex = /(https?:\/\/[^\s<]+)/g;
+                            const urls: string[] = [];
+                            let match;
+                            const textCopy = msg.text;
+                            urlRegex.lastIndex = 0;
+                            while ((match = urlRegex.exec(textCopy)) !== null) {
+                              if (!isVideoUrl(match[1])) {
+                                urls.push(match[1]);
+                              }
+                            }
+                            return urls.slice(0, 3).map((url, idx) => (
+                              <LinkPreview key={idx} url={url} />
+                            ));
+                          })()}
+                        </>
                       )}
+                    </div>
+                  )}
+                  {/* Опрос */}
+                  {msg.pollId && msg.poll && (
+                    <Poll
+                      pollId={msg.pollId}
+                      question={msg.poll.question}
+                      options={msg.poll.options}
+                      messageId={msg.id}
+                      chatId={chatId}
+                      currentUserId={currentUser.id}
+                      canVote={msg.senderId !== currentUser.id}
+                      totalVotes={msg.poll.totalVotes}
+                    />
+                  )}
+                  {/* Календарное событие */}
+                  {msg.calendarEvent && (
+                    <div style={{
+                      padding: '12px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '8px',
+                      marginTop: '8px',
+                      border: '1px solid var(--border)'
+                    }}>
+                      <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-primary)' }}>
+                        📅 {msg.calendarEvent.title}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        🕐 {new Date(msg.calendarEvent.startTime).toLocaleString('ru-RU')}
+                        {msg.calendarEvent.endTime && ` - ${new Date(msg.calendarEvent.endTime).toLocaleString('ru-RU')}`}
+                      </div>
+                      {msg.calendarEvent.location && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                          📍 {msg.calendarEvent.location}
+                        </div>
+                      )}
+                      {msg.calendarEvent.description && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                          {msg.calendarEvent.description}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Контакт */}
+                  {msg.contact && (
+                    <div style={{
+                      padding: '12px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '8px',
+                      marginTop: '8px',
+                      border: '1px solid var(--border)',
+                      display: 'flex',
+                      gap: '12px',
+                      alignItems: 'center'
+                    }}>
+                      {msg.contact.avatar && (
+                        <img src={msg.contact.avatar} alt={msg.contact.name} style={{ width: '48px', height: '48px', borderRadius: '50%' }} />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
+                          👤 {msg.contact.name}
+                        </div>
+                        {msg.contact.phone && (
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            📞 {msg.contact.phone}
+                          </div>
+                        )}
+                        {msg.contact.email && (
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            ✉️ {msg.contact.email}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {/* Документ */}
+                  {msg.document && (
+                    <div style={{
+                      padding: '12px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '8px',
+                      marginTop: '8px',
+                      border: '1px solid var(--border)',
+                      display: 'flex',
+                      gap: '12px',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ fontSize: '32px' }}>📄</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
+                          {msg.document.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          {msg.document.type.toUpperCase()} • {(msg.document.size / 1024).toFixed(1)} KB
+                        </div>
+                      </div>
+                      {msg.document.previewUrl && (
+                        <img src={msg.document.previewUrl} alt="Preview" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px' }} />
+                      )}
+                    </div>
+                  )}
+                  {/* История редактирования */}
+                  {msg.editHistory && msg.editHistory.length > 0 && (
+                    <details style={{
+                      marginTop: '8px',
+                      fontSize: '11px',
+                      color: 'var(--text-tertiary)'
+                    }}>
+                      <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
+                        История редактирования ({msg.editHistory.length})
+                      </summary>
+                      <div style={{ marginTop: '8px', padding: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px' }}>
+                        {msg.editHistory.map((edit, idx) => (
+                          <div key={idx} style={{ marginBottom: '4px' }}>
+                            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                              {new Date(edit.editedAt).toLocaleString('ru-RU')}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              {edit.text.length > 100 ? edit.text.slice(0, 100) + '...' : edit.text}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                  {/* Прогресс отправки */}
+                  {msg.uploadProgress !== undefined && msg.uploadProgress < 100 && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '8px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      color: 'var(--text-secondary)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span>Отправка...</span>
+                        <span>{msg.uploadProgress}%</span>
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: '4px',
+                        background: 'var(--bg-tertiary)',
+                        borderRadius: '2px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          width: `${msg.uploadProgress}%`,
+                          height: '100%',
+                          background: 'var(--accent-primary)',
+                          transition: 'width 0.3s'
+                        }} />
+                      </div>
                     </div>
                   )}
                   {msg.attachmentUrl && (
@@ -2365,6 +3464,81 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
         />
       )}
 
+      {/* История звонков */}
+      {showCallHistory && (
+        <CallHistory
+          chatId={chatId}
+          currentUserId={currentUser.id}
+          onClose={() => setShowCallHistory(false)}
+        />
+      )}
+
+      {/* Настройки внешнего вида */}
+      {showAppearanceSettings && (
+        <AppearanceSettings
+          chatId={chatId}
+          onClose={() => setShowAppearanceSettings(false)}
+        />
+      )}
+
+      {/* Экспорт чата */}
+      {showExportDialog && (
+        <ExportChatDialog
+          chatId={chatId}
+          chatName={chatInfoRef.current?.type === 'dm' 
+            ? (() => {
+                const otherMemberId = chatInfoRef.current?.members.find(id => id !== currentUser.id);
+                if (otherMemberId) {
+                  const otherUser = users.get(otherMemberId);
+                  return otherUser?.username || 'Личный чат';
+                }
+                return 'Личный чат';
+              })()
+            : (chatInfoRef.current?.name || 'Чат')}
+          messages={messages}
+          onClose={() => setShowExportDialog(false)}
+        />
+      )}
+
+      {/* Статистика чата */}
+      {showStatistics && (
+        <ChatStatistics
+          chatId={chatId}
+          onClose={() => setShowStatistics(false)}
+        />
+      )}
+
+      {/* Резервное копирование */}
+      {showBackupManager && (
+        <BackupManager
+          onClose={() => setShowBackupManager(false)}
+        />
+      )}
+
+      {/* Управление ботами */}
+      {showBotManager && (
+        <BotManager
+          chatId={chatId}
+          onClose={() => setShowBotManager(false)}
+        />
+      )}
+
+      {/* Календарь */}
+      {showCalendar && (
+        <CalendarIntegration
+          chatId={chatId}
+          onClose={() => setShowCalendar(false)}
+        />
+      )}
+
+      {/* Задачи */}
+      {showTodos && (
+        <TodoIntegration
+          chatId={chatId}
+          onClose={() => setShowTodos(false)}
+        />
+      )}
+
       {/* Модальное окно создания треда */}
       <PromptModal
         isOpen={showThreadModal}
@@ -2515,12 +3689,185 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
           </div>
         )}
         <div className="chat-input-wrapper">
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              className="attach-btn"
+              onClick={() => document.getElementById('file-input')?.click()}
+              title="Прикрепить файл"
+              onMouseEnter={(e) => {
+                const menu = e.currentTarget.nextElementSibling as HTMLElement;
+                if (menu) menu.style.display = 'flex';
+              }}
+            >
+              📎
+            </button>
+            <div 
+              style={{
+                position: 'absolute',
+                bottom: '100%',
+                right: 0,
+                marginBottom: '8px',
+                background: 'var(--bg-primary)',
+                borderRadius: '8px',
+                padding: '8px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                border: '1px solid var(--border)',
+                display: 'none',
+                flexDirection: 'column',
+                gap: '4px',
+                minWidth: '180px',
+                zIndex: 1000
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            >
+              <button
+                onClick={() => {
+                  document.getElementById('file-input')?.click();
+                }}
+                style={{
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                📎 Файл
+              </button>
+              <button
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = 'image/*';
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) sendFile(file);
+                  };
+                  input.click();
+                }}
+                style={{
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                🖼️ Изображение
+              </button>
+              <button
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.pdf,.doc,.docx,.txt,.xls,.xlsx';
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) sendDocument(file);
+                  };
+                  input.click();
+                }}
+                style={{
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                📄 Документ
+              </button>
+              <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
+              <button
+                onClick={() => setShowPollCreator(true)}
+                style={{
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                📊 Опрос
+              </button>
+              <button
+                onClick={() => setShowCalendarCreator(true)}
+                style={{
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                📅 Событие
+              </button>
+              <button
+                onClick={() => setShowContactCreator(true)}
+                style={{
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                👤 Контакт
+              </button>
+            </div>
+          </div>
           <button
-            className="attach-btn"
-            onClick={() => fileInputRef.current?.click()}
-            title="Прикрепить файл"
+            className="preview-btn"
+            onClick={() => {
+              setPreviewText(text);
+              setPreviewAttachment(undefined);
+              setShowMessagePreview(true);
+            }}
+            title="Предпросмотр"
+            disabled={!text.trim()}
+            style={{
+              opacity: text.trim() ? 1 : 0.5,
+              cursor: text.trim() ? 'pointer' : 'not-allowed',
+              background: 'transparent',
+              border: 'none',
+              fontSize: '18px',
+              padding: '8px',
+              borderRadius: '8px',
+              marginRight: '4px'
+            }}
           >
-            📎
+            👁️
           </button>
           <button
             className="emoji-btn"
@@ -2565,11 +3912,86 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
               setShowEmojiPicker(false);
               setShowStickerPicker(false);
               setShowGifPicker(false);
+              setShowExpirePicker(false);
             }}
             title="Геолокация"
           >
             📍
           </button>
+          <button
+            className="expire-btn"
+            onClick={() => {
+              setShowExpirePicker(!showExpirePicker);
+              setShowEmojiPicker(false);
+              setShowStickerPicker(false);
+              setShowGifPicker(false);
+              setShowLocationPicker(false);
+            }}
+            title="Самоуничтожающееся сообщение"
+            style={{
+              background: selectedExpireTime ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
+              border: selectedExpireTime ? '1px solid rgba(239, 68, 68, 0.3)' : 'none'
+            }}
+          >
+            ⏱️ {selectedExpireTime ? `${selectedExpireTime}с` : ''}
+          </button>
+          {showExpirePicker && (
+            <div style={{
+              position: 'absolute',
+              bottom: '100%',
+              right: 0,
+              marginBottom: '8px',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px',
+              minWidth: '200px',
+              zIndex: 1000
+            }}>
+              <div style={{ marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>Время жизни сообщения:</div>
+              {[5, 10, 30, 60, 300, 3600].map(seconds => (
+                <button
+                  key={seconds}
+                  onClick={() => {
+                    setSelectedExpireTime(seconds);
+                    setShowExpirePicker(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    marginBottom: '4px',
+                    background: selectedExpireTime === seconds ? 'var(--accent-primary)' : 'transparent',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: selectedExpireTime === seconds ? '#fff' : 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontSize: '13px'
+                  }}
+                >
+                  {seconds < 60 ? `${seconds} секунд` : seconds < 3600 ? `${seconds / 60} минут` : `${seconds / 3600} часов`}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setSelectedExpireTime(null);
+                  setShowExpirePicker(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  marginTop: '8px',
+                  background: 'transparent',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Отключить
+              </button>
+            </div>
+          )}
           <div style={{ position: 'relative', flex: 1 }}>
             <textarea
               ref={inputRef}
@@ -2652,9 +4074,34 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
               🎤
             </button>
           )}
+          {canUndo && lastSentMessage && (
+            <button
+              className="undo-btn"
+              onClick={undoSendMessage}
+              style={{
+                padding: '8px 12px',
+                background: 'rgba(239, 68, 68, 0.2)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 'var(--radius-sm)',
+                color: '#fca5a5',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '500',
+                marginRight: '8px',
+                transition: 'var(--transition-base)'
+              }}
+              title="Отменить отправку (до 5 сек)"
+            >
+              ↶ Отменить
+            </button>
+          )}
           <button 
             className="send-btn ripple" 
-            onClick={() => sendMessage(text)} 
+            onClick={() => {
+              const expiresMs = selectedExpireTime ? selectedExpireTime * 1000 : undefined;
+              sendMessage(text, undefined, undefined, expiresMs);
+              setSelectedExpireTime(null);
+            }} 
             disabled={!text.trim() || isLoading}
             title="Отправить (Enter)"
           >

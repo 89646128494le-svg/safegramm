@@ -1,6 +1,8 @@
-import React, { useMemo, useRef, useEffect } from 'react';
-import { FixedSizeList as List } from 'react-window';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
+import { VariableSizeList as List } from 'react-window';
 import { motion, AnimatePresence } from 'framer-motion';
+import { setupLazyImage } from '../utils/lazyMediaLoader';
+import { loadAndCacheImage } from '../utils/imageCache';
 import type { Message } from './EnhancedChatWindow';
 
 interface VirtualizedMessagesProps {
@@ -48,17 +50,25 @@ export default function VirtualizedMessages({
 }: VirtualizedMessagesProps) {
   const listRef = useRef<List>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [itemHeights, setItemHeights] = useState<Map<number, number>>(new Map());
 
   // Прокрутка вниз при новых сообщениях
   useEffect(() => {
-    if (messagesEndRef.current && listRef.current) {
+    if (listRef.current && messages.length > 0) {
       listRef.current.scrollToItem(messages.length - 1, 'end');
     }
   }, [messages.length]);
 
   // Оценка высоты каждого сообщения (динамическая)
   const getItemSize = (index: number) => {
+    // Используем сохраненную высоту, если есть
+    if (itemHeights.has(index)) {
+      return itemHeights.get(index)!;
+    }
+
     const msg = messages[index];
+    if (!msg) return 60;
+
     let height = 60; // базовая высота
 
     if (msg.replyTo) height += 60;
@@ -69,6 +79,68 @@ export default function VirtualizedMessages({
     if (reactions.get(msg.id)?.length) height += 40;
 
     return height;
+  };
+
+  // Обновление высоты элемента после рендера
+  const updateItemSize = (index: number, height: number) => {
+    if (itemHeights.get(index) !== height) {
+      setItemHeights(prev => {
+        const newMap = new Map(prev);
+        newMap.set(index, height);
+        return newMap;
+      });
+      if (listRef.current) {
+        listRef.current.resetAfterIndex(index);
+      }
+    }
+  };
+
+  // Компонент для ленивой загрузки изображений
+  const LazyImageComponent = ({ src, alt, className, onLoad }: { 
+    src: string; 
+    alt: string; 
+    className?: string;
+    onLoad?: (height: number) => void;
+  }) => {
+    const imgRef = useRef<HTMLImageElement>(null);
+    const [imageSrc, setImageSrc] = useState<string | null>(null);
+
+    useEffect(() => {
+      if (!imgRef.current) return;
+
+      // Настраиваем ленивую загрузку
+      const cleanup = setupLazyImage(imgRef.current, src, {
+        rootMargin: '100px'
+      });
+
+      // Загружаем и кэшируем изображение
+      loadAndCacheImage(src)
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          setImageSrc(url);
+          if (imgRef.current && onLoad) {
+            imgRef.current.onload = () => {
+              onLoad(imgRef.current?.offsetHeight || 200);
+            };
+          }
+        })
+        .catch(() => {
+          setImageSrc(src); // Fallback на оригинальный URL
+        });
+
+      return cleanup;
+    }, [src, onLoad]);
+
+    return (
+      <img
+        ref={imgRef}
+        src={imageSrc || undefined}
+        alt={alt}
+        className={className}
+        loading="lazy"
+        style={{ opacity: imageSrc ? 1 : 0, transition: 'opacity 0.3s' }}
+      />
+    );
   };
 
   const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
@@ -100,7 +172,11 @@ export default function VirtualizedMessages({
               whileTap={{ scale: 0.95 }}
             >
               {sender?.avatarUrl ? (
-                <img src={sender.avatarUrl} alt={sender.username} />
+                <LazyImageComponent
+                  src={sender.avatarUrl}
+                  alt={sender.username}
+                  className="avatar-img"
+                />
               ) : (
                 <div className="avatar-placeholder">{sender?.username?.[0]?.toUpperCase() || 'U'}</div>
               )}
@@ -114,7 +190,12 @@ export default function VirtualizedMessages({
               <div className="message-text">{msg.text}</div>
             )}
             {msg.attachmentUrl && (
-              <img src={msg.attachmentUrl} alt="attachment" className="message-attachment" />
+              <LazyImageComponent
+                src={msg.attachmentUrl}
+                alt="attachment"
+                className="message-attachment"
+                onLoad={(height) => updateItemSize(index, height)}
+              />
             )}
             <div className="message-meta">
               <span>{formatTime(msg.createdAt)}</span>
@@ -176,12 +257,16 @@ export default function VirtualizedMessages({
       ref={listRef}
       height={containerHeight}
       itemCount={messages.length}
-      itemSize={getItemSize(0)}
+      itemSize={getItemSize}
       width="100%"
       style={{ direction: 'rtl' }}
       onScroll={(props) => {
-        // Можно добавить логику загрузки старых сообщений
+        // Можно добавить логику загрузки старых сообщений при прокрутке вверх
+        if (props.scrollOffset < 100 && props.scrollDirection === 'backward') {
+          // Загружаем старые сообщения
+        }
       }}
+      estimatedItemSize={100} // Примерная высота для оптимизации
     >
       {Row}
     </List>

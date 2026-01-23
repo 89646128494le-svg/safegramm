@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -49,16 +51,41 @@ func CreateServer(db *gorm.DB) gin.HandlerFunc {
 			Role:     "owner",
 		}
 		db.Create(&member)
+		logMemberEvent(db, "server", server.ID, userIDStr, userIDStr, "create", gin.H{"name": server.Name})
 
-		// Создаем канал по умолчанию
+		// Генерируем invite link для сервера
+		b := make([]byte, 16)
+		_, _ = rand.Read(b)
+		server.InviteLink = base64.URLEncoding.EncodeToString(b)
+		db.Model(&models.Server{}).Where("id = ?", server.ID).Update("invite_link", server.InviteLink)
+
+		// Создаем чат для канала по умолчанию
+		channelChat := models.Chat{
+			ID:        uuid.New().String(),
+			Type:      "channel",
+			Name:      "general",
+			CreatedBy: userIDStr,
+		}
+		db.Create(&channelChat)
+
+		// Создаем канал по умолчанию и привязываем к чату
 		channel := models.Channel{
 			ID:       uuid.New().String(),
 			ServerID: server.ID,
+			ChatID:   channelChat.ID,
 			Name:     "general",
 			Type:     "text",
 			Position: 0,
 		}
 		db.Create(&channel)
+
+		// Добавляем владельца в чат канала
+		db.Create(&models.ChatMember{
+			ID:     uuid.New().String(),
+			ChatID: channelChat.ID,
+			UserID: userIDStr,
+			Role:   "owner",
+		})
 
 		c.JSON(http.StatusOK, gin.H{"server": server})
 	}

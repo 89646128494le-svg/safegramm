@@ -346,36 +346,139 @@ func sendHTTPRequestForm(apiURL, apiKey, data string) error {
 
 // SendVerificationCode отправляет код подтверждения
 func SendVerificationCode(to, code string) error {
-	subject := "Код подтверждения SafeGram"
-	
-	// HTML шаблон письма
-	htmlBody := fmt.Sprintf(`
-<!DOCTYPE html>
-<html>
-<head>
-	<meta charset="UTF-8">
-	<style>
-		body { font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px; }
-		.container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-		.code { font-size: 32px; font-weight: bold; color: #7c6cff; text-align: center; letter-spacing: 8px; padding: 20px; background: #f0f0f0; border-radius: 8px; margin: 20px 0; }
-		.footer { margin-top: 30px; font-size: 12px; color: #666; text-align: center; }
-	</style>
-</head>
-<body>
-	<div class="container">
-		<h1 style="color: #7c6cff;">SafeGram</h1>
-		<p>Ваш код подтверждения:</p>
-		<div class="code">%s</div>
-		<p>Код действителен в течение 10 минут.</p>
-		<p>Если вы не запрашивали этот код, просто проигнорируйте это письмо.</p>
-		<div class="footer">
-			<p>© 2026 SafeGram. Все права защищены.</p>
-		</div>
-	</div>
-</body>
-</html>
-`, code)
+	return SendVerificationCodeWithUsername(to, code, "")
+}
 
+// SendVerificationCodeWithUsername отправляет код подтверждения с именем пользователя
+func SendVerificationCodeWithUsername(to, code, username string) error {
+	subject := "Код подтверждения SafeGram"
+	data := EmailTemplateData{
+		Username:  username,
+		Code:      code,
+		ExpiresIn: "10 минут",
+	}
+	htmlBody := TemplateVerificationCode(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendWelcomeEmail отправляет приветственное письмо
+func SendWelcomeEmail(to, username, appURL string) error {
+	subject := "Добро пожаловать в SafeGram! 🎉"
+	data := EmailTemplateData{
+		Username: username,
+		Link:     appURL,
+	}
+	htmlBody := TemplateWelcome(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendLoginNotification отправляет уведомление о входе
+func SendLoginNotification(to, username, ip, device string) error {
+	subject := "Новый вход в аккаунт SafeGram"
+	data := EmailTemplateData{
+		Username:  username,
+		IP:        ip,
+		Device:    device,
+		Timestamp: time.Now().Format("02.01.2006 в 15:04"),
+	}
+	htmlBody := TemplateLoginNotification(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendPasswordResetCode отправляет код восстановления пароля
+func SendPasswordResetCode(to, username, code string) error {
+	subject := "Восстановление пароля SafeGram"
+	data := EmailTemplateData{
+		Username:  username,
+		Code:      code,
+		ExpiresIn: "15 минут",
+	}
+	htmlBody := TemplatePasswordReset(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendPasswordChangedNotification отправляет уведомление об изменении пароля
+func SendPasswordChangedNotification(to, username, ip string) error {
+	subject := "Пароль изменён — SafeGram"
+	data := EmailTemplateData{
+		Username:  username,
+		IP:        ip,
+		Timestamp: time.Now().Format("02.01.2006 в 15:04"),
+	}
+	htmlBody := TemplatePasswordChanged(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendNewMessageNotification отправляет уведомление о новом сообщении
+func SendNewMessageNotification(to, username, senderName, message, chatName, chatURL string) error {
+	subject := fmt.Sprintf("Новое сообщение от %s", senderName)
+	data := EmailTemplateData{
+		Username:  username,
+		SenderName: senderName,
+		Message:   message,
+		ChatName:  chatName,
+		Link:      chatURL,
+	}
+	htmlBody := TemplateNewMessage(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendGroupInvite отправляет приглашение в группу
+func SendGroupInvite(to, username, inviterName, groupName, groupURL string) error {
+	subject := fmt.Sprintf("Приглашение в группу %s", groupName)
+	data := EmailTemplateData{
+		Username:    username,
+		InviterName: inviterName,
+		GroupName:   groupName,
+		Link:        groupURL,
+	}
+	htmlBody := TemplateGroupInvite(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendSecurityAlert отправляет уведомление о безопасности
+func SendSecurityAlert(to, username, message, settingsURL string) error {
+	subject := "⚠️ Уведомление безопасности SafeGram"
+	data := EmailTemplateData{
+		Username: username,
+		Message:  message,
+		Link:     settingsURL,
+	}
+	htmlBody := TemplateSecurityAlert(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendAccountLockedNotification отправляет уведомление о блокировке аккаунта
+func SendAccountLockedNotification(to, username, reason, supportURL string) error {
+	subject := "🔒 Аккаунт временно заблокирован"
+	data := EmailTemplateData{
+		Username: username,
+		Message:  reason,
+		Link:     supportURL,
+	}
+	htmlBody := TemplateAccountLocked(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendPremiumActivated отправляет уведомление об активации премиум
+func SendPremiumActivated(to, username, appURL string) error {
+	subject := "✨ Премиум активирован!"
+	data := EmailTemplateData{
+		Username: username,
+		Link:     appURL,
+	}
+	htmlBody := TemplatePremiumActivated(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendBackupCodes отправляет резервные коды восстановления
+func SendBackupCodes(to, username, codes string) error {
+	subject := "Резервные коды восстановления SafeGram"
+	data := EmailTemplateData{
+		Username: username,
+		Code:     codes,
+	}
+	htmlBody := TemplateBackupCode(data)
 	return SendEmail(to, subject, htmlBody)
 }
 

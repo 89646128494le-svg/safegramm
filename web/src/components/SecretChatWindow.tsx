@@ -23,22 +23,72 @@ export default function SecretChatWindow({ chatId, currentUser, peerUser, onClos
   useEffect(() => {
     // Защита от скриншотов
     if (screenshotProtection) {
+      // Блокируем контекстное меню (правый клик)
+      const handleContextMenu = (e: MouseEvent) => {
+        e.preventDefault();
+        return false;
+      };
+      
+      // Блокируем DevTools
+      const handleDevTools = (e: KeyboardEvent) => {
+        if (e.key === 'F12' || 
+            (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+            (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+            (e.ctrlKey && e.key === 'U')) {
+          e.preventDefault();
+          alert('Разработческие инструменты заблокированы в секретных чатах');
+          return false;
+        }
+      };
+      
+      // Блокируем PrintScreen и комбинации для скриншотов
+      const handleScreenshotAttempt = (e: KeyboardEvent) => {
+        if (e.key === 'PrintScreen' || 
+            (e.ctrlKey && e.shiftKey && e.key === 'S') ||
+            (e.metaKey && e.shiftKey && e.key === '3') ||
+            (e.metaKey && e.shiftKey && e.key === '4')) {
+          e.preventDefault();
+          alert('Скриншоты запрещены в секретных чатах');
+          return false;
+        }
+      };
+      
+      // Блокируем копирование текста
+      const handleCopy = (e: ClipboardEvent) => {
+        e.preventDefault();
+        alert('Копирование текста запрещено в секретных чатах');
+        return false;
+      };
+      
+      // Блокируем выделение текста
+      const handleSelectStart = (e: Event) => {
+        e.preventDefault();
+        return false;
+      };
+      
+      document.addEventListener('contextmenu', handleContextMenu);
+      document.addEventListener('keydown', handleDevTools);
       document.addEventListener('keydown', handleScreenshotAttempt);
+      document.addEventListener('copy', handleCopy);
+      document.addEventListener('selectstart', handleSelectStart);
       document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      // CSS защита от выделения
+      document.body.style.userSelect = 'none';
+      document.body.style.webkitUserSelect = 'none';
+      
       return () => {
+        document.removeEventListener('contextmenu', handleContextMenu);
+        document.removeEventListener('keydown', handleDevTools);
         document.removeEventListener('keydown', handleScreenshotAttempt);
+        document.removeEventListener('copy', handleCopy);
+        document.removeEventListener('selectstart', handleSelectStart);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
       };
     }
   }, [screenshotProtection]);
-
-  const handleScreenshotAttempt = (e: KeyboardEvent) => {
-    // Блокируем PrintScreen и комбинации для скриншотов
-    if (e.key === 'PrintScreen' || (e.ctrlKey && e.shiftKey && e.key === 'S')) {
-      e.preventDefault();
-      alert('Скриншоты запрещены в секретных чатах');
-    }
-  };
 
   const handleVisibilityChange = () => {
     if (document.hidden && screenshotProtection) {
@@ -119,10 +169,43 @@ export default function SecretChatWindow({ chatId, currentUser, peerUser, onClos
     }
   };
 
+  const [myFingerprint, setMyFingerprint] = useState<string>('');
+  const [peerFingerprint, setPeerFingerprint] = useState<string>('');
+  const [showFingerprintModal, setShowFingerprintModal] = useState(false);
+
+  useEffect(() => {
+    const loadFingerprints = async () => {
+      try {
+        const { getMyKeyFingerprint, getKeyFingerprint } = await import('../services/crypto');
+        const myFp = await getMyKeyFingerprint();
+        setMyFingerprint(myFp);
+        
+        const peerKey = await api(`/api/users/${peerUser.id}/public_key`);
+        if (peerKey.publicKeyJwk) {
+          const peerFp = await getKeyFingerprint(peerKey.publicKeyJwk);
+          setPeerFingerprint(peerFp);
+        }
+      } catch (e) {
+        console.error('Failed to load fingerprints:', e);
+      }
+    };
+    loadFingerprints();
+  }, [peerUser.id]);
+
   const verifyKey = async () => {
-    // В реальности здесь должна быть проверка отпечатков ключей
-    const confirmed = confirm('Проверьте отпечатки ключей с собеседником. Совпадают?');
-    setKeyVerified(confirmed);
+    setShowFingerprintModal(true);
+  };
+
+  const confirmFingerprintMatch = () => {
+    const confirmed = window.confirm(
+      `Ваш отпечаток: ${myFingerprint}\n\nОтпечаток собеседника: ${peerFingerprint}\n\nСовпадают ли отпечатки с тем, что показывает собеседник?`
+    );
+    if (confirmed) {
+      setKeyVerified(true);
+      setShowFingerprintModal(false);
+      // Сохраняем проверку в localStorage
+      localStorage.setItem(`key_verified_${chatId}`, 'true');
+    }
   };
 
   return (
@@ -140,6 +223,93 @@ export default function SecretChatWindow({ chatId, currentUser, peerUser, onClos
         </div>
         {onClose && <button onClick={onClose}>✕</button>}
       </div>
+
+      {/* Модальное окно проверки отпечатков */}
+      {showFingerprintModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.8)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            background: 'var(--bg-primary)',
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '90%',
+            border: '1px solid var(--border)'
+          }}>
+            <h3 style={{ marginTop: 0 }}>Проверка отпечатков ключей</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
+              Сравните отпечатки ключей с собеседником. Они должны совпадать.
+            </p>
+            <div style={{
+              background: 'var(--bg-secondary)',
+              padding: '16px',
+              borderRadius: '8px',
+              marginBottom: '16px',
+              fontFamily: 'monospace',
+              fontSize: '14px'
+            }}>
+              <div style={{ marginBottom: '12px' }}>
+                <strong>Ваш отпечаток:</strong>
+                <div style={{ 
+                  color: 'var(--accent-primary)', 
+                  marginTop: '4px',
+                  wordBreak: 'break-all'
+                }}>
+                  {myFingerprint}
+                </div>
+              </div>
+              <div>
+                <strong>Отпечаток собеседника:</strong>
+                <div style={{ 
+                  color: 'var(--accent-primary)', 
+                  marginTop: '4px',
+                  wordBreak: 'break-all'
+                }}>
+                  {peerFingerprint}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowFingerprintModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer'
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={confirmFingerprintMatch}
+                style={{
+                  padding: '8px 16px',
+                  background: 'var(--accent-primary)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                Подтвердить совпадение
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="secret-chat-messages">
         {messages.map(msg => (

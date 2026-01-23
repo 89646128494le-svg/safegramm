@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
 import { api } from '../services/api';
+import { showToast } from './Toast';
 
 interface GroupVideoCallProps {
   chatId: string;
@@ -24,6 +25,10 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingConsents, setRecordingConsents] = useState<Map<string, boolean>>(new Map());
+  const [videoFilter, setVideoFilter] = useState<string>('none');
+  const [virtualBackground, setVirtualBackground] = useState<string | null>(null);
   const [showParticipantsMenu, setShowParticipantsMenu] = useState(false);
   const [chatMembers, setChatMembers] = useState<Map<string, {username: string, avatarUrl?: string, role?: string}>>(new Map());
   const [isAdmin, setIsAdmin] = useState(false);
@@ -31,6 +36,10 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStartTimeRef = useRef<number | null>(null);
+  const callStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     loadChatMembers();
@@ -107,6 +116,30 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
           if (pc) {
             await handleSignal(pc, signalData, userId);
           }
+        } else if (data.type === 'call:recording:request') {
+          // Запрос на запись от участника
+          const consent = confirm('Участник хочет записать звонок. Разрешить?');
+          sendWebSocketMessage('call:recording:response', {
+            chatId,
+            to: data.from,
+            allowed: consent,
+          });
+          setRecordingConsents(prev => {
+            const newMap = new Map(prev);
+            newMap.set(data.from, consent);
+            return newMap;
+          });
+        } else if (data.type === 'call:recording:response') {
+          // Ответ на запрос записи
+          setRecordingConsents(prev => {
+            const newMap = new Map(prev);
+            newMap.set(data.from, data.allowed);
+            return newMap;
+          });
+          if (!data.allowed && isRecording) {
+            showToast('Участник запретил запись', 'warning');
+            stopRecording();
+          }
         }
       } catch (e) {
         console.error('Failed to parse WebSocket message:', e);
@@ -117,6 +150,7 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
 
     // Инициализация локального потока
     initLocalStream();
+    callStartTimeRef.current = Date.now();
 
     return () => {
       socket.removeEventListener('message', handleMessage);
@@ -137,7 +171,7 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
       }
     } catch (e) {
       console.error('Failed to get user media:', e);
-      alert('Не удалось получить доступ к камере/микрофону');
+      showToast('Не удалось получить доступ к камере/микрофону', 'error');
     }
   };
 
@@ -348,6 +382,154 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
     setIsScreenSharing(false);
   };
 
+  // Запись звонка
+  const startRecording = async () => {
+    try {
+      if (!localStream && participants.size === 0) {
+        showToast('Нет потоков для записи', 'error');
+        return;
+      }
+
+      // Запрашиваем согласие на запись
+      const consent = confirm('Начать запись группового звонка? Все участники будут уведомлены.');
+      if (!consent) return;
+
+      // Отправляем запрос на согласие всем участникам
+      participants.forEach((participant) => {
+        sendWebSocketMessage('call:recording:request', {
+          chatId,
+          to: participant.userId,
+        });
+      });
+
+      // Создаем комбинированный поток для записи
+      const combinedStream = new MediaStream();
+      
+      if (localStream) {
+        localStream.getTracks().forEach(track => combinedStream.addTrack(track));
+      }
+      participants.forEach((participant) => {
+        participant.stream.getTracks().forEach(track => combinedStream.addTrack(track));
+      });
+
+      // Используем MediaRecorder для записи
+      const options = {
+        mimeType: 'video/webm;codecs=vp9,opus',
+        videoBitsPerSecond: 2500000,
+      };
+      
+      const recorder = new MediaRecorder(combinedStream, options);
+      recordedChunksRef.current = [];
+      
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+      
+      recorder.onstop = async () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const formData = new FormData();
+        formData.append('file', blob, `group-call-${chatId}-${Date.now()}.webm`);
+        formData.append('chatId', chatId);
+        formData.append('type', 'group');
+        
+        try {
+          // Используем fetch для загрузки файла
+          const formDataToSend = new FormData();
+          formDataToSend.append('file', blob, `group-call-${chatId}-${Date.now()}.webm`);
+          formDataToSend.append('chatId', chatId);
+          formDataToSend.append('type', 'group');
+          
+          const response = await fetch('/api/calls/recordings', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + localStorage.getItem('token')
+            },
+            body: formDataToSend
+          });
+          
+          if (!response.ok) {
+            throw new Error('Failed to upload recording');
+          }
+          showToast('Запись сохранена', 'success');
+        } catch (e: any) {
+          showToast('Ошибка сохранения записи: ' + e.message, 'error');
+        }
+      };
+      
+      mediaRecorderRef.current = recorder;
+      recordingStartTimeRef.current = Date.now();
+      recorder.start(1000);
+      setIsRecording(true);
+      
+      showToast('Запись начата', 'success');
+    } catch (e: any) {
+      console.error('Failed to start recording:', e);
+      showToast('Ошибка начала записи: ' + e.message, 'error');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      recordingConsents.clear();
+      showToast('Запись остановлена', 'info');
+    }
+  };
+
+  // Применение фильтров к видео
+  const applyVideoFilter = (filter: string) => {
+    setVideoFilter(filter);
+    if (localVideoRef.current) {
+      localVideoRef.current.style.filter = filter === 'none' ? 'none' : getFilterCSS(filter);
+    }
+  };
+
+  const getFilterCSS = (filter: string): string => {
+    const filters: Record<string, string> = {
+      'blur': 'blur(5px)',
+      'grayscale': 'grayscale(100%)',
+      'sepia': 'sepia(100%)',
+      'brightness': 'brightness(1.2)',
+      'contrast': 'contrast(1.2)',
+      'saturate': 'saturate(1.5)',
+      'hue-rotate': 'hue-rotate(90deg)',
+      'invert': 'invert(100%)',
+    };
+    return filters[filter] || 'none';
+  };
+
+  // Виртуальный фон
+  const applyVirtualBackground = async (imageUrl: string | null) => {
+    setVirtualBackground(imageUrl);
+    // В реальности здесь нужна более сложная обработка через canvas и WebGL
+    if (localVideoRef.current) {
+      if (imageUrl) {
+        localVideoRef.current.style.position = 'relative';
+      } else {
+        localVideoRef.current.style.position = '';
+      }
+    }
+  };
+
+  // Сохранение истории группового звонка
+  const saveGroupCallHistory = async (status: 'active' | 'ended') => {
+    try {
+      await api('/api/calls/group', 'POST', {
+        chatId,
+        type: 'video',
+        status,
+        startedAt: callStartTimeRef.current || Date.now(),
+        endedAt: status === 'ended' ? Date.now() : undefined,
+        participantIds: Array.from(participants.keys()),
+      });
+    } catch (e) {
+      console.error('Failed to save group call history:', e);
+    }
+  };
+
   const loadChatMembers = async () => {
     try {
       const chat = await api(`/api/chats/${chatId}`);
@@ -421,6 +603,16 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
   };
 
   const leaveCall = () => {
+    // Останавливаем запись если активна
+    if (isRecording) {
+      stopRecording();
+    }
+
+    // Останавливаем screen sharing если активен
+    if (isScreenSharing) {
+      stopScreenShare();
+    }
+
     // Останавливаем все потоки
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
@@ -433,9 +625,13 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
     peersRef.current.forEach(pc => pc.close());
     peersRef.current.clear();
 
+    // Сохраняем историю звонка
+    saveGroupCallHistory('ended');
+
     // Покидаем voice room
     sendWebSocketMessage('voice:leave', { chatId });
 
+    callStartTimeRef.current = null;
     onClose();
   };
 
@@ -444,6 +640,73 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
       <div className="video-call-header">
         <h3>Видеозвонок</h3>
         <button onClick={leaveCall} className="close-call-btn">✕</button>
+      </div>
+
+      {/* Меню фильтров и эффектов */}
+      <div style={{
+        position: 'absolute',
+        top: '60px',
+        right: '20px',
+        background: 'rgba(0,0,0,0.7)',
+        borderRadius: '8px',
+        padding: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        zIndex: 1000
+      }}>
+        <div style={{ fontSize: '12px', color: 'white', marginBottom: '4px' }}>Фильтры:</div>
+        <select
+          value={videoFilter}
+          onChange={(e) => applyVideoFilter(e.target.value)}
+          style={{
+            padding: '6px',
+            borderRadius: '4px',
+            background: 'var(--bg-secondary)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border)',
+            fontSize: '12px'
+          }}
+        >
+          <option value="none">Нет</option>
+          <option value="blur">Размытие</option>
+          <option value="grayscale">Черно-белый</option>
+          <option value="sepia">Сепия</option>
+          <option value="brightness">Яркость</option>
+          <option value="contrast">Контраст</option>
+          <option value="saturate">Насыщенность</option>
+          <option value="hue-rotate">Оттенок</option>
+          <option value="invert">Инверсия</option>
+        </select>
+        
+        <div style={{ fontSize: '12px', color: 'white', marginTop: '8px', marginBottom: '4px' }}>Виртуальный фон:</div>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const url = URL.createObjectURL(file);
+              applyVirtualBackground(url);
+            }
+          }}
+          style={{ fontSize: '11px', color: 'white' }}
+        />
+        <button
+          onClick={() => applyVirtualBackground(null)}
+          style={{
+            padding: '4px 8px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+            borderRadius: '4px',
+            color: 'var(--text-primary)',
+            cursor: 'pointer',
+            fontSize: '11px',
+            marginTop: '4px'
+          }}
+        >
+          Убрать фон
+        </button>
       </div>
       
       <div className="video-grid">
@@ -472,7 +735,11 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
               <video
                 autoPlay
                 playsInline
-                srcObject={participant.stream}
+                ref={(video) => {
+                  if (video && participant.stream) {
+                    video.srcObject = participant.stream;
+                  }
+                }}
                 className="video-element"
               />
               <div className="video-overlay">
@@ -547,6 +814,14 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
           title={isScreenSharing ? 'Остановить демонстрацию экрана' : 'Демонстрация экрана'}
         >
           🖥️
+        </button>
+        <button
+          onClick={isRecording ? stopRecording : startRecording}
+          className={`control-btn ${isRecording ? 'active' : ''}`}
+          title={isRecording ? 'Остановить запись' : 'Начать запись'}
+          disabled={isRecording && Array.from(recordingConsents.values()).some(consent => !consent)}
+        >
+          {isRecording ? '🔴⏹️' : '🔴'}
         </button>
         <button
           onClick={() => setShowParticipantsMenu(!showParticipantsMenu)}

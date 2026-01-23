@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		var req struct {
 			ChatID        string  `json:"chatId"`
 			Text          string  `json:"text"`
+			Ciphertext    string  `json:"ciphertext"` // Зашифрованное сообщение (для E2EE групп)
 			AttachmentURL string  `json:"attachmentUrl"`
 			ReplyTo       string  `json:"replyTo"`
 			ForwardFrom   string  `json:"forwardFrom"` // ID сообщения для пересылки
@@ -33,6 +35,33 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			LocationLat   *float64 `json:"locationLat"`
 			LocationLon   *float64 `json:"locationLon"`
 			ThreadID      string  `json:"threadId"`
+			ExpiresMs     *int64  `json:"expiresMs"` // Время жизни сообщения в миллисекундах
+			// Новые типы сообщений
+			Poll          *struct {
+				Question string   `json:"question"`
+				Options  []struct {
+					Text string `json:"text"`
+				} `json:"options"`
+			} `json:"poll,omitempty"`
+			CalendarEvent *struct {
+				Title       string `json:"title"`
+				StartTime   string `json:"startTime"`
+				EndTime     string `json:"endTime,omitempty"`
+				Location    string `json:"location,omitempty"`
+				Description string `json:"description,omitempty"`
+			} `json:"calendarEvent,omitempty"`
+			Contact *struct {
+				Name   string `json:"name"`
+				Phone  string `json:"phone,omitempty"`
+				Email  string `json:"email,omitempty"`
+				Avatar string `json:"avatar,omitempty"`
+			} `json:"contact,omitempty"`
+			Document *struct {
+				Name       string `json:"name"`
+				Type       string `json:"type"`
+				Size       int64  `json:"size"`
+				PreviewURL string `json:"previewUrl,omitempty"`
+			} `json:"document,omitempty"`
 		}
 
 		// Если chatId не в теле запроса, берем из URL параметра
@@ -58,6 +87,48 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			return
 		}
 
+		// Проверяем активный бан в чате
+		now := time.Now()
+		var activeBan models.ChatBan
+		if err := db.Where("chat_id = ? AND user_id = ? AND (expires_at IS NULL OR expires_at > ?)", req.ChatID, userIDStr, now).
+			First(&activeBan).Error; err == nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":     "banned",
+				"expiresAt": activeBan.ExpiresAt,
+			})
+			return
+		}
+
+		// Настройки автомодерации
+		var modSettings models.ChatModerationSettings
+		hasModSettings := db.Where("chat_id = ?", req.ChatID).First(&modSettings).Error == nil
+		violation := ""
+		if hasModSettings && modSettings.Enabled {
+			maxMsgs := modSettings.MaxMsgsPer10s
+			if maxMsgs <= 0 {
+				maxMsgs = 8
+			}
+			var cnt int64
+			db.Model(&models.Message{}).
+				Where("chat_id = ? AND sender_id = ? AND created_at > ?", req.ChatID, userIDStr, now.Add(-10*time.Second)).
+				Count(&cnt)
+			if cnt >= int64(maxMsgs) {
+				violation = "spam"
+			}
+
+			// фильтр запрещенных слов работает только для незашифрованного текста
+			if violation == "" && req.Text != "" && modSettings.BannedWords != "" {
+				lower := strings.ToLower(req.Text)
+				for _, w := range strings.Split(modSettings.BannedWords, ",") {
+					w = strings.TrimSpace(strings.ToLower(w))
+					if w != "" && strings.Contains(lower, w) {
+						violation = "banned_word"
+						break
+					}
+				}
+			}
+		}
+
 		// Если пересылка, загружаем исходное сообщение
 		var forwardFromChatID string
 		if req.ForwardFrom != "" {
@@ -67,11 +138,71 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			}
 		}
 
+		messageID := uuid.New().String()
+		var pollID string
+		
+		// Обработка опроса
+		if req.Poll != nil && req.Poll.Question != "" && len(req.Poll.Options) > 0 {
+			pollID = uuid.New().String()
+			poll := models.Poll{
+				ID:        pollID,
+				ChatID:    req.ChatID,
+				MessageID: messageID,
+				Question:  req.Poll.Question,
+				CreatedBy: userIDStr,
+			}
+			
+			// Создаем опции
+			for i, opt := range req.Poll.Options {
+				if opt.Text != "" {
+					poll.Options = append(poll.Options, models.PollOption{
+						ID:     uuid.New().String(),
+						PollID: pollID,
+						Text:   opt.Text,
+						Order:  i,
+					})
+				}
+			}
+			
+			if err := db.Create(&poll).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "detail": err.Error()})
+				return
+			}
+			
+			// Сохраняем pollID в сообщении
+			req.Text = "" // Опрос не имеет текста
+		}
+		
+		// Обработка календарного события
+		var calendarEventJSON string
+		if req.CalendarEvent != nil && req.CalendarEvent.Title != "" {
+			if jsonData, err := json.Marshal(req.CalendarEvent); err == nil {
+				calendarEventJSON = string(jsonData)
+			}
+		}
+		
+		// Обработка контакта
+		var contactJSON string
+		if req.Contact != nil && req.Contact.Name != "" {
+			if jsonData, err := json.Marshal(req.Contact); err == nil {
+				contactJSON = string(jsonData)
+			}
+		}
+		
+		// Обработка документа
+		var documentJSON string
+		if req.Document != nil && req.Document.Name != "" {
+			if jsonData, err := json.Marshal(req.Document); err == nil {
+				documentJSON = string(jsonData)
+			}
+		}
+		
 		message := models.Message{
-			ID:            uuid.New().String(),
+			ID:            messageID,
 			ChatID:        req.ChatID,
 			SenderID:      userIDStr,
 			Text:          req.Text,
+			Ciphertext:    req.Ciphertext,
 			AttachmentURL: req.AttachmentURL,
 			ReplyTo:       req.ReplyTo,
 			ForwardFrom:   req.ForwardFrom,
@@ -80,6 +211,68 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			GifURL:        req.GifURL,
 			LocationLat:   req.LocationLat,
 			LocationLon:   req.LocationLon,
+			PollID:        pollID,
+			CalendarEventJSON: calendarEventJSON,
+			ContactJSON:   contactJSON,
+			DocumentJSON:  documentJSON,
+		}
+		
+		// Устанавливаем время истечения, если указано
+		if req.ExpiresMs != nil && *req.ExpiresMs > 0 {
+			expiresAt := time.Now().Add(time.Duration(*req.ExpiresMs) * time.Millisecond)
+			message.ExpiresAt = &expiresAt
+		}
+
+		// Применяем автомодерацию (до сохранения)
+		if violation != "" && hasModSettings && modSettings.Enabled {
+			message.ModerationReason = violation
+			if modSettings.QueueOnViolation {
+				message.ModerationStatus = "pending"
+			} else {
+				message.ModerationStatus = "rejected"
+			}
+
+			// предупреждение
+			_ = db.Create(&models.ChatWarning{
+				ID:      uuid.New().String(),
+				ChatID:  req.ChatID,
+				UserID:  userIDStr,
+				ActorID: "",
+				Reason:  "automod:" + violation,
+			}).Error
+			logMemberEvent(db, "chat", req.ChatID, userIDStr, "", "warn", gin.H{"reason": violation})
+			logModeration(db, req.ChatID, "", "", "automod_violation", userIDStr, "", gin.H{"reason": violation})
+
+			// бан при пороге предупреждений
+			warnThreshold := modSettings.WarnThreshold
+			if warnThreshold <= 0 {
+				warnThreshold = 2
+			}
+			var warnCnt int64
+			db.Model(&models.ChatWarning{}).
+				Where("chat_id = ? AND user_id = ? AND created_at > ?", req.ChatID, userIDStr, now.Add(-24*time.Hour)).
+				Count(&warnCnt)
+			if warnCnt >= int64(warnThreshold) {
+				mins := modSettings.BanMinutes
+				if mins <= 0 {
+					mins = 10
+				}
+				exp := now.Add(time.Duration(mins) * time.Minute)
+				_ = db.Create(&models.ChatBan{
+					ID:        uuid.New().String(),
+					ChatID:    req.ChatID,
+					UserID:    userIDStr,
+					ActorID:   "",
+					Reason:    "automod_threshold",
+					ExpiresAt: &exp,
+				}).Error
+				logMemberEvent(db, "chat", req.ChatID, userIDStr, "", "ban", gin.H{"expiresAt": exp})
+				logModeration(db, req.ChatID, "", "", "automod_ban", userIDStr, "", gin.H{"expiresAt": exp})
+			}
+		} else {
+			if message.ModerationStatus == "" {
+				message.ModerationStatus = "approved"
+			}
 		}
 
 		if err := db.Create(&message).Error; err != nil {
@@ -99,12 +292,60 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			}
 		}
 
+		// Загружаем опрос если есть
+		var pollData gin.H
+		if message.PollID != "" {
+			var poll models.Poll
+			if err := db.Preload("Options").Preload("Votes").Preload("Votes.User").First(&poll, "id = ?", message.PollID).Error; err == nil {
+				// Подсчитываем голоса
+				totalVotes := int64(len(poll.Votes))
+				optionsWithVotes := make([]gin.H, 0)
+				for _, opt := range poll.Options {
+					voteCount := int64(0)
+					voters := make([]string, 0)
+					for _, vote := range poll.Votes {
+						if vote.OptionID == opt.ID {
+							voteCount++
+							voters = append(voters, vote.UserID)
+						}
+					}
+					optionsWithVotes = append(optionsWithVotes, gin.H{
+						"id":     opt.ID,
+						"text":   opt.Text,
+						"votes":  voteCount,
+						"voters": voters,
+					})
+				}
+				pollData = gin.H{
+					"id":         poll.ID,
+					"question":   poll.Question,
+					"options":    optionsWithVotes,
+					"totalVotes": totalVotes,
+				}
+			}
+		}
+		
+		// Парсим JSON для календарного события, контакта и документа
+		var calendarEventParsed, contactParsed, documentParsed gin.H
+		if message.CalendarEventJSON != "" {
+			json.Unmarshal([]byte(message.CalendarEventJSON), &calendarEventParsed)
+		}
+		if message.ContactJSON != "" {
+			json.Unmarshal([]byte(message.ContactJSON), &contactParsed)
+		}
+		if message.DocumentJSON != "" {
+			json.Unmarshal([]byte(message.DocumentJSON), &documentParsed)
+		}
+		
 		// Формируем ответ для API
 		response := gin.H{
 			"id":            message.ID,
 			"chatId":        message.ChatID,
 			"senderId":      message.SenderID,
 			"text":          message.Text,
+			"ciphertext":    message.Ciphertext,
+			"moderationStatus": message.ModerationStatus,
+			"moderationReason": message.ModerationReason,
 			"attachmentUrl":  message.AttachmentURL,
 			"replyTo":       message.ReplyTo,
 			"forwardFrom":   message.ForwardFrom,
@@ -115,6 +356,29 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			"locationLat":   message.LocationLat,
 			"locationLon":    message.LocationLon,
 			"createdAt":     message.CreatedAt,
+		}
+		
+		// Добавляем новые типы сообщений
+		if pollData != nil {
+			response["pollId"] = message.PollID
+			response["poll"] = pollData
+		}
+		if calendarEventParsed != nil {
+			response["calendarEvent"] = calendarEventParsed
+		}
+		if contactParsed != nil {
+			response["contact"] = contactParsed
+		}
+		if documentParsed != nil {
+			response["document"] = documentParsed
+		}
+		
+		// Добавляем историю редактирования (если есть)
+		if message.EditHistoryJSON != "" {
+			var editHistory []gin.H
+			if err := json.Unmarshal([]byte(message.EditHistoryJSON), &editHistory); err == nil {
+				response["editHistory"] = editHistory
+			}
 		}
 		if replyToMessage != nil {
 			response["replyToMessage"] = gin.H{
@@ -145,16 +409,27 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			}
 		}
 
-		// Отправляем через WebSocket в правильном формате
-		wsMessage := gin.H{
-			"type": "message",
-			"data": response,
+		// Отправляем через WebSocket только одобренные сообщения
+		if message.ModerationStatus == "approved" {
+			wsMessage := gin.H{
+				"type": "message",
+				"data": response,
+			}
+			messageJSON, _ := json.Marshal(wsMessage)
+			wsHub.BroadcastToChat(req.ChatID, messageJSON)
+
+			// Вебхуки: message.created
+			webhookPayload, _ := json.Marshal(gin.H{
+				"event":   "message.created",
+				"chatId":  req.ChatID,
+				"message": response,
+			})
+			go fireWebhooks(db, "chat", req.ChatID, "message.created", webhookPayload)
 		}
-		messageJSON, _ := json.Marshal(wsMessage)
-		wsHub.BroadcastToChat(req.ChatID, messageJSON)
 
 		// Отправляем push-уведомления всем участникам чата (кроме отправителя)
-		go func() {
+		if message.ModerationStatus == "approved" {
+			go func() {
 			var members []models.ChatMember
 			if err := db.Where("chat_id = ? AND user_id != ?", req.ChatID, userIDStr).Find(&members).Error; err == nil {
 				for _, member := range members {
@@ -193,7 +468,17 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 					}
 				}
 			}
-		}()
+			}()
+		}
+
+		if message.ModerationStatus == "pending" {
+			c.JSON(http.StatusAccepted, gin.H{"queued": true, "message": response})
+			return
+		}
+		if message.ModerationStatus == "rejected" {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "moderation_rejected", "reason": message.ModerationReason})
+			return
+		}
 
 		c.JSON(http.StatusOK, response)
 	}
@@ -286,8 +571,26 @@ func EditMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 
 		now := time.Now()
+		
+		// Сохраняем историю редактирования
+		var editHistory []gin.H
+		if message.EditHistoryJSON != "" {
+			json.Unmarshal([]byte(message.EditHistoryJSON), &editHistory)
+		}
+		// Добавляем текущую версию в историю
+		editHistory = append(editHistory, gin.H{
+			"text":     message.Text,
+			"editedAt": message.EditedAt,
+		})
+		// Ограничиваем историю последними 10 версиями
+		if len(editHistory) > 10 {
+			editHistory = editHistory[len(editHistory)-10:]
+		}
+		editHistoryJSON, _ := json.Marshal(editHistory)
+		
 		message.Text = req.Text
 		message.EditedAt = &now
+		message.EditHistoryJSON = string(editHistoryJSON)
 
 		if err := db.Save(&message).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})

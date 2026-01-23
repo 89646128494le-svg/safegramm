@@ -11,13 +11,17 @@ import Profile from './Profile';
 import Settings from './Settings';
 import Feedback from './Feedback';
 import Admin from './admin/Admin';
+import JoinChat from './JoinChat';
 import Servers from './servers/Servers';
 import ServerView from './servers/ServerView';
+import JoinServer from './servers/JoinServer';
 import Stories from '../components/Stories';
 import { api } from '../services/api';
 import { setupPush } from '../services/push';
 import { ToastContainer, useToast } from '../components/Toast';
 import { useStore } from '../store/useStore';
+import { initAppearance } from '../services/appearance';
+import ConnectionStatus from '../components/ConnectionStatus';
 
 export default function AppShell() {
   const { user, setUser, setToken, setTheme, ui } = useStore();
@@ -28,6 +32,9 @@ export default function AppShell() {
   useEffect(() => {
     // Применяем сохраненную тему
     document.documentElement.setAttribute('data-theme', ui.theme);
+    
+    // Инициализируем темы и настройки внешнего вида
+    initAppearance();
     
     api('/api/users/me').then(u => { 
       setUser(u); 
@@ -99,11 +106,12 @@ export default function AppShell() {
             }
             // Явная обработка ролей - сервер всегда отправляет массив
             let roles: string[] = [];
-            if (Array.isArray(user.roles)) {
-              roles = user.roles;
-            } else if (user.roles) {
+            const u: any = user as any;
+            if (Array.isArray(u.roles)) {
+              roles = u.roles;
+            } else if (u.roles) {
               // Если пришла строка, разбиваем по запятой
-              roles = String(user.roles).split(',').map(r => r.trim()).filter(r => r);
+              roles = String(u.roles).split(',').map(r => r.trim()).filter(r => r);
             }
             const hasAccess = roles.includes('admin') || roles.includes('owner');
             return hasAccess && (
@@ -118,7 +126,9 @@ export default function AppShell() {
         <Routes>
           <Route path="/" element={<Navigate to="/app/chats" replace />} />
           <Route path="chats" element={<Chats />} />
+          <Route path="join/:link" element={<JoinChat />} />
           <Route path="servers" element={<Servers />} />
+          <Route path="servers/join/:link" element={<JoinServer />} />
           <Route path="servers/:id" element={<ServerView />} />
           <Route path="contacts" element={<Contacts />} />
           <Route path="search" element={<Search />} />
@@ -135,6 +145,7 @@ export default function AppShell() {
         )}
       </AnimatePresence>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <ConnectionStatus />
     </motion.div>
   );
 }
