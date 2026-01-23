@@ -7,6 +7,9 @@ export default defineConfig({
     port: 5173, 
     host: true 
   },
+  optimizeDeps: {
+    exclude: ['jspdf', 'jszip'] // Исключаем из предварительной оптимизации
+  },
   build: {
     minify: 'esbuild',
     sourcemap: process.env.NODE_ENV === 'development', // Source maps только в dev
@@ -18,7 +21,7 @@ export default defineConfig({
           'ui-vendor': ['framer-motion', 'lucide-react'],
           'utils-vendor': ['zustand', '@tanstack/react-query']
         }
-      }
+      },
     },
     chunkSizeWarningLimit: 1000,
     // В production удаляем console.log

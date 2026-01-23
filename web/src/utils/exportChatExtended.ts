@@ -25,8 +25,15 @@ export async function exportChatToPDF(messages: Message[], chatInfo: ChatInfo): 
     // Пытаемся использовать jsPDF, если доступен
     let jsPDF: any;
     try {
-      const module = await import('jspdf');
-      jsPDF = module.jsPDF || module.default;
+      // Динамический импорт с обработкой ошибок
+      const module = await import('jspdf').catch(() => null);
+      if (!module) {
+        throw new Error('jspdf not available');
+      }
+      jsPDF = module.jsPDF || module.default || module;
+      if (!jsPDF) {
+        throw new Error('jsPDF not found in module');
+      }
     } catch {
       // Если jsPDF не установлен, используем простой текстовый экспорт
       alert('Для экспорта в PDF необходимо установить библиотеку jsPDF. Используйте экспорт в JSON или TXT.');
@@ -153,8 +160,15 @@ export async function exportChatMedia(messages: Message[], chatInfo: ChatInfo): 
   try {
     let JSZip: any;
     try {
-      const module = await import('jszip');
+      // Динамический импорт с обработкой ошибок
+      const module = await import('jszip').catch(() => null);
+      if (!module) {
+        throw new Error('jszip not available');
+      }
       JSZip = module.default || module;
+      if (!JSZip) {
+        throw new Error('JSZip not found in module');
+      }
     } catch {
       // Если JSZip не установлен, просто показываем список URL
       const urlsText = mediaFiles.map(f => f.url).join('\n');
