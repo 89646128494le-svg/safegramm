@@ -618,11 +618,6 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
             </div>
           )}
 
-                </div>
-              )}
-            </>
-          )}
-
           {/* Вкладка: Участники */}
           {activeTab === 'members' && (
             <>
