@@ -277,6 +277,17 @@ function OwnerTab() {
     }
   };
 
+  const saveSettings = async (updates: any) => {
+    try {
+      const updated = { ...settings, ...updates };
+      await api('/api/owner/settings', 'POST', updated);
+      setSettings(updated);
+      showToast('Настройки сохранены', 'success');
+    } catch (e: any) {
+      showToast('Ошибка сохранения: ' + e.message, 'error');
+    }
+  };
+
   const setPlan = async (userId: string, plan: 'free' | 'premium') => {
     try {
       await api(`/api/owner/users/${userId}/plan`, 'POST', { plan });
@@ -431,7 +442,7 @@ function OwnerTab() {
                   type="checkbox"
                   checked={settings.maintenance || false}
                   onChange={(e) => {
-                    // TODO: Обновить настройки
+                    saveSettings({ maintenance: e.target.checked });
                   }}
                 />
                 <span>Режим обслуживания</span>
@@ -443,7 +454,7 @@ function OwnerTab() {
                   type="checkbox"
                   checked={settings.registrationEnabled !== false}
                   onChange={(e) => {
-                    // TODO: Обновить настройки
+                    saveSettings({ registrationEnabled: e.target.checked });
                   }}
                 />
                 <span>Регистрация включена</span>
