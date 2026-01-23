@@ -457,6 +457,7 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
         )}
 
         <div style={{padding: '20px'}}>
+          <>
           {/* Вкладка: Общее (для групп) или всё содержимое (для каналов) */}
           {(activeTab === 'general' || chatType === 'channel') && (
             <>
@@ -615,7 +616,28 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
                   ➕ Создать ссылку приглашения
                 </button>
               )}
-            </div>
+
+              {/* Подписка на канал (для каналов, всегда показывается) */}
+              {chatType === 'channel' && !isOwner && activeTab === 'general' && (
+                <div style={{marginBottom: '24px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
+                  {isSubscribed ? (
+                    <div>
+                      <div style={{marginBottom: '8px'}}>Вы подписаны на этот канал</div>
+                      <button onClick={unsubscribeFromChannel} style={{padding: '6px 12px'}}>
+                        Отписаться
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{marginBottom: '8px'}}>Вы не подписаны на этот канал</div>
+                      <button onClick={subscribeToChannel} style={{padding: '6px 12px'}}>
+                        Подписаться
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* Вкладка: Участники */}
@@ -947,27 +969,7 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
               </div>
             </div>
           )}
-
-          {/* Подписка на канал (для каналов, всегда показывается) */}
-          {chatType === 'channel' && !isOwner && activeTab === 'general' && (
-            <div style={{marginBottom: '24px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
-              {isSubscribed ? (
-                <div>
-                  <div style={{marginBottom: '8px'}}>Вы подписаны на этот канал</div>
-                  <button onClick={unsubscribeFromChannel} style={{padding: '6px 12px'}}>
-                    Отписаться
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <div style={{marginBottom: '8px'}}>Вы не подписаны на этот канал</div>
-                  <button onClick={subscribeToChannel} style={{padding: '6px 12px'}}>
-                    Подписаться
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          </>
         </div>
       </div>
     </div>
