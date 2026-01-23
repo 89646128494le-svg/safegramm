@@ -13,7 +13,7 @@ import BackupManager from './BackupManager';
 import BotManager from './BotManager';
 import CalendarIntegration from './CalendarIntegration';
 import TodoIntegration from './TodoIntegration';
-import { addToOfflineQueue, isOnline, onOnlineStatusChange, processOfflineQueue } from '../utils/offlineQueue';
+import { addToOfflineQueue, isOnline, onOnlineStatusChange, processOfflineQueue } from '../services/offlineQueue';
 import { sendWebSocketMessage as sendOptimized, flushWebSocketBatch } from '../services/websocketOptimized';
 import { compressImage, shouldCompressImage } from '../utils/imageCompression';
 import LinkPreview from './LinkPreview';
@@ -1214,7 +1214,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                 ...message.data
               });
               // Удаляем из очереди после успешной отправки
-              const { removeFromOfflineQueue } = require('../utils/offlineQueue');
+              const { removeFromOfflineQueue } = require('../services/offlineQueue');
               removeFromOfflineQueue(message.id);
             } catch (e) {
               console.error('Failed to sync message:', e);
@@ -1349,7 +1349,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
         
         // Удаляем сообщение из офлайн очереди, если оно там было
         if (optimisticMessage.id.startsWith('offline_')) {
-          const { removeFromOfflineQueue } = require('../utils/offlineQueue');
+          const { removeFromOfflineQueue } = require('../services/offlineQueue');
           removeFromOfflineQueue(optimisticMessage.id);
         }
       } catch (e: any) {

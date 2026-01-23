@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { isOnline, onOnlineStatusChange } from '../utils/offlineQueue';
-import { processOfflineQueue } from '../utils/offlineQueue';
+import { isOnline, onOnlineStatusChange, processOfflineQueue } from '../services/offlineQueue';
 import { api } from '../services/api';
 import { showToast } from './Toast';
 import { useTranslation } from '../i18n';
@@ -32,7 +31,7 @@ export default function ConnectionStatus({ onSyncComplete }: ConnectionStatusPro
   }, []);
 
   const updatePendingCount = () => {
-    const { getOfflineQueue } = require('../utils/offlineQueue');
+    const { getOfflineQueue } = require('../services/offlineQueue');
     const queue = getOfflineQueue();
     setPendingMessages(queue.length);
   };
@@ -43,7 +42,6 @@ export default function ConnectionStatus({ onSyncComplete }: ConnectionStatusPro
     setSyncing(true);
     
     try {
-      const { processOfflineQueue } = require('../utils/offlineQueue');
       const result = await processOfflineQueue(async (message) => {
         // Отправляем сообщение через API
         await api(`/api/chats/${message.chatId}/messages`, 'POST', {
