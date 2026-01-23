@@ -339,10 +339,10 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
   };
 
   const isSubscribed = members.some(m => m.id === currentUserId);
-  const filteredUsers = allUsers.filter(u => 
-    !members.some(m => m.id === u.id) &&
-    u.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredUsers = allUsers.filter((u) => {
+    return !members.some((m) => m.id === u.id) &&
+           u.username.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   if (loading) {
     return (
@@ -644,210 +644,6 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
                   )}
                 </div>
               )}
-              <label style={{display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10}}>
-                <input
-                  type="checkbox"
-                  checked={!!modSettings.enabled}
-                  onChange={(e) => setModSettings((p: any) => ({ ...p, enabled: e.target.checked }))}
-                />
-                <span>Включить автомодерацию</span>
-              </label>
-              <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-                <div>
-                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Запрещённые слова (через запятую)</div>
-                  <textarea
-                    value={modSettings.bannedWords || ''}
-                    onChange={(e) => setModSettings((p: any) => ({ ...p, bannedWords: e.target.value }))}
-                    style={{width: '100%', minHeight: 70, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)'}}
-                  />
-                </div>
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
-                  <label style={{display: 'flex', flexDirection: 'column', gap: 4}}>
-                    <span style={{fontSize: 12, color: 'var(--subtle)'}}>Макс. сообщений / 10с</span>
-                    <input
-                      type="number"
-                      value={modSettings.maxMsgsPer10s || 8}
-                      onChange={(e) => setModSettings((p: any) => ({ ...p, maxMsgsPer10s: Number(e.target.value) }))}
-                      style={{padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)'}}
-                    />
-                  </label>
-                  <label style={{display: 'flex', flexDirection: 'column', gap: 4}}>
-                    <span style={{fontSize: 12, color: 'var(--subtle)'}}>Порог предупреждений (24ч)</span>
-                    <input
-                      type="number"
-                      value={modSettings.warnThreshold || 2}
-                      onChange={(e) => setModSettings((p: any) => ({ ...p, warnThreshold: Number(e.target.value) }))}
-                      style={{padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)'}}
-                    />
-                  </label>
-                  <label style={{display: 'flex', flexDirection: 'column', gap: 4}}>
-                    <span style={{fontSize: 12, color: 'var(--subtle)'}}>Бан (минут)</span>
-                    <input
-                      type="number"
-                      value={modSettings.banMinutes || 10}
-                      onChange={(e) => setModSettings((p: any) => ({ ...p, banMinutes: Number(e.target.value) }))}
-                      style={{padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)'}}
-                    />
-                  </label>
-                  <label style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 18}}>
-                    <input
-                      type="checkbox"
-                      checked={!!modSettings.queueOnViolation}
-                      onChange={(e) => setModSettings((p: any) => ({ ...p, queueOnViolation: e.target.checked }))}
-                    />
-                    <span>Отправлять в очередь</span>
-                  </label>
-                </div>
-                <div style={{display: 'flex', gap: 10}}>
-                  <button onClick={saveModerationSettings} style={{padding: '8px 14px'}}>💾 Сохранить</button>
-                  <button
-                    onClick={async () => {
-                      const next = !showModQueue;
-                      setShowModQueue(next);
-                      if (next) await loadModQueue();
-                    }}
-                    style={{padding: '8px 14px'}}
-                  >
-                    🧾 Очередь ({modQueue.length})
-                  </button>
-                </div>
-              </div>
-
-              {showModQueue && (
-                <div style={{marginTop: 14}}>
-                  {modQueue.length === 0 ? (
-                    <div style={{color: 'var(--subtle)'}}>Очередь пуста</div>
-                  ) : (
-                    <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-                      {modQueue.slice(0, 50).map((m: any) => (
-                        <div key={m.id} style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
-                          <div style={{fontSize: 12, color: 'var(--subtle)'}}>Причина: {m.moderationReason || '—'}</div>
-                          <div style={{marginTop: 6, whiteSpace: 'pre-wrap'}}>{m.text || '[ciphertext]'}</div>
-                          <div style={{display: 'flex', gap: 8, marginTop: 10}}>
-                            <button onClick={() => approveQueued(m.id)} style={{padding: '6px 10px'}}>✅ Одобрить</button>
-                            <button onClick={() => rejectQueued(m.id)} style={{padding: '6px 10px', background: '#dc3545'}}>⛔ Отклонить</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Вкладка: Модерация */}
-          {activeTab === 'moderation' && chatType === 'group' && isOwner && (
-            <div style={{marginBottom: '24px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
-              <h3 style={{marginBottom: '12px'}}>🛡️ Модерация</h3>
-
-          {/* Вкладка: Интеграции */}
-          {activeTab === 'integrations' && chatType === 'group' && isOwner && (
-            <div style={{marginBottom: '24px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
-              <h3 style={{marginBottom: '12px'}}>🔗 Вебхуки</h3>
-              <div style={{marginBottom: 16}}>
-                <button
-                  onClick={() => setShowCreateWebhook(!showCreateWebhook)}
-                  style={{padding: '8px 14px', fontSize: 13}}
-                >
-                  {showCreateWebhook ? 'Отмена' : '+ Создать вебхук'}
-                </button>
-              </div>
-
-              {showCreateWebhook && (
-                <div style={{padding: 16, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 16}}>
-                  <label style={{display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12}}>
-                    <span style={{fontSize: 13, fontWeight: 600}}>URL вебхука</span>
-                    <input
-                      type="url"
-                      value={newWebhookUrl}
-                      onChange={(e) => setNewWebhookUrl(e.target.value)}
-                      placeholder="https://example.com/webhook"
-                      style={{padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-secondary)'}}
-                    />
-                  </label>
-                  <label style={{display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12}}>
-                    <span style={{fontSize: 13, fontWeight: 600}}>События (через запятую, * = все)</span>
-                    <input
-                      type="text"
-                      value={newWebhookEvents}
-                      onChange={(e) => setNewWebhookEvents(e.target.value)}
-                      placeholder="message.created,member.join"
-                      style={{padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-secondary)'}}
-                    />
-                  </label>
-                  <button onClick={createWebhook} style={{padding: '8px 14px'}}>✅ Создать</button>
-                </div>
-              )}
-
-              {webhooks.length === 0 ? (
-                <div style={{color: 'var(--subtle)', padding: 20, textAlign: 'center'}}>Нет вебхуков</div>
-              ) : (
-                <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-                  {webhooks.map((hook: any) => (
-                    <div key={hook.id} style={{padding: 14, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
-                      <div style={{fontSize: 13, fontWeight: 600, marginBottom: 6}}>{hook.url}</div>
-                      <div style={{fontSize: 12, color: 'var(--subtle)', marginBottom: 10}}>
-                        События: {hook.events || '*'}
-                      </div>
-                      <button
-                        onClick={() => deleteWebhook(hook.id)}
-                        style={{padding: '6px 10px', fontSize: 12, background: '#dc3545'}}
-                      >
-                        Удалить
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Вкладка: Статистика */}
-          {activeTab === 'stats' && chatType === 'group' && stats && (
-            <div style={{marginBottom: '24px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
-              <h3 style={{marginBottom: '12px'}}>📊 Статистика группы</h3>
-              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
-                <div style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
-                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Участники</div>
-                  <div style={{fontSize: 18, fontWeight: 700}}>{stats.members}</div>
-                </div>
-                <div style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
-                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Активные 7д</div>
-                  <div style={{fontSize: 18, fontWeight: 700}}>{stats.activeUsers7d}</div>
-                </div>
-                <div style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
-                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Сообщений 24ч</div>
-                  <div style={{fontSize: 18, fontWeight: 700}}>{stats.messages24h}</div>
-                </div>
-                <div style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
-                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Сообщений 7д</div>
-                  <div style={{fontSize: 18, fontWeight: 700}}>{stats.messages7d}</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Подписка на канал (для каналов, всегда показывается) */}
-          {chatType === 'channel' && !isOwner && activeTab === 'general' && (
-            <div style={{marginBottom: '24px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
-              {isSubscribed ? (
-                <div>
-                  <div style={{marginBottom: '8px'}}>Вы подписаны на этот канал</div>
-                  <button onClick={unsubscribeFromChannel} style={{padding: '6px 12px'}}>
-                    Отписаться
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <div style={{marginBottom: '8px'}}>Вы не подписаны на этот канал</div>
-                  <button onClick={subscribeToChannel} style={{padding: '6px 12px'}}>
-                    Подписаться
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
 
             {showAddMember && chatType === 'group' && isOwner && (
               <div style={{marginBottom: '16px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
@@ -966,7 +762,212 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
                 </div>
               )}
             </div>
-          </div>
+            </>
+          )}
+
+          {/* Вкладка: Модерация */}
+          {activeTab === 'moderation' && chatType === 'group' && isOwner && (
+            <div style={{marginBottom: '24px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
+              <h3 style={{marginBottom: '12px'}}>🛡️ Модерация</h3>
+              <label style={{display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10}}>
+                <input
+                  type="checkbox"
+                  checked={!!modSettings.enabled}
+                  onChange={(e) => setModSettings((p: any) => ({ ...p, enabled: e.target.checked }))}
+                />
+                <span>Включить автомодерацию</span>
+              </label>
+              <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
+                <div>
+                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Запрещённые слова (через запятую)</div>
+                  <textarea
+                    value={modSettings.bannedWords || ''}
+                    onChange={(e) => setModSettings((p: any) => ({ ...p, bannedWords: e.target.value }))}
+                    style={{width: '100%', minHeight: 70, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)'}}
+                  />
+                </div>
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
+                  <label style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+                    <span style={{fontSize: 12, color: 'var(--subtle)'}}>Макс. сообщений / 10с</span>
+                    <input
+                      type="number"
+                      value={modSettings.maxMsgsPer10s || 8}
+                      onChange={(e) => setModSettings((p: any) => ({ ...p, maxMsgsPer10s: Number(e.target.value) }))}
+                      style={{padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)'}}
+                    />
+                  </label>
+                  <label style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+                    <span style={{fontSize: 12, color: 'var(--subtle)'}}>Порог предупреждений (24ч)</span>
+                    <input
+                      type="number"
+                      value={modSettings.warnThreshold || 2}
+                      onChange={(e) => setModSettings((p: any) => ({ ...p, warnThreshold: Number(e.target.value) }))}
+                      style={{padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)'}}
+                    />
+                  </label>
+                  <label style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+                    <span style={{fontSize: 12, color: 'var(--subtle)'}}>Бан (минут)</span>
+                    <input
+                      type="number"
+                      value={modSettings.banMinutes || 10}
+                      onChange={(e) => setModSettings((p: any) => ({ ...p, banMinutes: Number(e.target.value) }))}
+                      style={{padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)'}}
+                    />
+                  </label>
+                  <label style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 18}}>
+                    <input
+                      type="checkbox"
+                      checked={!!modSettings.queueOnViolation}
+                      onChange={(e) => setModSettings((p: any) => ({ ...p, queueOnViolation: e.target.checked }))}
+                    />
+                    <span>Отправлять в очередь</span>
+                  </label>
+                </div>
+                <div style={{display: 'flex', gap: 10}}>
+                  <button onClick={saveModerationSettings} style={{padding: '8px 14px'}}>💾 Сохранить</button>
+                  <button
+                    onClick={async () => {
+                      const next = !showModQueue;
+                      setShowModQueue(next);
+                      if (next) await loadModQueue();
+                    }}
+                    style={{padding: '8px 14px'}}
+                  >
+                    🧾 Очередь ({modQueue.length})
+                  </button>
+                </div>
+              </div>
+
+              {showModQueue && (
+                <div style={{marginTop: 14}}>
+                  {modQueue.length === 0 ? (
+                    <div style={{color: 'var(--subtle)'}}>Очередь пуста</div>
+                  ) : (
+                    <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
+                      {modQueue.slice(0, 50).map((m: any) => (
+                        <div key={m.id} style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
+                          <div style={{fontSize: 12, color: 'var(--subtle)'}}>Причина: {m.moderationReason || '—'}</div>
+                          <div style={{marginTop: 6, whiteSpace: 'pre-wrap'}}>{m.text || '[ciphertext]'}</div>
+                          <div style={{display: 'flex', gap: 8, marginTop: 10}}>
+                            <button onClick={() => approveQueued(m.id)} style={{padding: '6px 10px'}}>✅ Одобрить</button>
+                            <button onClick={() => rejectQueued(m.id)} style={{padding: '6px 10px', background: '#dc3545'}}>⛔ Отклонить</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Вкладка: Интеграции */}
+          {activeTab === 'integrations' && chatType === 'group' && isOwner && (
+            <div style={{marginBottom: '24px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
+              <h3 style={{marginBottom: '12px'}}>🔗 Вебхуки</h3>
+              <div style={{marginBottom: 16}}>
+                <button
+                  onClick={() => setShowCreateWebhook(!showCreateWebhook)}
+                  style={{padding: '8px 14px', fontSize: 13}}
+                >
+                  {showCreateWebhook ? 'Отмена' : '+ Создать вебхук'}
+                </button>
+              </div>
+
+              {showCreateWebhook && (
+                <div style={{padding: 16, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 16}}>
+                  <label style={{display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12}}>
+                    <span style={{fontSize: 13, fontWeight: 600}}>URL вебхука</span>
+                    <input
+                      type="url"
+                      value={newWebhookUrl}
+                      onChange={(e) => setNewWebhookUrl(e.target.value)}
+                      placeholder="https://example.com/webhook"
+                      style={{padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-secondary)'}}
+                    />
+                  </label>
+                  <label style={{display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12}}>
+                    <span style={{fontSize: 13, fontWeight: 600}}>События (через запятую, * = все)</span>
+                    <input
+                      type="text"
+                      value={newWebhookEvents}
+                      onChange={(e) => setNewWebhookEvents(e.target.value)}
+                      placeholder="message.created,member.join"
+                      style={{padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-secondary)'}}
+                    />
+                  </label>
+                  <button onClick={createWebhook} style={{padding: '8px 14px'}}>✅ Создать</button>
+                </div>
+              )}
+
+              {webhooks.length === 0 ? (
+                <div style={{color: 'var(--subtle)', padding: 20, textAlign: 'center'}}>Нет вебхуков</div>
+              ) : (
+                <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
+                  {webhooks.map((hook: any) => (
+                    <div key={hook.id} style={{padding: 14, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
+                      <div style={{fontSize: 13, fontWeight: 600, marginBottom: 6}}>{hook.url}</div>
+                      <div style={{fontSize: 12, color: 'var(--subtle)', marginBottom: 10}}>
+                        События: {hook.events || '*'}
+                      </div>
+                      <button
+                        onClick={() => deleteWebhook(hook.id)}
+                        style={{padding: '6px 10px', fontSize: 12, background: '#dc3545'}}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Вкладка: Статистика */}
+          {activeTab === 'stats' && chatType === 'group' && stats && (
+            <div style={{marginBottom: '24px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
+              <h3 style={{marginBottom: '12px'}}>📊 Статистика группы</h3>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
+                <div style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
+                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Участники</div>
+                  <div style={{fontSize: 18, fontWeight: 700}}>{stats.members}</div>
+                </div>
+                <div style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
+                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Активные 7д</div>
+                  <div style={{fontSize: 18, fontWeight: 700}}>{stats.activeUsers7d}</div>
+                </div>
+                <div style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
+                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Сообщений 24ч</div>
+                  <div style={{fontSize: 18, fontWeight: 700}}>{stats.messages24h}</div>
+                </div>
+                <div style={{padding: 12, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)'}}>
+                  <div style={{fontSize: 12, color: 'var(--subtle)'}}>Сообщений 7д</div>
+                  <div style={{fontSize: 18, fontWeight: 700}}>{stats.messages7d}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Подписка на канал (для каналов, всегда показывается) */}
+          {chatType === 'channel' && !isOwner && activeTab === 'general' && (
+            <div style={{marginBottom: '24px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px'}}>
+              {isSubscribed ? (
+                <div>
+                  <div style={{marginBottom: '8px'}}>Вы подписаны на этот канал</div>
+                  <button onClick={unsubscribeFromChannel} style={{padding: '6px 12px'}}>
+                    Отписаться
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{marginBottom: '8px'}}>Вы не подписаны на этот канал</div>
+                  <button onClick={subscribeToChannel} style={{padding: '6px 12px'}}>
+                    Подписаться
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
