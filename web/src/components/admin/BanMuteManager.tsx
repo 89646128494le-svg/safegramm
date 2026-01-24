@@ -51,15 +51,35 @@ export default function BanMuteManager() {
       setLoading(true);
       if (activeTab === 'bans') {
         const response = await api('/api/admin/bans');
-        setBans(response.bans || []);
+        if (response === null) {
+          // Эндпоинт не реализован
+          setBans([]);
+          return;
+        }
+        setBans(response?.bans || []);
       } else if (activeTab === 'mutes') {
         const response = await api('/api/admin/mutes');
-        setMutes(response.mutes || []);
+        if (response === null) {
+          setMutes([]);
+          return;
+        }
+        setMutes(response?.mutes || []);
       } else {
         const response = await api('/api/admin/moderation/history');
-        setHistory(response.history || []);
+        if (response === null) {
+          setHistory([]);
+          return;
+        }
+        setHistory(response?.history || []);
       }
     } catch (e: any) {
+      // Игнорируем 404 - эндпоинт еще не реализован
+      if (e.status === 404 || e.errorCode === 'not_found') {
+        if (activeTab === 'bans') setBans([]);
+        else if (activeTab === 'mutes') setMutes([]);
+        else setHistory([]);
+        return;
+      }
       showToast('Ошибка загрузки: ' + e.message, 'error');
     } finally {
       setLoading(false);

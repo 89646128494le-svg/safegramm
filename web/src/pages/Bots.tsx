@@ -52,8 +52,13 @@ export default function Bots() {
     try {
       setLoading(true);
       const data = await api('/api/bots');
-      setBots(data.bots || []);
+      setBots(data?.bots || []);
     } catch (e: any) {
+      // Игнорируем 404 - эндпоинт еще не реализован
+      if (e.status === 404 || e.errorCode === 'not_found') {
+        setBots([]);
+        return;
+      }
       showToast('Ошибка загрузки ботов: ' + e.message, 'error');
       setBots([]);
     } finally {

@@ -196,6 +196,8 @@ export default function Register() {
       
       setToken(res.token);
       setUser(res.user);
+      // Устанавливаем флаг принятия политик при успешной регистрации
+      localStorage.setItem('policiesAccepted', '1');
       
       setShowSuccess(true);
       

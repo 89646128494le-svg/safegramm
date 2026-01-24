@@ -36,7 +36,7 @@ type Message struct {
 	Sender User `gorm:"foreignKey:SenderID" json:"sender,omitempty"`
 	Chat   Chat `gorm:"foreignKey:ChatID" json:"chat,omitempty"`
 	Reactions []MessageReaction `gorm:"foreignKey:MessageID" json:"reactions,omitempty"`
-	Poll   *Poll `gorm:"foreignKey:ID;references:PollID" json:"poll,omitempty"`
+	// Poll связь определена в модели Poll через MessageID, не создаем здесь чтобы избежать конфликта внешних ключей
 }
 
 type MessageReaction struct {

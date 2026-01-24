@@ -15,6 +15,7 @@ type Poll struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Relations
+	Message Message `gorm:"foreignKey:MessageID;references:ID" json:"-"`
 	Options []PollOption `gorm:"foreignKey:PollID" json:"options"`
 	Votes   []PollVote  `gorm:"foreignKey:PollID" json:"votes,omitempty"`
 }

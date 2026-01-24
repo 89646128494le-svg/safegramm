@@ -28,29 +28,30 @@ func StoreEmailCode(email, code string, expiresIn time.Duration) {
 // VerifyEmailCode проверяет код для email
 func VerifyEmailCode(email, code string) (bool, error) {
 	emailCodeMutex.RLock()
-	defer emailCodeMutex.RUnlock()
-	
 	stored, exists := emailCodeStorage[email]
 	if !exists {
+		emailCodeMutex.RUnlock()
 		return false, nil
 	}
 	
-	if time.Now().After(stored.ExpiresAt) {
+	// Проверяем срок действия
+	expired := time.Now().After(stored.ExpiresAt)
+	storedCode := stored.Code
+	emailCodeMutex.RUnlock()
+	
+	if expired {
 		// Удаляем истекший код
-		emailCodeMutex.RUnlock()
 		emailCodeMutex.Lock()
 		delete(emailCodeStorage, email)
 		emailCodeMutex.Unlock()
-		emailCodeMutex.RLock()
 		return false, nil
 	}
 	
-	if stored.Code != code {
+	if storedCode != code {
 		return false, nil
 	}
 	
 	// Код верный, удаляем его
-	emailCodeMutex.RUnlock()
 	emailCodeMutex.Lock()
 	delete(emailCodeStorage, email)
 	emailCodeMutex.Unlock()

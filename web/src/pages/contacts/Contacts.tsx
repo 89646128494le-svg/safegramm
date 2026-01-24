@@ -52,8 +52,18 @@ export default function Contacts() {
     try {
       setContactsLoading(true);
       const r = await api('/api/contacts/list');
-      setContacts(Array.isArray(r) ? r : (r.contacts || []));
+      if (r === null) {
+        // Эндпоинт не реализован
+        setContacts([]);
+        return;
+      }
+      setContacts(Array.isArray(r) ? r : (r?.contacts || []));
     } catch (e: any) {
+      // Игнорируем 404 - эндпоинт еще не реализован
+      if (e.status === 404 || e.errorCode === 'not_found') {
+        setContacts([]);
+        return;
+      }
       showToast('Ошибка загрузки контактов: ' + e.message, 'error');
       setContacts([]);
     } finally {

@@ -71,7 +71,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 // AuthRateLimit более строгий лимит для аутентификации
 var authLimiter = &rateLimiter{
 	visitors: make(map[string]*visitor),
-	rate:     5, // 5 попыток
+	rate:     30, // 30 попыток (увеличено для разработки и нормального использования)
 	window:   time.Minute * 5,
 }
 
@@ -85,5 +85,23 @@ func AuthRateLimitMiddleware() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// ResetAuthRateLimit сбрасывает лимит для IP (для разработки)
+func ResetAuthRateLimit(ip string) {
+	authLimiter.mu.Lock()
+	defer authLimiter.mu.Unlock()
+	delete(authLimiter.visitors, ip)
+}
+
+// ResetAllRateLimits сбрасывает все лимиты (для разработки)
+func ResetAllRateLimits() {
+	limiter.mu.Lock()
+	limiter.visitors = make(map[string]*visitor)
+	limiter.mu.Unlock()
+	
+	authLimiter.mu.Lock()
+	authLimiter.visitors = make(map[string]*visitor)
+	authLimiter.mu.Unlock()
 }
 

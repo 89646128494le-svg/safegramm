@@ -57,8 +57,18 @@ export default function AnalyticsDashboard() {
     try {
       setLoading(true);
       const response = await api(`/api/admin/analytics?range=${timeRange}`);
+      if (response === null) {
+        // Эндпоинт не реализован
+        setData(null);
+        return;
+      }
       setData(response);
     } catch (e: any) {
+      // Игнорируем 404 - эндпоинт еще не реализован
+      if (e.status === 404 || e.errorCode === 'not_found') {
+        setData(null);
+        return;
+      }
       showToast('Ошибка загрузки аналитики: ' + e.message, 'error');
     } finally {
       setLoading(false);

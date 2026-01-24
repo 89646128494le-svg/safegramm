@@ -2,7 +2,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { api, API_URL } from '../services/api';
 import { getSocket, sendWebSocketMessage, closeSocket } from '../services/websocket';
-import { sendWebSocketMessage as sendOptimized } from '../services/websocketOptimized';
 import { notifyNewMessage, notifyCall, hasNotificationPermission } from '../services/notifications';
 import { useStore } from '../store/useStore';
 import { parseMarkdown, isVideoUrl } from '../utils/markdown';
@@ -13,7 +12,7 @@ import BackupManager from './BackupManager';
 import BotManager from './BotManager';
 import CalendarIntegration from './CalendarIntegration';
 import TodoIntegration from './TodoIntegration';
-import { addToOfflineQueue, isOnline, onOnlineStatusChange, processOfflineQueue } from '../services/offlineQueue';
+import { addToOfflineQueue, isOnline, onOnlineStatusChange, processOfflineQueue, removeFromOfflineQueue } from '../services/offlineQueue';
 import { sendWebSocketMessage as sendOptimized, flushWebSocketBatch } from '../services/websocketOptimized';
 import { compressImage, shouldCompressImage } from '../utils/imageCompression';
 import LinkPreview from './LinkPreview';
@@ -125,6 +124,8 @@ interface Message {
       avatarUrl?: string;
     };
   }>;
+  gifUrl?: string;
+  sending?: boolean;
 }
 
 interface Sticker {
@@ -169,6 +170,7 @@ interface User {
   username: string;
   avatarUrl?: string;
   status?: string;
+  roles?: string[] | string;
 }
 
 interface EnhancedChatWindowProps {
@@ -249,7 +251,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [stickerPacks, setStickerPacks] = useState<StickerPack[]>([]);
   const [selectedPack, setSelectedPack] = useState<string | null>(null);
-  const [stickers, setStickers] = useState<Map<string, Sticker[]>>(new Map());
+  const [stickers, setStickers] = useState<Map<string, Sticker>>(new Map());
+  const [savedMessages, setSavedMessages] = useState<Set<string>>(new Set());
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -328,7 +331,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIntervalRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
-  const chatInfoRef = useRef<{members: string[], type: string} | null>(null);
+  const chatInfoRef = useRef<{members: string[], type: string, name?: string} | null>(null);
   const incomingCallTimerRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const { ui } = useStore();
 
@@ -504,7 +507,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       const chats = await api('/api/chats');
       const chat = chats.chats?.find((c: any) => c.id === chatId);
       if (chat) {
-        chatInfoRef.current = { members: chat.members || [], type: chat.type || 'dm' };
+        chatInfoRef.current = { members: chat.members || [], type: chat.type || 'dm', name: chat.name };
         
         // Проверяем права пользователя
         if (chat.members && Array.isArray(chat.members)) {
@@ -662,22 +665,26 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       setStickerPacks(packs);
       
       // Загружаем стикеры из всех наборов для быстрого доступа
-      const allStickers = new Map<string, {url: string, emoji: string}>();
+      const allStickers = new Map<string, Sticker>();
       for (const pack of packs) {
         try {
           const stickersData = await api(`/api/sticker-packs/${pack.id}/stickers`);
           const packStickers = stickersData.stickers || [];
           packStickers.forEach((sticker: any) => {
             allStickers.set(sticker.id, {
+              id: sticker.id,
+              packId: pack.id,
+              emoji: sticker.emoji || '',
               url: sticker.url,
-              emoji: sticker.emoji
+              width: sticker.width || 128,
+              height: sticker.height || 128
             });
           });
         } catch (e) {
           console.warn(`Failed to load stickers for pack ${pack.id}:`, e);
         }
       }
-      setStickerMap(allStickers);
+      setStickers(allStickers);
     } catch (e) {
       console.error('Failed to load sticker packs:', e);
     }
@@ -1214,7 +1221,6 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                 ...message.data
               });
               // Удаляем из очереди после успешной отправки
-              const { removeFromOfflineQueue } = require('../services/offlineQueue');
               removeFromOfflineQueue(message.id);
             } catch (e) {
               console.error('Failed to sync message:', e);
@@ -1349,7 +1355,6 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
         
         // Удаляем сообщение из офлайн очереди, если оно там было
         if (optimisticMessage.id.startsWith('offline_')) {
-          const { removeFromOfflineQueue } = require('../services/offlineQueue');
           removeFromOfflineQueue(optimisticMessage.id);
         }
       } catch (e: any) {
@@ -2905,7 +2910,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                       {(() => {
                         const replyMsg = msg.replyToMessage || messages.find(m => m.id === msg.replyTo);
                         if (replyMsg) {
-                          const replySender = replyMsg.replyToMessage?.sender || users.get(replyMsg.senderId);
+                          const replySender = users.get(replyMsg.senderId);
                           return `↩️ Ответ на ${replySender?.username || 'пользователя'}`;
                         }
                         return '↩️ Ответ на сообщение';
@@ -2921,12 +2926,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                       {(() => {
                         const replyMsg = msg.replyToMessage || messages.find(m => m.id === msg.replyTo);
                         if (replyMsg) {
-                          if (replyMsg.text) {
+                          if ('text' in replyMsg && replyMsg.text) {
                             return replyMsg.text.length > 50 ? replyMsg.text.slice(0, 50) + '...' : replyMsg.text;
                           }
-                          if (replyMsg.attachmentUrl) return '📎 Вложение';
-                          if (replyMsg.stickerId) return '🎨 Стикер';
-                          if (replyMsg.gifUrl) return '🎬 GIF';
+                          if ('attachmentUrl' in replyMsg && replyMsg.attachmentUrl) return '📎 Вложение';
+                          if ('stickerId' in replyMsg && replyMsg.stickerId) return '🎨 Стикер';
+                          if ('gifUrl' in replyMsg && replyMsg.gifUrl) return '🎬 GIF';
                         }
                         return 'Сообщение';
                       })()}
@@ -2994,10 +2999,10 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                       alignItems: 'center',
                       justifyContent: 'center'
                     }}>
-                      {stickerMap.get(msg.stickerId) ? (
+                      {stickers.get(msg.stickerId) ? (
                         <img 
-                          src={stickerMap.get(msg.stickerId)!.url} 
-                          alt={stickerMap.get(msg.stickerId)!.emoji || 'sticker'} 
+                          src={stickers.get(msg.stickerId)!.url} 
+                          alt={stickers.get(msg.stickerId)!.emoji || 'sticker'} 
                           style={{
                             maxWidth: '200px',
                             maxHeight: '200px',
@@ -3326,12 +3331,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                   }} title="Переслать">
                     ➡️ Переслать
                   </button>
-                  {isMessageSaved(msg.id) ? (
-                    <button onClick={() => unsaveMessage(msg.id)} title="Удалить из избранного">
+                  {savedMessages.has(msg.id) ? (
+                    <button onClick={() => setSavedMessages(prev => { const next = new Set(prev); next.delete(msg.id); return next; })} title="Удалить из избранного">
                       ⭐
                     </button>
                   ) : (
-                    <button onClick={() => saveMessage(msg.id)} title="Сохранить в избранное">
+                    <button onClick={() => setSavedMessages(prev => new Set(prev).add(msg.id))} title="Сохранить в избранное">
                       ☆
                     </button>
                   )}

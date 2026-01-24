@@ -1,4 +1,5 @@
 // Настройки внешнего вида
+import { getCurrentTheme, applyTheme } from './themes';
 
 export interface AppearanceSettings {
   fontSize: 'small' | 'medium' | 'large' | 'xlarge';
@@ -114,8 +115,8 @@ export function initAppearance(): void {
   const settings = loadAppearanceSettings();
   applyAppearanceSettings(settings);
   
-  const theme = require('./themes').getCurrentTheme();
+  const theme = getCurrentTheme();
   if (theme) {
-    require('./themes').applyTheme(theme);
+    applyTheme(theme);
   }
 }

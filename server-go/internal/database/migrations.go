@@ -11,6 +11,10 @@ import (
 func AutoMigrate(db *gorm.DB) error {
 	log.Println("🔄 Starting database migrations...")
 
+	// Удаляем неправильные внешние ключи, если они существуют
+	db.Exec("ALTER TABLE polls DROP CONSTRAINT IF EXISTS fk_messages_poll")
+	db.Exec("ALTER TABLE polls DROP CONSTRAINT IF EXISTS fk_polls_message")
+
 	// Миграция всех моделей
 	err := db.AutoMigrate(
 		&models.User{},

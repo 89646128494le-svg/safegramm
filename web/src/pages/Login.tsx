@@ -78,6 +78,8 @@ export default function Login({ onDone }: LoginProps) {
         // Успешный вход
         setToken(res.token);
         setUser(res.user);
+        // Устанавливаем флаг принятия политик при успешном входе
+        localStorage.setItem('policiesAccepted', '1');
         if (onDone) {
           onDone();
         }
@@ -107,24 +109,26 @@ export default function Login({ onDone }: LoginProps) {
       console.error('Login error:', e);
       
       // Проверяем ответ сервера в ошибке
-      const serverError = e?.response?.error || e?.error;
+      const serverError = e?.response?.error || e?.errorCode || '';
       const errorMsg = e?.message || 'Ошибка входа';
       
       // Обработка специфичных ошибок
-      if (serverError === 'email_verification_required' || errorMsg.includes('email_verification_required')) {
+      if (serverError === 'email_verification_required' || errorMsg === 'email_verification_required') {
         setHasCloudCode(e?.response?.hasCloudCode || false);
         setLoading(false);
         await sendEmailCode();
         return;
-      } else if (serverError === 'cloud_code_required' || errorMsg.includes('cloud_code_required')) {
+      } else if (serverError === 'cloud_code_required' || errorMsg === 'cloud_code_required') {
         setStep('cloudCode');
         setErr('');
         setLoading(false);
         return;
-      } else if (serverError === 'invalid_email_code') {
+      } else if (serverError === 'invalid_email_code' || errorMsg === 'invalid_email_code') {
         setErr('Неверный код подтверждения');
-      } else if (serverError === 'invalid_cloud_code') {
+      } else if (serverError === 'invalid_cloud_code' || errorMsg === 'invalid_cloud_code') {
         setErr('Неверный облачный код');
+      } else if (serverError === 'bad_creds' || errorMsg === 'bad_creds') {
+        setErr('Неверный логин или пароль');
       } else {
         setErr(errorMsg);
       }

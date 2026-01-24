@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface ModalProps {
   isOpen: boolean;
@@ -184,7 +185,6 @@ export function ConfirmModal({
   confirmColor = 'primary'
 }: ConfirmModalProps) {
   // Используем i18n для дефолтных значений
-  const { useTranslation } = require('../i18n');
   const { t } = useTranslation();
   const defaultConfirmText = confirmText || t('common.confirm');
   const defaultCancelText = cancelText || t('common.cancel');

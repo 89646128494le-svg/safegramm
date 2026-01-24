@@ -35,14 +35,57 @@ export default function AppShell() {
     
     // Инициализируем темы и настройки внешнего вида
     initAppearance();
-    
-    api('/api/users/me').then(u => { 
-      setUser(u); 
-    }).catch((err) => {
+  }, [ui.theme]);
+
+  useEffect(() => {
+    // Загружаем данные пользователя только при монтировании
+    const token = localStorage.getItem('token');
+    if (!token) {
       nav('/login');
+      return;
+    }
+
+    // Если пользователь уже загружен, не делаем повторный запрос
+    if (user) {
+      setupPush().catch(()=>{});
+      return;
+    }
+
+    let cancelled = false;
+    api('/api/users/me').then(u => { 
+      if (!cancelled) {
+        setUser(u); 
+      }
+    }).catch((err: any) => {
+      if (cancelled) return;
+      
+      // Перенаправляем на логин только при ошибке авторизации (401/403)
+      const status = err.status;
+      const errorCode = err.errorCode || '';
+      const errorMsg = err.message?.toLowerCase() || '';
+      
+      // Проверяем статус код или код ошибки
+      if (status === 401 || status === 403 || 
+          errorCode === 'unauthorized' || 
+          errorMsg.includes('авторизац') || 
+          errorMsg.includes('unauthorized') || 
+          errorMsg.includes('forbidden') ||
+          errorMsg.includes('токен')) {
+        setToken(null);
+        setUser(null);
+        localStorage.removeItem('token');
+        nav('/login');
+      } else {
+        // Для других ошибок (сеть, сервер и т.д.) просто логируем, но не перенаправляем
+        console.warn('Failed to load user, but not redirecting:', err.message);
+      }
     });
     setupPush().catch(()=>{});
-  }, [nav, setUser, ui.theme]);
+    
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Пустой массив зависимостей - выполняется только при монтировании
 
   const logout = () => { 
     setToken(null);

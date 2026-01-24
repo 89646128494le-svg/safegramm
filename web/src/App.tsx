@@ -28,10 +28,26 @@ export default function App() {
         const userData = await api('/api/users/me');
         setToken(t);
         setUser(userData);
-      } catch {
-        // Токен невалидный, удаляем его
-        setToken(null);
-        setUser(null);
+      } catch (err: any) {
+        // Токен невалидный только при ошибке авторизации
+        const status = err.status;
+        const errorCode = err.errorCode || '';
+        const errorMsg = err.message?.toLowerCase() || '';
+        
+        if (status === 401 || status === 403 || 
+            errorCode === 'unauthorized' || 
+            errorMsg.includes('авторизац') || 
+            errorMsg.includes('unauthorized') || 
+            errorMsg.includes('forbidden')) {
+          // Токен невалидный, удаляем его
+          setToken(null);
+          setUser(null);
+        } else {
+          // Для других ошибок (сеть, сервер) оставляем пользователя, если он уже был загружен
+          if (!user) {
+            setUser(null);
+          }
+        }
       }
     } else {
       setUser(null);
@@ -82,20 +98,31 @@ export default function App() {
     );
   }
 
+  // Если пользователь авторизован, редиректим с главной страницы в мессенджер
+  const isAuthenticated = !!user && !!token;
+  
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      {/* Главная страница - редирект в мессенджер если авторизован */}
+      <Route path="/" element={
+        isAuthenticated ? <Navigate to="/app/chats" replace /> : <Landing />
+      } />
       <Route path="/features" element={<Features />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/about" element={<About />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
-      <Route path="/login" element={<Login onDone={handleAuthSuccess} />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/app/*" element={
-        accepted ? (user ? <AppShell /> : <Navigate to="/login" />) : <Navigate to="/" />
+      {/* Login/Register - редирект в мессенджер если уже авторизован */}
+      <Route path="/login" element={
+        isAuthenticated ? <Navigate to="/app/chats" replace /> : <Login onDone={handleAuthSuccess} />
       } />
-      <Route path="*" element={<Navigate to="/" />} />
+      <Route path="/register" element={
+        isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
+      } />
+      <Route path="/app/*" element={
+        isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
+      } />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

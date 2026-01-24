@@ -457,7 +457,6 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
         )}
 
         <div style={{padding: '20px'}}>
-          <>
           {/* Вкладка: Общее (для групп) или всё содержимое (для каналов) */}
           {(activeTab === 'general' || chatType === 'channel') && (
             <>
@@ -615,6 +614,8 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
                 >
                   ➕ Создать ссылку приглашения
                 </button>
+              )}
+                </div>
               )}
 
               {/* Подписка на канал (для каналов, всегда показывается) */}
@@ -969,7 +970,6 @@ export default function GroupChannelSettings({ chatId, chatType, currentUserId, 
               </div>
             </div>
           )}
-          </>
         </div>
       </div>
     </div>

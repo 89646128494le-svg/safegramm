@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { isOnline, onOnlineStatusChange, processOfflineQueue } from '../services/offlineQueue';
+import { isOnline, onOnlineStatusChange, processOfflineQueue, getOfflineQueue } from '../services/offlineQueue';
 import { api } from '../services/api';
 import { showToast } from './Toast';
 import { useTranslation } from '../i18n';
@@ -31,7 +31,6 @@ export default function ConnectionStatus({ onSyncComplete }: ConnectionStatusPro
   }, []);
 
   const updatePendingCount = () => {
-    const { getOfflineQueue } = require('../services/offlineQueue');
     const queue = getOfflineQueue();
     setPendingMessages(queue.length);
   };

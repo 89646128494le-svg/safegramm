@@ -26,30 +26,41 @@ export async function setupPush(): Promise<boolean> {
     console.log('Service Worker registered:', registration);
     
     // Получаем публичный ключ VAPID
-    const { key } = await api('/api/push/vapid_public');
-    if (!key) {
-      console.warn('VAPID public key not available');
-      return false;
-    }
-    
-    // Подписываемся на Push-уведомления
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlB64ToUint8Array(key)
-    });
-    
-    // Отправляем подписку на сервер
-    await api('/api/push/subscribe', 'POST', {
-      subscription: subscription.toJSON(),
-      endpoint: subscription.endpoint,
-      keys: {
-        p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!))),
-        auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!)))
+    try {
+      const { key } = await api('/api/push/vapid_public');
+      if (!key) {
+        console.warn('VAPID public key not available - push notifications not configured');
+        return false;
       }
-    });
-    
-    console.log('Push subscription successful');
-    return true;
+      
+      // Подписываемся на Push-уведомления
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(key)
+      });
+      
+      // Отправляем подписку на сервер
+      await api('/api/push/subscribe', 'POST', {
+        subscription: subscription.toJSON(),
+        endpoint: subscription.endpoint,
+        keys: {
+          p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')!))),
+          auth: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')!)))
+        }
+      });
+      
+      console.log('Push subscription successful');
+      return true;
+    } catch (error: any) {
+      // Обрабатываем ошибки конфигурации (503, 404) gracefully
+      if (error.status === 503 || error.status === 404 || 
+          error.errorCode === 'vapid_not_configured' ||
+          error.message?.includes('vapid')) {
+        console.warn('Push notifications not configured on server:', error.message);
+        return false;
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('Failed to setup push notifications:', error);
     return false;
