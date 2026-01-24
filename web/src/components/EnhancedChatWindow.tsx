@@ -549,8 +549,16 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       }));
       
       if (append && loadedMessages.length > 0) {
-        // Добавляем старые сообщения в начало
-        setMessages(prev => [...loadedMessages, ...prev]);
+        // Добавляем старые сообщения в начало, удаляя дубликаты
+        setMessages(prev => {
+          const combined = [...loadedMessages, ...prev];
+          // Удаляем дубликаты по ID
+          const uniqueMessages = combined.filter((message, index, self) =>
+            index === self.findIndex((m) => m.id === message.id)
+          );
+          return uniqueMessages;
+        });
+        
         // Сохраняем позицию прокрутки
         const container = messagesContainerRef.current;
         if (container) {
@@ -562,8 +570,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
           }, 0);
         }
       } else {
-        // Заменяем все сообщения (первая загрузка)
-        setMessages(loadedMessages);
+        // Заменяем все сообщения (первая загрузка), удаляя возможные дубликаты
+        const uniqueMessages = loadedMessages.filter((message, index, self) =>
+          index === self.findIndex((m) => m.id === message.id)
+        );
+        setMessages(uniqueMessages);
         setTimeout(() => {
           if (messagesEndRef.current) {
             messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -828,8 +839,18 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
             };
             
             setMessages(prev => {
+              // Проверяем есть ли уже это сообщение
               if (prev.some(m => m.id === msg.id)) return prev;
+              
+              // Добавляем новое сообщение
               const newMessages = [...prev, msg];
+              
+              // Дополнительная проверка: удаляем дубликаты если они есть
+              const uniqueMessages = newMessages.filter((message, index, self) =>
+                index === self.findIndex((m) => m.id === message.id)
+              );
+              
+              return uniqueMessages;
               
               // Добавляем класс анимации для входящего сообщения
               setTimeout(() => {

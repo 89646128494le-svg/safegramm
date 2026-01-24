@@ -71,6 +71,40 @@ func main() {
 	// CORS middleware
 	router.Use(corsMiddleware())
 
+	// Root path - для localtunnel и проверки работоспособности
+	router.GET("/", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(200, `<!DOCTYPE html>
+<html>
+<head>
+	<title>SafeGram API Server</title>
+	<style>
+		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+			   background: linear-gradient(135deg, #0b1020 0%, #1a1f35 100%); 
+			   color: #e9ecf5; min-height: 100vh; margin: 0; 
+			   display: flex; align-items: center; justify-content: center; }
+		.container { text-align: center; padding: 40px; }
+		h1 { background: linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%); 
+			 -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+			 font-size: 48px; margin-bottom: 16px; }
+		p { color: rgba(233, 236, 245, 0.7); font-size: 18px; }
+		.status { color: #4ade80; font-weight: bold; }
+		a { color: #7c6cff; text-decoration: none; }
+		a:hover { text-decoration: underline; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>SafeGram API</h1>
+		<p>Server is <span class="status">running</span></p>
+		<p>API endpoints available at <code>/api/*</code></p>
+		<p>WebSocket at <code>/ws</code></p>
+		<p><a href="/health">Health Check</a></p>
+	</div>
+</body>
+</html>`)
+	})
+
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "timestamp": gin.H{}})

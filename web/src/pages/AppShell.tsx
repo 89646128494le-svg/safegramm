@@ -22,12 +22,62 @@ import { ToastContainer, useToast } from '../components/Toast';
 import { useStore } from '../store/useStore';
 import { initAppearance } from '../services/appearance';
 import ConnectionStatus from '../components/ConnectionStatus';
+import IncomingCallNotification from '../components/IncomingCallNotification';
+import DMCall from '../components/DMCall';
+import { getSocket, sendWebSocketMessage } from '../services/websocket';
 
 export default function AppShell() {
   const { user, setUser, setToken, setTheme, ui } = useStore();
   const [showStories, setShowStories] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<any>(null);
+  const [activeCall, setActiveCall] = useState<any>(null);
   const nav = useNavigate();
   const { toasts, removeToast } = useToast();
+
+  // WebSocket listener для входящих звонков
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleIncomingCall = (event: MessageEvent) => {
+      try {
+        const messages = event.data.split('\n').filter((m: string) => m.trim());
+        for (const msgText of messages) {
+          if (!msgText.trim()) continue;
+          try {
+            const data = JSON.parse(msgText);
+            
+            // Обрабатываем входящий звонок
+            if (data.type === 'webrtc:offer' && user) {
+              // Проверяем что это не наш собственный звонок
+              if (data.from !== user.id) {
+                setIncomingCall({
+                  callId: data.chatId || `call-${Date.now()}`,
+                  from: data.from,
+                  fromName: data.fromName,
+                  fromAvatar: data.fromAvatar,
+                  chatId: data.chatId,
+                  isVideo: data.video || false,
+                  offer: data,
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to parse WebSocket message:', e);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to handle WebSocket message:', e);
+      }
+    };
+
+    socket.addEventListener('message', handleIncomingCall);
+
+    return () => {
+      socket.removeEventListener('message', handleIncomingCall);
+    };
+  }, [user]);
 
   useEffect(() => {
     // Применяем сохраненную тему
@@ -91,6 +141,37 @@ export default function AppShell() {
     setToken(null);
     setUser(null);
     nav('/login');
+  };
+
+  // Обработка принятия звонка
+  const handleAcceptCall = (call: any) => {
+    setActiveCall({
+      chatId: call.chatId,
+      otherUserId: call.from,
+      currentUserId: user?.id,
+      currentUserName: user?.username,
+      currentUserAvatar: user?.avatar,
+      isVideo: call.isVideo,
+      isIncoming: true,
+      offerData: call.offer,
+    });
+    setIncomingCall(null);
+  };
+
+  // Обработка отклонения звонка
+  const handleDeclineCall = (call: any) => {
+    // Отправляем hangup сообщение
+    sendWebSocketMessage('webrtc:hangup', {
+      chatId: call.chatId,
+      to: call.from,
+      reason: 'declined',
+    });
+    setIncomingCall(null);
+  };
+
+  // Закрытие активного звонка
+  const handleCloseCall = () => {
+    setActiveCall(null);
   };
 
   return (
@@ -189,6 +270,28 @@ export default function AppShell() {
       </AnimatePresence>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConnectionStatus />
+      
+      {/* Уведомление о входящем звонке */}
+      <IncomingCallNotification
+        call={incomingCall}
+        onAccept={handleAcceptCall}
+        onDecline={handleDeclineCall}
+      />
+      
+      {/* Активный звонок */}
+      {activeCall && user && (
+        <DMCall
+          chatId={activeCall.chatId}
+          otherUserId={activeCall.otherUserId}
+          currentUserId={user.id}
+          currentUserName={user.username}
+          currentUserAvatar={user.avatar}
+          isVideo={activeCall.isVideo}
+          isIncoming={activeCall.isIncoming}
+          offerData={activeCall.offerData}
+          onClose={handleCloseCall}
+        />
+      )}
     </motion.div>
   );
 }

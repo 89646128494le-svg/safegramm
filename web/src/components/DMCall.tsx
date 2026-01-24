@@ -7,13 +7,15 @@ interface DMCallProps {
   chatId: string;
   otherUserId: string;
   currentUserId: string;
+  currentUserName?: string;
+  currentUserAvatar?: string;
   isVideo: boolean;
   onClose: () => void;
   isIncoming?: boolean; // true если это входящий звонок
   offerData?: any; // данные offer для входящего звонка
 }
 
-export default function DMCall({ chatId, otherUserId, currentUserId, isVideo, onClose, isIncoming = false, offerData }: DMCallProps) {
+export default function DMCall({ chatId, otherUserId, currentUserId, currentUserName, currentUserAvatar, isVideo, onClose, isIncoming = false, offerData }: DMCallProps) {
   const [isCalling, setIsCalling] = useState(false);
   const [isRinging, setIsRinging] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -228,10 +230,13 @@ export default function DMCall({ chatId, otherUserId, currentUserId, isVideo, on
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Отправляем offer через WebSocket
+      // Отправляем offer через WebSocket с информацией о звонящем
       sendWebSocketMessage('webrtc:offer', {
         chatId,
         to: otherUserId,
+        from: currentUserId,
+        fromName: currentUserName,
+        fromAvatar: currentUserAvatar,
         sdp: offer.sdp,
         type: offer.type,
         video: isVideo,
