@@ -3,43 +3,25 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Структуры для запроса к Google Gemini API
+// Структуры для Google Gemini API
 type GeminiRequest struct {
-	Contents []GeminiContent `json:"contents"`
+	Contents []struct {
+		Parts []struct {
+			Text string `json:"text"`
+		} `json:"parts"`
+	} `json:"contents"`
 }
 
-type GeminiContent struct {
-	Parts []GeminiPart `json:"parts"`
-	Role  string       `json:"role,omitempty"` // "user" или "model"
-}
-
-type GeminiPart struct {
-	Text string `json:"text"`
-}
-
-// Структура ответа от Google Gemini API
-type GeminiResponse struct {
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-	} `json:"candidates"`
-}
-
-// AskGemini обрабатывает запрос от фронтенда и пересылает его в Gemini
 func AskGemini(c *gin.Context) {
 	var req struct {
-		Message string `json:"message"`
-		Mode    string `json:"mode"` // "safety" или "x"
+		Message string `json:"message" binding:"required"`
+		Mode    string `json:"mode"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -47,63 +29,43 @@ func AskGemini(c *gin.Context) {
 		return
 	}
 
+	// Vercel автоматически подставит ключ из настроек Environment Variables
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Gemini API key not configured"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Gemini API key is not configured in Vercel settings"})
 		return
 	}
 
-	// Настройка системного промпта (Gemini понимает контекст через историю, но здесь мы шлем одним сообщением для простоты)
-	systemPrompt := "You are Safety, a helpful assistant for SafeGram messenger. Answer in Russian."
+	systemPrompt := "Ты — Safety, интеллектуальный помощник SafeGram. Отвечай кратко и на русском языке."
 	if req.Mode == "x" {
-		systemPrompt = "You are Safety-X, a strict security auditor for SafeGram. Be technical, concise, and paranoid. Answer in Russian."
+		systemPrompt = "Ты — Safety-X, строгий аудит-бот SafeGram. Фокусируйся на безопасности и коде."
 	}
 
-	// Формируем тело запроса
-	geminiReq := GeminiRequest{
-		Contents: []GeminiContent{
-			{
-				Role: "user",
-				Parts: []GeminiPart{
-					{Text: systemPrompt + "\n\nUser request: " + req.Message},
-				},
-			},
+	geminiPayload := GeminiRequest{}
+	geminiPayload.Contents = append(geminiPayload.Contents, struct {
+		Parts []struct {
+			Text string `json:"text"`
+		} `json:"parts"`
+	}{
+		Parts: []struct {
+			Text string `json:"text"`
+		}{
+			{Text: systemPrompt + "\n\nПользователь: " + req.Message},
 		},
-	}
+	})
 
-	jsonData, err := json.Marshal(geminiReq)
+	jsonData, _ := json.Marshal(geminiPayload)
+	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encode request"})
-		return
-	}
-
-	// URL для модели gemini-1.5-flash
-	apiURL := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey
-
-	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to AI provider"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Gemini"})
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "AI provider error: " + string(body)})
-		return
-	}
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
 
-	var geminiResp GeminiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI response"})
-		return
-	}
-
-	// Извлекаем текст ответа
-	reply := "I have nothing to say."
-	if len(geminiResp.Candidates) > 0 && len(geminiResp.Candidates[0].Content.Parts) > 0 {
-		reply = geminiResp.Candidates[0].Content.Parts[0].Text
-	}
-
-	c.JSON(http.StatusOK, gin.H{"reply": reply})
+	c.JSON(http.StatusOK, result)
 }
