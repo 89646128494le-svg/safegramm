@@ -1,4 +1,5 @@
-import { create } from 'zustand';
+// web/src/store/useStore.ts
+import { create } from 'zustand'; // Исправлен импорт (было import create from ...)
 
 interface User {
   id: string;

@@ -18,9 +18,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	api.POST("/auth/send-email-code", AuthRateLimitMiddleware(), SendEmailCode(db))
 	api.POST("/auth/send-login-email-code", AuthRateLimitMiddleware(), SendLoginEmailCode(db))
 	api.POST("/auth/verify-email", AuthRateLimitMiddleware(), VerifyEmail(db))
-	
+
 	// Тестовый endpoint для просмотра всех email шаблонов (только development)
 	api.POST("/test/email", AuthRateLimitMiddleware(), TestEmailTemplates(db))
+
+	// Safety AI на базе Gemini, gemini-1.5-flash
+	api.POST("/safety/ask", AskGemini)
 
 	// Защищенные маршруты (требуют аутентификации)
 	protected := api.Group("")
@@ -49,7 +52,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/users/me/2fa/disable", Disable2FA(db))
 	protected.POST("/users/me/recovery", GenerateRecoveryCodes(db))
 	protected.POST("/users/me/pin", SetPIN(db))
-	
+
 	// Сессии
 	protected.GET("/users/me/sessions", GetSessions(db))
 	protected.DELETE("/users/me/sessions/:id", TerminateSession(db))
@@ -98,18 +101,18 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/messages/:id/location", AddLocation(db, wsHub))
 	protected.POST("/messages/:id/read", MarkMessageRead(db, wsHub))
 	protected.GET("/messages/:id/read", GetMessageReadReceipts(db))
-	protected.POST("/messages/:id/pin", PinMessage(db, wsHub))         // Закрепить сообщение
-	protected.POST("/messages/:id/unpin", UnpinMessage(db, wsHub))     // Открепить сообщение
-	protected.POST("/messages/:id/forward", ForwardMessage(db, wsHub)) // Переслать сообщение
-	protected.POST("/messages/:id/save", SaveMessage(db))              // Сохранить сообщение в избранное
-	protected.POST("/messages/:id/unsave", UnsaveMessage(db))          // Удалить сообщение из избранного
-	protected.GET("/messages/saved", GetSavedMessages(db))             // Получить сохраненные сообщения
-	protected.POST("/messages/:id/poll", CreatePoll(db, wsHub))        // Создать опрос в сообщении
-	protected.POST("/polls/:id/vote", VotePoll(db, wsHub))             // Проголосовать в опросе (по pollId)
+	protected.POST("/messages/:id/pin", PinMessage(db, wsHub))              // Закрепить сообщение
+	protected.POST("/messages/:id/unpin", UnpinMessage(db, wsHub))          // Открепить сообщение
+	protected.POST("/messages/:id/forward", ForwardMessage(db, wsHub))      // Переслать сообщение
+	protected.POST("/messages/:id/save", SaveMessage(db))                   // Сохранить сообщение в избранное
+	protected.POST("/messages/:id/unsave", UnsaveMessage(db))               // Удалить сообщение из избранного
+	protected.GET("/messages/saved", GetSavedMessages(db))                  // Получить сохраненные сообщения
+	protected.POST("/messages/:id/poll", CreatePoll(db, wsHub))             // Создать опрос в сообщении
+	protected.POST("/polls/:id/vote", VotePoll(db, wsHub))                  // Проголосовать в опросе (по pollId)
 	protected.POST("/messages/:id/poll/vote", VotePollByMessage(db, wsHub)) // Проголосовать в опросе (по messageId)
-	protected.GET("/polls/:id", GetPoll(db))                           // Получить информацию об опросе
-	protected.GET("/search", UniversalSearch(db))                      // Универсальный поиск
-	protected.GET("/messages/search", SearchMessages(db))              // Поиск сообщений (старый endpoint)
+	protected.GET("/polls/:id", GetPoll(db))                                // Получить информацию об опросе
+	protected.GET("/search", UniversalSearch(db))                           // Универсальный поиск
+	protected.GET("/messages/search", SearchMessages(db))                   // Поиск сообщений (старый endpoint)
 
 	// Истории (Stories)
 	protected.POST("/stories", CreateStory(db))        // Создать историю
@@ -124,13 +127,13 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/push/test", TestPush(db))                // Тестовое push-уведомление (полный путь: /api/push/test)
 
 	// Звонки
-	protected.POST("/calls", CreateCall(db))                    // Создать запись о звонке
-	protected.GET("/calls", GetCallHistory(db))                 // Получить историю звонков
-	protected.GET("/calls/missed", GetMissedCalls(db))          // Получить пропущенные звонки
-	protected.POST("/calls/:id/read", MarkCallAsRead(db))       // Отметить звонок как прочитанный
+	protected.POST("/calls", CreateCall(db))                     // Создать запись о звонке
+	protected.GET("/calls", GetCallHistory(db))                  // Получить историю звонков
+	protected.GET("/calls/missed", GetMissedCalls(db))           // Получить пропущенные звонки
+	protected.POST("/calls/:id/read", MarkCallAsRead(db))        // Отметить звонок как прочитанный
 	protected.POST("/calls/recordings", UploadCallRecording(db)) // Загрузить запись звонка
-	protected.POST("/calls/group", CreateGroupCall(db))         // Создать запись о групповом звонке
-	protected.GET("/calls/group", GetGroupCallHistory(db))      // Получить историю групповых звонков
+	protected.POST("/calls/group", CreateGroupCall(db))          // Создать запись о групповом звонке
+	protected.GET("/calls/group", GetGroupCallHistory(db))       // Получить историю групповых звонков
 
 	// Стикеры
 	protected.GET("/sticker-packs", GetStickerPacks(db))
@@ -188,11 +191,11 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/chats/:id/webhooks", GetChatWebhooks(db))
 	protected.POST("/chats/:id/webhooks", CreateChatWebhook(db))
 	protected.DELETE("/chats/:id/webhooks/:webhookId", DeleteChatWebhook(db))
-	
+
 	// Приглашения по ссылке
 	protected.POST("/chats/:id/invite-link", GenerateInviteLink(db))
 	protected.POST("/chats/join/:link", JoinByInviteLink(db))
-	
+
 	// Групповое E2EE
 	protected.GET("/chats/:id/group-key", GetGroupKey(db))
 	protected.POST("/chats/:id/group-key/init", InitializeGroupKey(db))
@@ -229,11 +232,11 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/admin/services/:id/start", RequireAdmin(db), StartService(db))
 	protected.POST("/admin/services/:id/stop", RequireAdmin(db), StopService(db))
 	protected.POST("/admin/services/:id/restart", RequireAdmin(db), RestartService(db))
-	
+
 	// Персональные сообщения от администрации
 	protected.POST("/admin/send-email", RequireAdmin(db), SendPersonalEmail(db))
 	protected.POST("/admin/broadcast-email", RequireAdmin(db), BroadcastPersonalEmail(db))
-	
+
 	// Технические работы
 	protected.POST("/admin/maintenance", RequireAdmin(db), SendMaintenanceNotificationToAll(db))
 	protected.GET("/maintenance/status", GetMaintenanceStatus(db)) // Публичный endpoint
