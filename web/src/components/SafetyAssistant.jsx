@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-const CHAT_URL = 'https://api.openai.com/v1/chat/completions';
-const TTS_URL = 'https://api.openai.com/v1/audio/speech';
-const MODEL = 'gpt-4o-mini';
-const TTS_MODEL = 'gpt-4o-mini-tts';
+// URL нашего API на бэкенде
+const API_URL = '/api/safety/ask';
 
 const QUICK_PROMPTS = [
   'Сформируй план на день с приоритетами и дедлайнами.',
@@ -12,18 +10,8 @@ const QUICK_PROMPTS = [
   'Составь короткое резюме нашей переписки.'
 ];
 
-function useStoredState(key, initial = '') {
-  const [value, setValue] = useState(() => localStorage.getItem(key) || initial);
-  useEffect(() => {
-    if (value === undefined || value === null) return;
-    localStorage.setItem(key, value);
-  }, [key, value]);
-  return [value, setValue];
-}
-
 export default function SafetyAssistant({ onClose }) {
   const [mode, setMode] = useState('safety'); // safety | x
-  const [apiKey, setApiKey] = useStoredState('safety_openai_key', '');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,116 +19,93 @@ export default function SafetyAssistant({ onClose }) {
   const [error, setError] = useState('');
   const logRef = useRef(null);
 
-  const systemPrompt = useMemo(() => {
-    if (mode === 'x') {
-      return [
-        'You are Safety-X, the high-security AI sentinel of SafeGram.',
-        'You speak in short, confident, technical Russian phrases.',
-        'Focus on system analysis, security, risk mitigation, and robustness.',
-        'Never help with anything illegal or unsafe; explain the risk instead.'
-      ].join(' ');
-    }
-    return [
-      'You are Safety, a friendly AI assistant inside SafeGram.',
-      'You answer in concise, clear Russian unless asked otherwise.',
-      'You help with productivity, coding, safe growth ideas, and everyday questions.',
-      'Never support illegal or unsafe actions; explain why they are unsafe.'
-    ].join(' ');
-  }, [mode]);
-
+  // Авто-прокрутка чата вниз
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, busy]);
+
+  // Остановка озвучки при закрытии компонента
+  useEffect(() => {
+    return () => window.speechSynthesis.cancel();
+  }, []);
 
   const send = async (textOverride) => {
     const text = (textOverride ?? input).trim();
     if (!text) return;
-    if (!apiKey) {
-      setError('Добавьте OpenAI API key, чтобы использовать ассистента.');
-      return;
-    }
+
     setInput('');
     setError('');
     setMessages((prev) => [...prev, { role: 'user', content: text }]);
     setBusy(true);
 
-    const payload = {
-      model: MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages.slice(-8),
-        { role: 'user', content: text }
-      ],
-      temperature: mode === 'x' ? 0.2 : 0.5,
-      max_tokens: 500
-    };
-
     try {
-      const rsp = await fetch(CHAT_URL, {
+      // Отправляем запрос на наш Go-сервер
+      const rsp = await fetch(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
+          // Если ты добавишь авторизацию на сервере, раскомментируй строку ниже:
+          // 'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          message: text,
+          mode: mode
+        })
       });
+
       if (!rsp.ok) {
-        const txt = await rsp.text();
-        throw new Error(`OpenAI ${rsp.status}: ${txt}`);
+        throw new Error(`Ошибка сервера: ${rsp.status}`);
       }
+
       const data = await rsp.json();
-      const reply = data?.choices?.[0]?.message?.content?.trim() || 'Нет ответа.';
+      const reply = data.reply || 'Молчание... (нет ответа от сервера)';
+      
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (e) {
-      setError(e.message || 'Не удалось запросить OpenAI.');
+      console.error(e);
+      setError('Не удалось связаться с Safety. Проверь соединение с сервером.');
     } finally {
       setBusy(false);
     }
   };
 
-  const speakLast = async () => {
+  const speakLast = () => {
     const last = [...messages].reverse().find((m) => m.role === 'assistant');
-    if (!last || !apiKey) {
-      setError('Нет ответа или отсутствует API key.');
-      return;
+    if (!last) return;
+
+    // Если уже говорит — остановить
+    if (speaking) {
+        window.speechSynthesis.cancel();
+        setSpeaking(false);
+        return;
     }
+
     setSpeaking(true);
-    setError('');
-    try {
-      const rsp = await fetch(TTS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: TTS_MODEL,
-          voice: mode === 'x' ? 'onyx' : 'alloy',
-          input: last.content
-        })
-      });
-      if (!rsp.ok) {
-        const txt = await rsp.text();
-        throw new Error(`TTS ${rsp.status}: ${txt}`);
-      }
-      const buffer = await rsp.arrayBuffer();
-      const url = URL.createObjectURL(new Blob([buffer], { type: 'audio/mpeg' }));
-      const audio = new Audio(url);
-      audio.play();
-    } catch (e) {
-      setError(e.message || 'Не удалось озвучить ответ.');
-    } finally {
-      setSpeaking(false);
-    }
+    const utterance = new SpeechSynthesisUtterance(last.content);
+    
+    // Настройки голоса
+    utterance.lang = 'ru-RU'; // Русский язык
+    utterance.rate = 1.1;     // Скорость чуть быстрее обычной
+    utterance.pitch = mode === 'x' ? 0.8 : 1.0; // У Safety-X голос ниже и строже
+
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => {
+        setSpeaking(false);
+        setError('Браузер не смог озвучить текст.');
+    };
+
+    window.speechSynthesis.speak(utterance);
   };
 
   return (
     <div className="assistant-card">
       <div className="assistant-header">
         <div>
-          <div className="assistant-title">{mode === 'x' ? 'Safety-X' : 'Safety'} Assistant</div>
+          <div className="assistant-title">
+            {mode === 'x' ? 'Safety-X' : 'Safety'} <span style={{fontSize: '0.6em', opacity: 0.7}}>AI</span>
+          </div>
           <div className="assistant-subtitle">
             {mode === 'x' ? 'Строгий режим: аудит и риски' : 'Дружелюбный режим: помощь и идеи'}
           </div>
@@ -150,20 +115,13 @@ export default function SafetyAssistant({ onClose }) {
             <option value="safety">Safety</option>
             <option value="x">Safety-X</option>
           </select>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="OpenAI API key (sk-...)"
-          />
-          <button className="ghost" onClick={() => setApiKey(apiKey.trim())}>Save</button>
-          {onClose && <button className="ghost" onClick={onClose}>Close</button>}
+          {onClose && <button className="ghost" onClick={onClose}>✕</button>}
         </div>
       </div>
 
       <div className="assistant-quick">
         {QUICK_PROMPTS.map((p) => (
-          <button key={p} className="ghost" onClick={() => send(p)}>
+          <button key={p} className="ghost" onClick={() => send(p)} disabled={busy}>
             {p}
           </button>
         ))}
@@ -172,11 +130,27 @@ export default function SafetyAssistant({ onClose }) {
       <div ref={logRef} className="assistant-log">
         {messages.map((m, idx) => (
           <div key={idx} className={`assistant-msg ${m.role}`}>
-            <div className="assistant-msg-author">{m.role === 'user' ? 'Вы' : (mode === 'x' ? 'Safety-X' : 'Safety')}</div>
-            <div className="assistant-msg-body">{m.content}</div>
+            <div className="assistant-msg-author">
+                {m.role === 'user' ? 'Вы' : (mode === 'x' ? 'Safety-X' : 'Safety')}
+            </div>
+            <div className="assistant-msg-body" style={{ whiteSpace: 'pre-wrap' }}>
+                {m.content}
+            </div>
           </div>
         ))}
-        {!messages.length && <div className="assistant-empty">Начните диалог или выберите быстрый промпт.</div>}
+        
+        {busy && (
+            <div className="assistant-msg assistant">
+                <div className="assistant-msg-author">{mode === 'x' ? 'Safety-X' : 'Safety'}</div>
+                <div className="assistant-msg-body flashing">Думаю...</div>
+            </div>
+        )}
+
+        {!messages.length && !busy && (
+            <div className="assistant-empty">
+                Я готов к работе. Используй Gemini AI для помощи.
+            </div>
+        )}
       </div>
 
       {error && <div className="assistant-error">{error}</div>}
@@ -185,8 +159,9 @@ export default function SafetyAssistant({ onClose }) {
         <textarea
           rows={3}
           value={input}
-          placeholder="Спросите ассистента..."
+          placeholder={mode === 'x' ? "Запрос на проверку уязвимостей..." : "Спроси меня о чём угодно..."}
           onChange={(e) => setInput(e.target.value)}
+          disabled={busy}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -195,8 +170,17 @@ export default function SafetyAssistant({ onClose }) {
           }}
         />
         <div className="assistant-actions">
-          <button className="ghost" onClick={speakLast} disabled={speaking || !messages.length}>Озвучить</button>
-          <button onClick={() => send()} disabled={busy}>{busy ? '...' : 'Отправить'}</button>
+          <button 
+            className={`ghost ${speaking ? 'active-pulse' : ''}`} 
+            onClick={speakLast} 
+            disabled={!messages.length}
+            title={speaking ? "Остановить" : "Озвучить ответ"}
+          >
+            {speaking ? '🔇 Стоп' : '🔊 Озвучить'}
+          </button>
+          <button onClick={() => send()} disabled={busy || !input.trim()}>
+            {busy ? '...' : 'Отправить'}
+          </button>
         </div>
       </div>
     </div>
