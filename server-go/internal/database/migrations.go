@@ -50,6 +50,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.GroupCall{},
 		&models.GroupCallParticipant{},
 		&models.Session{},
+		&models.MaintenanceMode{}, // Режим технических работ
 	)
 
 	if err != nil {

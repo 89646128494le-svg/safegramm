@@ -229,6 +229,15 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/admin/services/:id/start", RequireAdmin(db), StartService(db))
 	protected.POST("/admin/services/:id/stop", RequireAdmin(db), StopService(db))
 	protected.POST("/admin/services/:id/restart", RequireAdmin(db), RestartService(db))
+	
+	// Персональные сообщения от администрации
+	protected.POST("/admin/send-email", RequireAdmin(db), SendPersonalEmail(db))
+	protected.POST("/admin/broadcast-email", RequireAdmin(db), BroadcastPersonalEmail(db))
+	
+	// Технические работы
+	protected.POST("/admin/maintenance", RequireAdmin(db), SendMaintenanceNotificationToAll(db))
+	protected.GET("/maintenance/status", GetMaintenanceStatus(db)) // Публичный endpoint
+	protected.POST("/admin/maintenance/disable", RequireAdmin(db), DisableMaintenance(db))
 
 	// Webhook настройки (для admin и owner)
 	protected.GET("/admin/webhook", RequireAdmin(db), GetWebhookSettings)

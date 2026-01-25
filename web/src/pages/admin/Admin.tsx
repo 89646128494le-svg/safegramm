@@ -11,9 +11,10 @@ import MaintenanceManager from '../../components/admin/MaintenanceManager';
 import BroadcastManager from '../../components/admin/BroadcastManager';
 import AdminLogs from '../../components/admin/AdminLogs';
 import SystemMonitor from '../../components/admin/SystemMonitor';
+import AdminMessaging from '../../components/admin/AdminMessaging';
 
 export default function Admin() {
-  const [tab, setTab] = useState<'users'|'analytics'|'bans'|'maintenance'|'broadcast'|'logs'|'monitor'|'mod'|'reports'|'feedback'|'push'|'services'|'webhook'|'owner'>('users');
+  const [tab, setTab] = useState<'users'|'analytics'|'bans'|'maintenance'|'broadcast'|'messages'|'logs'|'monitor'|'mod'|'reports'|'feedback'|'push'|'services'|'webhook'|'owner'>('users');
   const [isOwner, setIsOwner] = useState(false);
   const [user, setUser] = useState<any>(null);
 
@@ -111,6 +112,20 @@ export default function Admin() {
           }}
         >
           📢 Рассылка
+        </button>
+        <button 
+          onClick={()=>setTab('messages')} 
+          style={{
+            padding: '10px 16px',
+            fontWeight: tab === 'messages' ? '600' : '400',
+            background: tab === 'messages' ? 'var(--accent, #3b82f6)' : 'transparent',
+            color: tab === 'messages' ? '#fff' : 'var(--fg, #e5e7eb)',
+            border: '1px solid var(--border, #374151)',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          📧 Письма & Тех.работы
         </button>
         <button 
           onClick={()=>setTab('logs')} 
@@ -234,6 +249,7 @@ export default function Admin() {
       {tab==='bans' && <BanMuteManager />}
       {tab==='maintenance' && (isOwner || user?.roles?.includes('admin')) && <MaintenanceManager />}
       {tab==='broadcast' && (isOwner || user?.roles?.includes('admin')) && <BroadcastManager />}
+      {tab==='messages' && (isOwner || user?.roles?.includes('admin')) && <AdminMessaging />}
       {tab==='logs' && <AdminLogs />}
       {tab==='monitor' && (isOwner || user?.roles?.includes('admin')) && <SystemMonitor />}
       {tab==='mod' && <ModTab/>}

@@ -204,7 +204,7 @@ func TemplateVerificationCode(data EmailTemplateData) string {
 		<div class="warning-box">
 			<p><strong>⚠️ Важно:</strong> Никому не сообщайте этот код. Если вы не запрашивали этот код, просто проигнорируйте это письмо.</p>
 		</div>
-	`, 
+	`,
 		func() string {
 			if data.Username != "" {
 				return ", " + data.Username
@@ -247,7 +247,7 @@ func TemplateWelcome(data EmailTemplateData) string {
 		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">
 			Если у вас возникнут вопросы, мы всегда готовы помочь. Просто напишите нам через форму обратной связи в приложении.
 		</p>
-	`, 
+	`,
 		data.Username,
 		func() string {
 			if data.Link != "" {
@@ -562,4 +562,75 @@ func TemplateBackupCode(data EmailTemplateData) string {
 		}(),
 	)
 	return GetBaseTemplate("Резервные коды", content)
+}
+
+// TemplateAdminMessage шаблон для персонального сообщения от администрации
+func TemplateAdminMessage(data EmailTemplateData) string {
+	content := fmt.Sprintf(`
+		<h2>📨 Сообщение от администрации SafeGram</h2>
+		<p>Здравствуйте, <strong>%s</strong>!</p>
+		<p>У нас есть для вас важное сообщение:</p>
+		<div class="info-box" style="background: rgba(124, 108, 255, 0.15); border-left: 4px solid #7c6cff;">
+			<div style="font-size: 16px; line-height: 1.8; color: #e9ecf5; white-space: pre-wrap;">%s</div>
+		</div>
+		%s
+		<div class="divider"></div>
+		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">
+			Если у вас есть вопросы, вы можете связаться с нами через форму обратной связи в приложении.
+		</p>
+	`,
+		data.Username,
+		func() string {
+			if data.Message != "" {
+				return data.Message
+			}
+			return "Персональное сообщение от администрации"
+		}(),
+		func() string {
+			if data.Link != "" && data.ActionText != "" {
+				return fmt.Sprintf(`<div style="text-align: center; margin: 30px 0;">
+					<a href="%s" class="button">%s</a>
+				</div>`, data.Link, data.ActionText)
+			}
+			return ""
+		}(),
+	)
+	return GetBaseTemplate("Сообщение от администрации", content)
+}
+
+// TemplateMaintenanceNotification шаблон уведомления о технических работах
+func TemplateMaintenanceNotification(data EmailTemplateData) string {
+	content := fmt.Sprintf(`
+		<h2>🔧 Плановые технические работы</h2>
+		<p>Здравствуйте, <strong>%s</strong>!</p>
+		<p>Уведомляем вас о запланированных технических работах на платформе SafeGram.</p>
+		<div class="warning-box">
+			<p><strong>⏰ Время проведения работ:</strong></p>
+			<p style="font-size: 18px; font-weight: 600;">%s</p>
+		</div>
+		<div class="info-box">
+			<p><strong>ℹ️ Что это значит:</strong></p>
+			<p>%s</p>
+		</div>
+		<p>Мы приносим извинения за временные неудобства и благодарим за понимание.</p>
+		<div class="divider"></div>
+		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">
+			После завершения работ все функции будут восстановлены в полном объёме.
+		</p>
+	`,
+		data.Username,
+		func() string {
+			if data.Timestamp != "" {
+				return data.Timestamp
+			}
+			return "Время будет объявлено дополнительно"
+		}(),
+		func() string {
+			if data.Message != "" {
+				return data.Message
+			}
+			return "Во время работ доступ к сервису может быть ограничен или временно недоступен."
+		}(),
+	)
+	return GetBaseTemplate("Технические работы", content)
 }

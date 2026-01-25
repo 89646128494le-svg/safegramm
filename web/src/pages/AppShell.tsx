@@ -24,6 +24,7 @@ import { initAppearance } from '../services/appearance';
 import ConnectionStatus from '../components/ConnectionStatus';
 import IncomingCallNotification from '../components/IncomingCallNotification';
 import DMCall from '../components/DMCall';
+import MaintenanceBanner from '../components/MaintenanceBanner';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
 
 export default function AppShell() {
@@ -150,7 +151,7 @@ export default function AppShell() {
       otherUserId: call.from,
       currentUserId: user?.id,
       currentUserName: user?.username,
-      currentUserAvatar: user?.avatar,
+      currentUserAvatar: (user as any)?.avatarUrl || (user as any)?.avatar,
       isVideo: call.isVideo,
       isIncoming: true,
       offerData: call.offer,
@@ -182,6 +183,9 @@ export default function AppShell() {
       exit={{ opacity: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
+      {/* Баннер о технических работах */}
+      <MaintenanceBanner />
+      
       <Header user={user} onLogout={logout} />
       <motion.div 
         className="header" 
@@ -285,7 +289,7 @@ export default function AppShell() {
           otherUserId={activeCall.otherUserId}
           currentUserId={user.id}
           currentUserName={user.username}
-          currentUserAvatar={user.avatar}
+          currentUserAvatar={(user as any).avatarUrl || (user as any).avatar}
           isVideo={activeCall.isVideo}
           isIncoming={activeCall.isIncoming}
           offerData={activeCall.offerData}

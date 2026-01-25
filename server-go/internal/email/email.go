@@ -482,6 +482,31 @@ func SendBackupCodes(to, username, codes string) error {
 	return SendEmail(to, subject, htmlBody)
 }
 
+// SendAdminMessage отправляет персональное сообщение от администрации
+func SendAdminMessage(to, username, message, actionText, actionLink string) error {
+	subject := "Сообщение от администрации SafeGram"
+	data := EmailTemplateData{
+		Username:   username,
+		Message:    message,
+		ActionText: actionText,
+		Link:       actionLink,
+	}
+	htmlBody := TemplateAdminMessage(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendMaintenanceNotification отправляет уведомление о технических работах
+func SendMaintenanceNotification(to, username, timestamp, message string) error {
+	subject := "⚠️ Плановые технические работы SafeGram"
+	data := EmailTemplateData{
+		Username:  username,
+		Timestamp: timestamp,
+		Message:   message,
+	}
+	htmlBody := TemplateMaintenanceNotification(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
