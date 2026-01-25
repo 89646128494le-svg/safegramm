@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,6 +15,8 @@ import Servers from './servers/Servers';
 import ServerView from './servers/ServerView';
 import JoinServer from './servers/JoinServer';
 import Stories from '../components/Stories';
+// Импортируем Safety Assistant
+import SafetyAssistant from '../components/SafetyAssistant'; 
 import { api } from '../services/api';
 import { setupPush } from '../services/push';
 import { ToastContainer, useToast } from '../components/Toast';
@@ -30,6 +31,8 @@ import { getSocket, sendWebSocketMessage } from '../services/websocket';
 export default function AppShell() {
   const { user, setUser, setToken, setTheme, ui } = useStore();
   const [showStories, setShowStories] = useState(false);
+  // Состояние для отображения Safety Assistant
+  const [showSafety, setShowSafety] = useState(false); 
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const [activeCall, setActiveCall] = useState<any>(null);
   const nav = useNavigate();
@@ -48,9 +51,7 @@ export default function AppShell() {
           try {
             const data = JSON.parse(msgText);
             
-            // Обрабатываем входящий звонок
             if (data.type === 'webrtc:offer' && user) {
-              // Проверяем что это не наш собственный звонок
               if (data.from !== user.id) {
                 setIncomingCall({
                   callId: data.chatId || `call-${Date.now()}`,
@@ -81,22 +82,17 @@ export default function AppShell() {
   }, [user]);
 
   useEffect(() => {
-    // Применяем сохраненную тему
     document.documentElement.setAttribute('data-theme', ui.theme);
-    
-    // Инициализируем темы и настройки внешнего вида
     initAppearance();
   }, [ui.theme]);
 
   useEffect(() => {
-    // Загружаем данные пользователя только при монтировании
     const token = localStorage.getItem('token');
     if (!token) {
       nav('/login');
       return;
     }
 
-    // Если пользователь уже загружен, не делаем повторный запрос
     if (user) {
       setupPush().catch(()=>{});
       return;
@@ -110,12 +106,10 @@ export default function AppShell() {
     }).catch((err: any) => {
       if (cancelled) return;
       
-      // Перенаправляем на логин только при ошибке авторизации (401/403)
       const status = err.status;
       const errorCode = err.errorCode || '';
       const errorMsg = err.message?.toLowerCase() || '';
       
-      // Проверяем статус код или код ошибки
       if (status === 401 || status === 403 || 
           errorCode === 'unauthorized' || 
           errorMsg.includes('авторизац') || 
@@ -127,7 +121,6 @@ export default function AppShell() {
         localStorage.removeItem('token');
         nav('/login');
       } else {
-        // Для других ошибок (сеть, сервер и т.д.) просто логируем, но не перенаправляем
         console.warn('Failed to load user, but not redirecting:', err.message);
       }
     });
@@ -136,7 +129,7 @@ export default function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, []); // Пустой массив зависимостей - выполняется только при монтировании
+  }, []);
 
   const logout = () => { 
     setToken(null);
@@ -144,7 +137,6 @@ export default function AppShell() {
     nav('/login');
   };
 
-  // Обработка принятия звонка
   const handleAcceptCall = (call: any) => {
     setActiveCall({
       chatId: call.chatId,
@@ -159,9 +151,7 @@ export default function AppShell() {
     setIncomingCall(null);
   };
 
-  // Обработка отклонения звонка
   const handleDeclineCall = (call: any) => {
-    // Отправляем hangup сообщение
     sendWebSocketMessage('webrtc:hangup', {
       chatId: call.chatId,
       to: call.from,
@@ -170,7 +160,6 @@ export default function AppShell() {
     setIncomingCall(null);
   };
 
-  // Закрытие активного звонка
   const handleCloseCall = () => {
     setActiveCall(null);
   };
@@ -183,7 +172,6 @@ export default function AppShell() {
       exit={{ opacity: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      {/* Баннер о технических работах */}
       <MaintenanceBanner />
       
       <Header user={user} onLogout={logout} />
@@ -194,7 +182,8 @@ export default function AppShell() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 30 }}
       >
-        <nav style={{ display: 'flex', gap: 'var(--spacing-md)', flexWrap: 'wrap' }}>
+        <nav style={{ display: 'flex', gap: 'var(--spacing-md)', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Основная навигация */}
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link to="/app/chats" className="btn btn-ghost" style={{ textDecoration: 'none' }}>💬 Чаты</Link>
           </motion.div>
@@ -204,21 +193,29 @@ export default function AppShell() {
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link to="/app/contacts" className="btn btn-ghost" style={{ textDecoration: 'none' }}>👥 Контакты</Link>
           </motion.div>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/search" className="btn btn-ghost" style={{ textDecoration: 'none' }}>🔍 Поиск</Link>
-          </motion.div>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/bots" className="btn btn-ghost" style={{ textDecoration: 'none' }}>🤖 Боты</Link>
-          </motion.div>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/profile" className="btn btn-ghost" style={{ textDecoration: 'none' }}>👤 Профиль</Link>
-          </motion.div>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }}>⚙️ Настройки</Link>
-          </motion.div>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/feedback" className="btn btn-ghost" style={{ textDecoration: 'none' }}>💭 Feedback</Link>
-          </motion.div>
+          
+          <div style={{ flex: 1 }} /> {/* Распорка */}
+
+          {/* Кнопка Safety AI */}
+          <motion.button
+            onClick={() => setShowSafety(true)}
+            className="btn btn-ghost"
+            style={{ 
+              textDecoration: 'none', 
+              border: '1px solid var(--primary-color)', 
+              background: 'rgba(59, 130, 246, 0.1)', 
+              color: 'var(--primary-color)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            🛡️ Safety AI
+          </motion.button>
+
           <motion.button
             onClick={() => setShowStories(true)}
             className="btn btn-ghost"
@@ -228,28 +225,31 @@ export default function AppShell() {
           >
             📸 Истории
           </motion.button>
+
+          {/* Остальные кнопки */}
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }}>⚙️</Link>
+          </motion.div>
+
           {(() => {
-            if (!user) {
-              return null;
-            }
-            // Явная обработка ролей - сервер всегда отправляет массив
+            if (!user) return null;
             let roles: string[] = [];
             const u: any = user as any;
             if (Array.isArray(u.roles)) {
               roles = u.roles;
             } else if (u.roles) {
-              // Если пришла строка, разбиваем по запятой
               roles = String(u.roles).split(',').map(r => r.trim()).filter(r => r);
             }
             const hasAccess = roles.includes('admin') || roles.includes('owner');
             return hasAccess && (
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Link to="/app/admin" className="btn btn-secondary" style={{ textDecoration: 'none' }}>⚙️ Панель управления</Link>
+                <Link to="/app/admin" className="btn btn-secondary" style={{ textDecoration: 'none' }}>Админка</Link>
               </motion.div>
             );
           })()}
         </nav>
       </motion.div>
+
       <AnimatePresence mode="wait">
         <Routes>
           <Route path="/" element={<Navigate to="/app/chats" replace />} />
@@ -267,22 +267,43 @@ export default function AppShell() {
           <Route path="admin" element={<Admin />} />
         </Routes>
       </AnimatePresence>
+
+      {/* Модальное окно Историй */}
       <AnimatePresence>
         {showStories && (
           <Stories onClose={() => setShowStories(false)} />
         )}
       </AnimatePresence>
+
+      {/* Модальное окно Safety Assistant */}
+      <AnimatePresence>
+        {showSafety && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            style={{
+              position: 'fixed',
+              bottom: '20px',
+              right: '20px',
+              zIndex: 1000,
+              boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+            }}
+          >
+            <SafetyAssistant onClose={() => setShowSafety(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConnectionStatus />
       
-      {/* Уведомление о входящем звонке */}
       <IncomingCallNotification
         call={incomingCall}
         onAccept={handleAcceptCall}
         onDecline={handleDeclineCall}
       />
       
-      {/* Активный звонок */}
       {activeCall && user && (
         <DMCall
           chatId={activeCall.chatId}

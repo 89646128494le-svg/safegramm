@@ -1,7 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-
-// URL нашего API на бэкенде
-const API_URL = '/api/safety/ask';
+import { api } from '../services/api'; // <--- ИМПОРТИРУЕМ API HELPER
 
 const QUICK_PROMPTS = [
   'Сформируй план на день с приоритетами и дедлайнами.',
@@ -11,7 +9,7 @@ const QUICK_PROMPTS = [
 ];
 
 export default function SafetyAssistant({ onClose }) {
-  const [mode, setMode] = useState('safety'); // safety | x
+  const [mode, setMode] = useState('safety'); 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -19,14 +17,12 @@ export default function SafetyAssistant({ onClose }) {
   const [error, setError] = useState('');
   const logRef = useRef(null);
 
-  // Авто-прокрутка чата вниз
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [messages, busy]);
 
-  // Остановка озвучки при закрытии компонента
   useEffect(() => {
     return () => window.speechSynthesis.cancel();
   }, []);
@@ -41,31 +37,24 @@ export default function SafetyAssistant({ onClose }) {
     setBusy(true);
 
     try {
-      // Отправляем запрос на наш Go-сервер
-      const rsp = await fetch(API_URL, {
+      // ИСПОЛЬЗУЕМ api() ВМЕСТО fetch()
+      // Это автоматически направит запрос на порт 8080 и добавит токен авторизации
+      const data = await api('/api/safety/ask', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Если ты добавишь авторизацию на сервере, раскомментируй строку ниже:
-          // 'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify({
           message: text,
           mode: mode
         })
       });
 
-      if (!rsp.ok) {
-        throw new Error(`Ошибка сервера: ${rsp.status}`);
-      }
-
-      const data = await rsp.json();
+      // api() в твоем проекте обычно сразу возвращает JSON
       const reply = data.reply || 'Молчание... (нет ответа от сервера)';
       
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (e) {
       console.error(e);
-      setError('Не удалось связаться с Safety. Проверь соединение с сервером.');
+      // api() выбрасывает ошибку с полем message
+      setError(e.message || 'Не удалось связаться с Safety.');
     } finally {
       setBusy(false);
     }
@@ -75,7 +64,6 @@ export default function SafetyAssistant({ onClose }) {
     const last = [...messages].reverse().find((m) => m.role === 'assistant');
     if (!last) return;
 
-    // Если уже говорит — остановить
     if (speaking) {
         window.speechSynthesis.cancel();
         setSpeaking(false);
@@ -84,11 +72,9 @@ export default function SafetyAssistant({ onClose }) {
 
     setSpeaking(true);
     const utterance = new SpeechSynthesisUtterance(last.content);
-    
-    // Настройки голоса
-    utterance.lang = 'ru-RU'; // Русский язык
-    utterance.rate = 1.1;     // Скорость чуть быстрее обычной
-    utterance.pitch = mode === 'x' ? 0.8 : 1.0; // У Safety-X голос ниже и строже
+    utterance.lang = 'ru-RU'; 
+    utterance.rate = 1.1;     
+    utterance.pitch = mode === 'x' ? 0.8 : 1.0; 
 
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => {
