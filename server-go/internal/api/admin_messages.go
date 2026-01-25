@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json" // Добавлено для парсинга ролей
 	"net/http"
 	"safegram-server/internal/email"
 	"safegram-server/internal/models"
@@ -8,6 +9,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+// Helper function to check roles
+func checkAdminOrOwnerAccess(userRoles string) bool {
+	var roles []string
+	// Пытаемся распарсить как JSON массив (например ["admin", "user"])
+	if err := json.Unmarshal([]byte(userRoles), &roles); err != nil {
+		// Если не вышло (например, там просто строка "admin"), проверяем как одиночное значение
+		return userRoles == "admin" || userRoles == "owner"
+	}
+
+	for _, role := range roles {
+		if role == "admin" || role == "owner" {
+			return true
+		}
+	}
+	return false
+}
 
 // SendPersonalEmail отправляет персональное письмо пользователю
 func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
@@ -21,14 +39,7 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		// Проверяем роли
-		hasAccess := false
-		for _, role := range user.Roles {
-			if role == "admin" || role == "owner" {
-				hasAccess = true
-				break
-			}
-		}
-		if !hasAccess {
+		if !checkAdminOrOwnerAccess(user.Roles) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Admin or owner role required"})
 			return
 		}
@@ -52,8 +63,14 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Отправляем письмо
-		if err := email.SendAdminMessage(targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink); err != nil {
+		// Проверяем наличие email
+		if targetUser.Email == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Target user has no email address"})
+			return
+		}
+
+		// Отправляем письмо (разыменовываем указатель *targetUser.Email)
+		if err := email.SendAdminMessage(*targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send email: " + err.Error()})
 			return
 		}
@@ -61,7 +78,7 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"message": "Email sent successfully",
-			"to":      targetUser.Email,
+			"to":      *targetUser.Email,
 		})
 	}
 }
@@ -78,14 +95,7 @@ func BroadcastPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		// Проверяем роли
-		hasAccess := false
-		for _, role := range user.Roles {
-			if role == "admin" || role == "owner" {
-				hasAccess = true
-				break
-			}
-		}
-		if !hasAccess {
+		if !checkAdminOrOwnerAccess(user.Roles) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Admin or owner role required"})
 			return
 		}
@@ -115,9 +125,15 @@ func BroadcastPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 				continue
 			}
 
-			if err := email.SendAdminMessage(targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink); err != nil {
+			if targetUser.Email == nil {
 				failedCount++
-				errors = append(errors, "Failed to send to "+targetUser.Email+": "+err.Error())
+				errors = append(errors, "User "+targetUserID+" has no email")
+				continue
+			}
+
+			if err := email.SendAdminMessage(*targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink); err != nil {
+				failedCount++
+				errors = append(errors, "Failed to send to "+*targetUser.Email+": "+err.Error())
 				continue
 			}
 
@@ -133,7 +149,7 @@ func BroadcastPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// SendMaintenanceNotification отправляет уведомление о технических работах всем пользователям
+// SendMaintenanceNotificationToAll отправляет уведомление о технических работах всем пользователям
 func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Проверяем что это админ или владелец
@@ -145,14 +161,7 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		// Проверяем роли
-		hasAccess := false
-		for _, role := range user.Roles {
-			if role == "admin" || role == "owner" {
-				hasAccess = true
-				break
-			}
-		}
-		if !hasAccess {
+		if !checkAdminOrOwnerAccess(user.Roles) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Admin or owner role required"})
 			return
 		}
@@ -168,7 +177,7 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Сохраняем статус технических работ в базу (создадим модель ниже)
+		// Сохраняем статус технических работ в базу
 		maintenance := models.MaintenanceMode{
 			IsActive:  true,
 			Timestamp: req.Timestamp,
@@ -198,7 +207,11 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 			failedCount := 0
 
 			for _, targetUser := range users {
-				if err := email.SendMaintenanceNotification(targetUser.Email, targetUser.Username, req.Timestamp, req.Message); err != nil {
+				if targetUser.Email == nil {
+					continue
+				}
+
+				if err := email.SendMaintenanceNotification(*targetUser.Email, targetUser.Username, req.Timestamp, req.Message); err != nil {
 					failedCount++
 					continue
 				}
@@ -217,7 +230,7 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 func GetMaintenanceStatus(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var maintenance models.MaintenanceMode
-		
+
 		// Получаем последнее активное уведомление о технических работах
 		if err := db.Where("is_active = ?", true).Order("created_at DESC").First(&maintenance).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
@@ -252,14 +265,7 @@ func DisableMaintenance(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		// Проверяем роли
-		hasAccess := false
-		for _, role := range user.Roles {
-			if role == "admin" || role == "owner" {
-				hasAccess = true
-				break
-			}
-		}
-		if !hasAccess {
+		if !checkAdminOrOwnerAccess(user.Roles) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Admin or owner role required"})
 			return
 		}
