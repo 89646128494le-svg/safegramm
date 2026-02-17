@@ -1,6 +1,9 @@
 
-// API URL - используем переменную окружения или localhost по умолчанию
-const API = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+// API URL: пустая строка = тот же origin (для деплоя за nginx); иначе явный URL бэкенда
+const API = (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL !== ''
+  ? import.meta.env.VITE_API_URL
+  : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080')
+).replace(/\/$/, '');
 
 // Кэш для GET запросов
 const cache = new Map<string, { data: any; expires: number }>();

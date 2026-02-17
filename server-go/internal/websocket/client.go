@@ -109,7 +109,9 @@ func (c *Client) ReadPump() {
 		if err := json.Unmarshal(message, &msg); err == nil {
 			// Проверяем тип сообщения
 			msgType, _ := msg["type"].(string)
-			if msgType == "webrtc:offer" || msgType == "webrtc:answer" || msgType == "webrtc:ice" || msgType == "webrtc:hangup" {
+			if msgType == "webrtc:offer" || msgType == "webrtc:answer" || msgType == "webrtc:ice" || msgType == "webrtc:hangup" ||
+				msgType == "call:recording:request" || msgType == "call:recording:response" || msgType == "screen:share" ||
+				msgType == "voice:signal" {
 				c.HandleWebRTCMessage(msg)
 			} else {
 				c.handleMessage(msg)
@@ -178,6 +180,14 @@ func (c *Client) handleMessage(msg map[string]interface{}) {
 			}
 		case "typing":
 			c.HandleTyping(msg)
+		case "voice:join":
+			if chatID, ok := msg["chatId"].(string); ok {
+				c.hub.HandleVoiceRoom(chatID, c.userID, c, true)
+			}
+		case "voice:leave":
+			if chatID, ok := msg["chatId"].(string); ok {
+				c.hub.HandleVoiceRoom(chatID, c.userID, c, false)
+			}
 		}
 }
 

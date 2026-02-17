@@ -1,0 +1,35 @@
+# SafeGram — деплой на Render (бесплатный tier)
+# Dashboard: https://dashboard.render.com → New → Blueprint → подключить репозиторий
+
+databases:
+  - name: safegram-db
+    databaseName: safegram
+    plan: free
+
+services:
+  - type: web
+    name: safegram-api
+    runtime: go
+    rootDir: server-go
+    plan: free
+
+    buildCommand: go build -o main .
+    startCommand: ./main
+
+    healthCheckPath: /health
+
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: safegram-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        value: ""
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

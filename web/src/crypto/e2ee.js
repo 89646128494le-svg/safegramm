@@ -7,7 +7,8 @@
  * - Закрытый ключ хранится в localStorage (для MVP). Для реального продукта: зашифровать его PIN'ом/паролем и держать в защищённом контейнере.
  */
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+import { API_URL } from '../services/api';
+const API = API_URL;
 
 async function importPublicKeyJwk(jwk) {
   return await crypto.subtle.importKey(

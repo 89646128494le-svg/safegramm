@@ -24,6 +24,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 
 	// Safety AI на базе Gemini, gemini-1.5-flash
 	api.POST("/safety/ask", AskGemini)
+	
 
 	// Защищенные маршруты (требуют аутентификации)
 	protected := api.Group("")

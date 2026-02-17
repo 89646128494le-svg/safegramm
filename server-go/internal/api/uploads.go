@@ -26,6 +26,7 @@ func init() {
 	os.MkdirAll(filepath.Join(uploadsDir, "avatars"), 0755)
 	os.MkdirAll(filepath.Join(uploadsDir, "attachments"), 0755)
 	os.MkdirAll(filepath.Join(uploadsDir, "stickers"), 0755)
+	os.MkdirAll(filepath.Join(uploadsDir, "call-recordings"), 0755)
 }
 
 // UploadAvatar загружает аватар пользователя

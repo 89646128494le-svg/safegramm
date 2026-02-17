@@ -2087,6 +2087,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
           chatId={chatId}
           otherUserId={otherMemberId}
           currentUserId={currentUser.id}
+          currentUserName={currentUser.username}
+          currentUserAvatar={currentUser.avatarUrl}
           isVideo={inDMCall.isVideo}
           isIncoming={inDMCall.isIncoming}
           offerData={inDMCall.offerData}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../services/api';
+import { api, API_URL } from '../services/api';
 
 interface Call {
   id: string;
@@ -279,7 +279,7 @@ export default function CallHistory({ chatId, onClose, currentUserId }: CallHist
                       )}
                       {call.recordingUrl && (
                         <a
-                          href={call.recordingUrl}
+                          href={call.recordingUrl.startsWith('http') ? call.recordingUrl : API_URL + call.recordingUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}

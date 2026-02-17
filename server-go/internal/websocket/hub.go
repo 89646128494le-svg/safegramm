@@ -3,6 +3,7 @@ package websocket
 import (
 	"encoding/json"
 	"log"
+	"sync"
 	"time"
 
 	"safegram-server/internal/redis"
@@ -24,6 +25,13 @@ type Hub struct {
 
 	// Канал для отправки сообщения конкретному чату
 	sendToChat chan *ChatMessage
+
+	// Голосовые комнаты: chatID -> множество userID
+	voiceRooms   map[string]map[string]bool
+	voiceRoomsMu sync.RWMutex
+
+	// Действия в голосовой комнате
+	voiceAction chan *VoiceRoomAction
 }
 
 type ChatMessage struct {
@@ -31,14 +39,23 @@ type ChatMessage struct {
 	Message []byte
 }
 
+type VoiceRoomAction struct {
+	ChatID string
+	UserID string
+	Client *Client
+	Join   bool
+}
+
 // NewHub создает новый Hub
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[*Client]bool),
-		register:   make(chan *Client),
+		clients:     make(map[*Client]bool),
+		register:    make(chan *Client),
 		unregister: make(chan *Client),
-		broadcast:  make(chan []byte, 256),
-		sendToChat: make(chan *ChatMessage, 256),
+		broadcast:   make(chan []byte, 256),
+		sendToChat:  make(chan *ChatMessage, 256),
+		voiceRooms:  make(map[string]map[string]bool),
+		voiceAction: make(chan *VoiceRoomAction, 64),
 	}
 }
 
@@ -75,7 +92,37 @@ func (h *Hub) Run() {
 				delete(h.clients, client)
 				close(client.send)
 				log.Printf("Client disconnected: %s", client.userID)
-				
+
+				// Удаляем из голосовых комнат и уведомляем остальных
+				h.voiceRoomsMu.Lock()
+				for chatID, room := range h.voiceRooms {
+					if room[client.userID] {
+						delete(room, client.userID)
+						if len(room) == 0 {
+							delete(h.voiceRooms, chatID)
+						} else {
+							peerLeaveJSON, _ := json.Marshal(map[string]interface{}{
+								"type":   "voice:peer-leave",
+								"chatId": chatID,
+								"userId": client.userID,
+							})
+							for uid := range room {
+								for c := range h.clients {
+									if c.userID == uid {
+										select {
+										case c.send <- peerLeaveJSON:
+										default:
+										}
+										break
+									}
+								}
+							}
+						}
+						break
+					}
+				}
+				h.voiceRoomsMu.Unlock()
+
 				// Проверяем, есть ли еще подключения этого пользователя
 				hasOtherConnections := false
 				for c := range h.clients {
@@ -126,6 +173,70 @@ func (h *Hub) Run() {
 					}
 				}
 			}
+
+		case act := <-h.voiceAction:
+			h.voiceRoomsMu.Lock()
+			if act.Join {
+				if h.voiceRooms[act.ChatID] == nil {
+					h.voiceRooms[act.ChatID] = make(map[string]bool)
+				}
+				h.voiceRooms[act.ChatID][act.UserID] = true
+				act.Client.SubscribeToChat(act.ChatID)
+				members := make([]string, 0, len(h.voiceRooms[act.ChatID]))
+				for uid := range h.voiceRooms[act.ChatID] {
+					members = append(members, uid)
+				}
+				participantsJSON, _ := json.Marshal(map[string]interface{}{
+					"type":    "voice:participants",
+					"chatId": act.ChatID,
+					"members": members,
+				})
+				act.Client.send <- participantsJSON
+				for uid := range h.voiceRooms[act.ChatID] {
+					if uid == act.UserID {
+						continue
+					}
+					peerJoinJSON, _ := json.Marshal(map[string]interface{}{
+						"type":   "voice:peer-join",
+						"chatId": act.ChatID,
+						"userId": act.UserID,
+					})
+					for client := range h.clients {
+						if client.userID == uid {
+							select {
+							case client.send <- peerJoinJSON:
+							default:
+							}
+							break
+						}
+					}
+				}
+			} else {
+				if room, ok := h.voiceRooms[act.ChatID]; ok {
+					delete(room, act.UserID)
+					if len(room) == 0 {
+						delete(h.voiceRooms, act.ChatID)
+					} else {
+						peerLeaveJSON, _ := json.Marshal(map[string]interface{}{
+							"type":   "voice:peer-leave",
+							"chatId": act.ChatID,
+							"userId": act.UserID,
+						})
+						for uid := range room {
+							for client := range h.clients {
+								if client.userID == uid {
+									select {
+									case client.send <- peerLeaveJSON:
+									default:
+									}
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+			h.voiceRoomsMu.Unlock()
 		}
 	}
 }
@@ -149,6 +260,14 @@ func (h *Hub) SendToUser(userID string, message []byte) {
 				delete(h.clients, client)
 			}
 		}
+	}
+}
+
+// HandleVoiceRoom обрабатывает вход/выход из голосовой комнаты
+func (h *Hub) HandleVoiceRoom(chatID, userID string, client *Client, join bool) {
+	select {
+	case h.voiceAction <- &VoiceRoomAction{ChatID: chatID, UserID: userID, Client: client, Join: join}:
+	default:
 	}
 }
 

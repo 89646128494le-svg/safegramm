@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api } from '../services/api';
+import { api, API_URL } from '../services/api';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
 import { showToast } from './Toast';
 
@@ -38,6 +38,9 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   const recordedChunksRef = useRef<Blob[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoProcessorRef = useRef<{stream: MediaStream, processor: any} | null>(null);
+  const callStartTimeRef = useRef<number | null>(null);
+  const recordingStartTimeRef = useRef<number | null>(null);
+  const [remoteScreenSharing, setRemoteScreenSharing] = useState(false);
 
   useEffect(() => {
     const socket = getSocket();
@@ -113,6 +116,8 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
               stopRecording();
             }
           }
+        } else if (msgType === 'screen:share') {
+          setRemoteScreenSharing(!!data.active);
         }
       };
 
@@ -349,7 +354,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   };
 
   // Сохранение истории звонка
-  const saveCallHistory = async (status: 'completed' | 'missed' | 'declined', duration?: number) => {
+  const saveCallHistory = async (status: 'completed' | 'missed' | 'declined', duration?: number): Promise<void> => {
     try {
       await api('/api/calls', 'POST', {
         chatId,
@@ -364,8 +369,6 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       console.error('Failed to save call history:', e);
     }
   };
-
-  const callStartTimeRef = useRef<number | null>(null);
 
   const handleHangup = () => {
     // Останавливаем запись если активна
@@ -403,7 +406,9 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       saveCallHistory('completed');
     }
 
-    // Отправляем hangup
+    if (isScreenSharing) {
+      sendWebSocketMessage('screen:share', { chatId, to: otherUserId, active: false });
+    }
     sendWebSocketMessage('webrtc:hangup', {
       chatId,
       to: otherUserId,
@@ -458,6 +463,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         }
 
         setIsScreenSharing(true);
+        sendWebSocketMessage('screen:share', { chatId, to: otherUserId, active: true });
 
         // Когда пользователь останавливает демонстрацию экрана
         videoTrack.onended = () => {
@@ -490,7 +496,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         localVideoRef.current.srcObject = localStream;
       }
     }
-
+    sendWebSocketMessage('screen:share', { chatId, to: otherUserId, active: false });
     setIsScreenSharing(false);
   };
 
@@ -548,7 +554,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         formData.append('duration', Math.floor((Date.now() - (recordingStartTimeRef.current || Date.now())) / 1000).toString());
         
         try {
-          const response = await fetch('/api/calls/recordings', {
+          const response = await fetch(API_URL + '/api/calls/recordings', {
             method: 'POST',
             headers: {
               'Authorization': 'Bearer ' + localStorage.getItem('token')
@@ -586,8 +592,6 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       showToast('Запись остановлена', 'info');
     }
   };
-
-  const recordingStartTimeRef = useRef<number | null>(null);
 
   // Применение фильтров к видео
   const applyVideoFilter = (filter: string) => {
@@ -663,18 +667,37 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         <div className="dm-call-video-container">
           {isVideo && (
             <>
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="remote-video"
-                style={{ 
-                  width: '100%', 
-                  height: '100%', 
-                  objectFit: 'cover',
-                  background: '#000'
-                }}
-              />
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="remote-video"
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    objectFit: 'cover',
+                    background: '#000'
+                  }}
+                />
+                {remoteScreenSharing && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '12px',
+                    left: '12px',
+                    background: 'rgba(0,0,0,0.7)',
+                    color: '#fff',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    🖥️ Демонстрация экрана
+                  </div>
+                )}
+              </div>
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -868,7 +891,6 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
             onClick={isRecording ? stopRecording : startRecording}
             className={`call-control-btn ${isRecording ? 'active' : ''}`}
             title={isRecording ? 'Остановить запись' : 'Начать запись'}
-            disabled={!recordingConsent.local || !recordingConsent.remote}
           >
             {isRecording ? '🔴⏹️' : '🔴'}
           </button>

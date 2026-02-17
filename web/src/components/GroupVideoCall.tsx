@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
-import { api } from '../services/api';
+import { api, API_URL } from '../services/api';
 import { showToast } from './Toast';
 
 interface GroupVideoCallProps {
@@ -106,15 +106,16 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
             return newMap;
           });
         } else if (data.type === 'voice:signal') {
-          const { from, userId, data: signalData } = data;
-          if (userId === currentUserId) return;
-          let pc = peersRef.current.get(userId);
+          const fromUserId = data.from;
+          const signalData = data.data;
+          if (!fromUserId || fromUserId === currentUserId || !signalData) return;
+          let pc = peersRef.current.get(fromUserId);
           if (!pc) {
-            await createPeerConnection(userId, false);
-            pc = peersRef.current.get(userId);
+            await createPeerConnection(fromUserId, false);
+            pc = peersRef.current.get(fromUserId);
           }
           if (pc) {
-            await handleSignal(pc, signalData, userId);
+            await handleSignal(pc, signalData, fromUserId);
           }
         } else if (data.type === 'call:recording:request') {
           // Запрос на запись от участника
@@ -441,7 +442,7 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
           formDataToSend.append('chatId', chatId);
           formDataToSend.append('type', 'group');
           
-          const response = await fetch('/api/calls/recordings', {
+          const response = await fetch(API_URL + '/api/calls/recordings', {
             method: 'POST',
             headers: {
               'Authorization': 'Bearer ' + localStorage.getItem('token')

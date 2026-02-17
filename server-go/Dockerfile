@@ -16,12 +16,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 # Final stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates wget
 
-WORKDIR /root/
+WORKDIR /app
 
 # Копируем бинарник из builder stage
 COPY --from=builder /app/main .
+
+RUN mkdir -p /app/uploads /app/logs
 
 EXPOSE 8080
 

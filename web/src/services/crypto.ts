@@ -1,6 +1,7 @@
 
 // E2EE helpers (same as before, TS)
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+import { API_URL } from './api';
+const API = API_URL;
 
 async function importPublicKeyJwk(jwk: JsonWebKey) {
   return await crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, true, []);
