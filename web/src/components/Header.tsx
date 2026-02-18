@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Shield, LogOut, User, Settings, Crown, Bell, Menu, X } from 'lucide-react';
+import { Shield, LogOut, User, Settings, Crown, Bell, Menu, X, Home, Star, DollarSign, Info, FileText, Lock } from 'lucide-react';
 import ThemeSwitcher from './ThemeSwitcher';
 import Navigation from './Navigation';
 import { useStore } from '../store/useStore';
+
+const publicNavItems = [
+  { path: '/', label: 'Главная', icon: Home },
+  { path: '/features', label: 'Функции', icon: Star },
+  { path: '/pricing', label: 'Тарифы', icon: DollarSign },
+  { path: '/about', label: 'О нас', icon: Info },
+  { path: '/privacy', label: 'Приватность', icon: Lock },
+  { path: '/terms', label: 'Условия', icon: FileText },
+];
 
 interface User {
   id: string;
@@ -20,6 +29,7 @@ interface HeaderProps {
 
 export default function Header({ user, onLogout }: HeaderProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [showPublicNav, setShowPublicNav] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const nav = useNavigate();
   const location = useLocation();
@@ -140,9 +150,32 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         {!isAppRoute && !user && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Navigation />
-          </div>
+          <>
+            <div className="header-public-nav" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Navigation />
+            </div>
+            <button
+              type="button"
+              className="header-burger"
+              aria-label="Меню"
+              onClick={() => setShowPublicNav(!showPublicNav)}
+              style={{
+                display: 'none',
+                width: 44,
+                height: 44,
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#e9ecf5',
+                cursor: 'pointer',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+              }}
+            >
+              {showPublicNav ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </>
         )}
         <ThemeSwitcher />
         
@@ -252,7 +285,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
             </motion.button>
           </>
         ) : (
-          <>
+          <div className="header-public-nav" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link
                 to="/login"
@@ -287,11 +320,125 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 Регистрация
               </Link>
             </motion.div>
-          </>
+          </div>
         )}
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile: публичное меню (страницы сайта + Войти + Регистрация) */}
+      <AnimatePresence>
+        {showPublicNav && !user && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.5)',
+                zIndex: 999,
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+              }}
+              onClick={() => setShowPublicNav(false)}
+              aria-hidden="true"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.25 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: 'min(320px, 85vw)',
+                background: 'rgba(11, 16, 32, 0.98)',
+                backdropFilter: 'blur(20px)',
+                borderLeft: '1px solid rgba(255,255,255,0.1)',
+                zIndex: 1000,
+                padding: '24px 16px',
+                paddingTop: 'max(24px, env(safe-area-inset-top))',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                overflowY: 'auto',
+              }}
+            >
+              {publicNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setShowPublicNav(false)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '14px 16px',
+                      borderRadius: 12,
+                      textDecoration: 'none',
+                      color: isActive ? '#7c6cff' : '#e9ecf5',
+                      background: isActive ? 'rgba(124, 108, 255, 0.15)' : 'transparent',
+                      fontSize: 16,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Icon size={20} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
+              <Link
+                to="/login"
+                onClick={() => setShowPublicNav(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  textDecoration: 'none',
+                  color: '#e9ecf5',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  fontSize: 16,
+                  fontWeight: 600,
+                }}
+              >
+                Войти
+              </Link>
+              <Link
+                to="/register"
+                onClick={() => setShowPublicNav(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  textDecoration: 'none',
+                  color: '#0a0e1a',
+                  background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  boxShadow: '0 4px 12px rgba(124, 108, 255, 0.3)',
+                }}
+              >
+                Регистрация
+              </Link>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Mobile Menu (для авторизованных) */}
       <AnimatePresence>
         {showMenu && user && (
           <motion.div
@@ -417,8 +564,17 @@ export default function Header({ user, onLogout }: HeaderProps) {
           .mobile-menu-btn {
             display: flex !important;
           }
+          .header-public-nav {
+            display: none !important;
+          }
+          .header-burger {
+            display: flex !important;
+          }
         }
         @media (min-width: 769px) {
+          .header-burger {
+            display: none !important;
+          }
           .mobile-menu {
             display: none !important;
           }
