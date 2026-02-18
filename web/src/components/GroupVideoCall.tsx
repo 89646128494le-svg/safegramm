@@ -1,13 +1,15 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
-import { api, API_URL } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 import { showToast } from './Toast';
 
 interface GroupVideoCallProps {
   chatId: string;
   currentUserId: string;
   onClose: () => void;
+  /** Голосовой звонок без видео по умолчанию */
+  startWithVideo?: boolean;
 }
 
 type Participant = { 
@@ -19,11 +21,11 @@ type Participant = {
   avatarUrl?: string
 };
 
-export default function GroupVideoCall({ chatId, currentUserId, onClose }: GroupVideoCallProps) {
+export default function GroupVideoCall({ chatId, currentUserId, onClose, startWithVideo = true }: GroupVideoCallProps) {
   const [participants, setParticipants] = useState<Map<string, Participant>>(new Map());
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(startWithVideo);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingConsents, setRecordingConsents] = useState<Map<string, boolean>>(new Map());
@@ -163,9 +165,12 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
   const initLocalStream = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 }, 
-        audio: true 
+        video: startWithVideo ? { width: 1280, height: 720 } : false,
+        audio: true
       });
+      if (!startWithVideo && stream.getVideoTracks().length > 0) {
+        stream.getVideoTracks().forEach(t => t.enabled = false);
+      }
       setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -442,7 +447,7 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose }: Group
           formDataToSend.append('chatId', chatId);
           formDataToSend.append('type', 'group');
           
-          const response = await fetch(API_URL + '/api/calls/recordings', {
+          const response = await fetch(getApiBaseUrl() + '/api/calls/recordings', {
             method: 'POST',
             headers: {
               'Authorization': 'Bearer ' + localStorage.getItem('token')

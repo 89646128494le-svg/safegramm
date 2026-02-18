@@ -1,11 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, User, Eye, EyeOff, ArrowRight, Mail, Key } from 'lucide-react';
 import { api } from '../services/api';
 import { useStore } from '../store/useStore';
 import '../styles/globals.css';
+
+const RESEND_COOLDOWN_SEC = 60;
 
 interface LoginProps {
   onDone?: () => void;
@@ -24,25 +26,40 @@ export default function Login({ onDone }: LoginProps) {
   const [sendingCode, setSendingCode] = useState(false);
   const [step, setStep] = useState<LoginStep>('credentials');
   const [hasCloudCode, setHasCloudCode] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [devEmailCode, setDevEmailCode] = useState<string>('');
   const nav = useNavigate();
   const { setToken, setUser } = useStore();
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setInterval(() => setResendCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resendCooldown]);
 
   const sendEmailCode = async () => {
     if (!username.trim()) {
       setErr('Введите логин');
       return;
     }
-    
+    if (resendCooldown > 0) return;
     setSendingCode(true);
     setErr('');
-    
+    setDevEmailCode('');
+    const SEND_CODE_TIMEOUT_MS = 20000;
+    const timeoutPromise = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error('Таймаут отправки. Проверьте настройки почты на сервере или попробуйте позже.')), SEND_CODE_TIMEOUT_MS)
+    );
     try {
-      const res = await api('/api/auth/send-login-email-code', 'POST', { username });
+      const res = await Promise.race([
+        api('/api/auth/send-login-email-code', 'POST', { username }),
+        timeoutPromise,
+      ]);
       setHasCloudCode(res.hasCloudCode || false);
       setErr('');
-      if (step !== 'email') {
-        setStep('email');
-      }
+      setResendCooldown(RESEND_COOLDOWN_SEC);
+      if (res.code) setDevEmailCode(res.code);
+      if (step !== 'email') setStep('email');
     } catch (e: any) {
       setErr(e?.message || 'Ошибка отправки кода');
     } finally {
@@ -71,8 +88,7 @@ export default function Login({ onDone }: LoginProps) {
       }
       
       const res = await api('/api/auth/login', 'POST', payload);
-      console.log('Login response:', res);
-      
+
       // Обработка различных ответов
       if (res && res.token) {
         // Успешный вход
@@ -106,31 +122,41 @@ export default function Login({ onDone }: LoginProps) {
         setErr(res?.message || 'Ошибка входа');
       }
     } catch (e: any) {
-      console.error('Login error:', e);
-      
-      // Проверяем ответ сервера в ошибке
       const serverError = e?.response?.error || e?.errorCode || '';
-      const errorMsg = e?.message || 'Ошибка входа';
-      
-      // Обработка специфичных ошибок
-      if (serverError === 'email_verification_required' || errorMsg === 'email_verification_required') {
-        setHasCloudCode(e?.response?.hasCloudCode || false);
+      const errorMsg = (e?.message || '') as string;
+      const isEmailVerification = serverError === 'email_verification_required' || errorMsg === 'email_verification_required';
+      const isCloudCode = serverError === 'cloud_code_required' || errorMsg === 'cloud_code_required';
+
+      if (!isEmailVerification && !isCloudCode) {
+        console.error('Login error:', e);
+      }
+
+      if (isEmailVerification) {
+        setStep('email');
+        setErr('');
+        setHasCloudCode(e?.response?.hasCloudCode ?? false);
         setLoading(false);
-        await sendEmailCode();
+        try {
+          await sendEmailCode();
+        } catch {
+          setErr('Требуется подтверждение email. Запросите код повторно или введите код из письма.');
+        }
         return;
-      } else if (serverError === 'cloud_code_required' || errorMsg === 'cloud_code_required') {
+      }
+      if (isCloudCode) {
         setStep('cloudCode');
         setErr('');
         setLoading(false);
         return;
-      } else if (serverError === 'invalid_email_code' || errorMsg === 'invalid_email_code') {
+      }
+      if (serverError === 'invalid_email_code' || errorMsg === 'invalid_email_code') {
         setErr('Неверный код подтверждения');
       } else if (serverError === 'invalid_cloud_code' || errorMsg === 'invalid_cloud_code') {
         setErr('Неверный облачный код');
       } else if (serverError === 'bad_creds' || errorMsg === 'bad_creds') {
         setErr('Неверный логин или пароль');
       } else {
-        setErr(errorMsg);
+        setErr(e?.message || 'Ошибка входа');
       }
     } finally {
       setLoading(false);
@@ -142,6 +168,14 @@ export default function Login({ onDone }: LoginProps) {
       case 'email':
         return (
           <>
+            <p style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 14 }}>
+              Подтвердите email: введите код из письма.
+            </p>
+            {devEmailCode && (
+              <p style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(124, 108, 255, 0.15)', borderRadius: 10, fontSize: 14, color: 'var(--text-primary)' }}>
+                Код для входа (разработка): <strong style={{ letterSpacing: 2, fontFamily: 'monospace' }}>{devEmailCode}</strong>
+              </p>
+            )}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -196,8 +230,8 @@ export default function Login({ onDone }: LoginProps) {
             <motion.button
               type="button"
               onClick={sendEmailCode}
-              disabled={sendingCode}
-              whileHover={{ scale: 1.02 }}
+              disabled={sendingCode || resendCooldown > 0}
+              whileHover={{ scale: resendCooldown > 0 ? 1 : 1.02 }}
               whileTap={{ scale: 0.98 }}
               style={{
                 width: '100%',
@@ -207,11 +241,11 @@ export default function Login({ onDone }: LoginProps) {
                 borderRadius: '12px',
                 color: '#e9ecf5',
                 fontSize: '14px',
-                cursor: sendingCode ? 'not-allowed' : 'pointer',
-                opacity: sendingCode ? 0.5 : 1
+                cursor: sendingCode || resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                opacity: sendingCode || resendCooldown > 0 ? 0.6 : 1
               }}
             >
-              {sendingCode ? 'Отправка...' : 'Отправить код повторно'}
+              {sendingCode ? 'Отправка...' : resendCooldown > 0 ? `Повторно через ${resendCooldown} с` : 'Отправить код повторно'}
             </motion.button>
           </>
         );

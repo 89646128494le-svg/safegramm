@@ -7,14 +7,14 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const options = {
-  resources: ['http://localhost:5173'],
+  resources: ['http://localhost:5174'],
   delay: 1000,
   interval: 500,
   timeout: 30000,
   window: 1000
 };
 
-console.log('Ожидание запуска Vite dev server на http://localhost:5173...');
+console.log('Ожидание запуска Vite dev server на http://localhost:5174...');
 
 waitOn(options)
   .then(() => {

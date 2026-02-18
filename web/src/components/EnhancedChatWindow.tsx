@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { api, API_URL } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 import { getSocket, sendWebSocketMessage, closeSocket } from '../services/websocket';
 import { notifyNewMessage, notifyCall, hasNotificationPermission } from '../services/notifications';
 import { useStore } from '../store/useStore';
@@ -241,6 +241,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   const [mentionQuery, setMentionQuery] = useState<{query: string, position: number} | null>(null);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [inGroupCall, setInGroupCall] = useState(false);
+  const [groupCallVoiceOnly, setGroupCallVoiceOnly] = useState(false);
   const [inDMCall, setInDMCall] = useState<{isVideo: boolean, otherUserId: string, isIncoming?: boolean, offerData?: any} | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -324,6 +325,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
     soundType: 'default'
   });
   const [isPageVisible, setIsPageVisible] = useState(!document.hidden);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -416,14 +418,16 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
         // Получаем публичные ключи всех участников
         const wrappedKeys: Record<string, string> = {};
         for (const memberId of chatInfoRef.current.members) {
+          const uid = typeof memberId === 'string' ? memberId : (memberId as any)?.userId ?? (memberId as any)?.id;
+          if (!uid) continue;
           try {
-            const userKey = await api(`/api/users/${memberId}/public_key`);
+            const userKey = await api(`/api/users/${uid}/public_key`);
             if (userKey.publicKeyJwk) {
-              const wrapped = await wrapKeyForUser(newGroupKey, userKey.publicKeyJwk);
-              wrappedKeys[memberId] = wrapped;
+              const wrapped = await wrapKeyForUser(newGroupKey, userKey.publicKeyJwk, chatId);
+              wrappedKeys[uid] = wrapped;
             }
           } catch (e) {
-            console.warn(`Failed to get key for user ${memberId}:`, e);
+            console.warn(`Failed to get key for user ${uid}:`, e);
           }
         }
         
@@ -450,10 +454,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
     try {
       const keyData = await api(`/api/chats/${chatId}/group-key`);
       if (keyData.wrappedKey) {
-        // Получаем публичный ключ того, кто создал ключ
-        const creatorKey = await api(`/api/users/${keyData.createdBy}/public_key`);
+        const createdBy = keyData.createdBy != null ? String(keyData.createdBy) : '';
+        if (!createdBy) return;
+        const creatorKey = await api(`/api/users/${createdBy}/public_key`);
         if (creatorKey.publicKeyJwk) {
-          const unwrappedKey = await unwrapKeyFromEnvelope(keyData.wrappedKey, creatorKey.publicKeyJwk);
+          const unwrappedKey = await unwrapKeyFromEnvelope(keyData.wrappedKey, creatorKey.publicKeyJwk, chatId);
           setGroupKey(unwrappedKey);
           setGroupKeyVersion(keyData.keyVersion || 0);
           setIsE2EEEnabled(true);
@@ -480,14 +485,16 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       // Получаем публичные ключи всех участников
       const wrappedKeys: Record<string, string> = {};
       for (const memberId of chatInfoRef.current.members) {
+        const uid = typeof memberId === 'string' ? memberId : (memberId as any)?.userId ?? (memberId as any)?.id;
+        if (!uid) continue;
         try {
-          const userKey = await api(`/api/users/${memberId}/public_key`);
+          const userKey = await api(`/api/users/${uid}/public_key`);
           if (userKey.publicKeyJwk) {
-            const wrapped = await wrapKeyForUser(newGroupKey, userKey.publicKeyJwk);
-            wrappedKeys[memberId] = wrapped;
+            const wrapped = await wrapKeyForUser(newGroupKey, userKey.publicKeyJwk, chatId);
+            wrappedKeys[uid] = wrapped;
           }
         } catch (e) {
-          console.warn(`Failed to get key for user ${memberId}:`, e);
+          console.warn(`Failed to get key for user ${uid}:`, e);
         }
       }
       
@@ -507,7 +514,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       const chats = await api('/api/chats');
       const chat = chats.chats?.find((c: any) => c.id === chatId);
       if (chat) {
-        chatInfoRef.current = { members: chat.members || [], type: chat.type || 'dm', name: chat.name };
+        const rawMembers = chat.members || [];
+        const memberIds: string[] = rawMembers.map((m: any) =>
+          typeof m === 'string' ? m : (m.userId ?? m.id ?? m?.user?.id ?? '')
+        ).filter(Boolean);
+        chatInfoRef.current = { members: memberIds, type: chat.type || 'dm', name: chat.name };
         
         // Проверяем права пользователя
         if (chat.members && Array.isArray(chat.members)) {
@@ -545,7 +556,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
         ...m,
         createdAt: m.createdAt ? (typeof m.createdAt === 'string' ? new Date(m.createdAt).getTime() : (typeof m.createdAt === 'number' ? m.createdAt : Date.now())) : Date.now(),
         isRead: m.isRead !== undefined ? m.isRead : false,
-        readReceipts: m.readReceipts || [],
+        readReceipts: (m.readReceipts || []).map((r: any) => ({
+          userId: r.userId,
+          readAt: typeof r.readAt === 'string' ? new Date(r.readAt).getTime() : (r.readAt ?? 0),
+          user: r.user,
+        })),
       }));
       
       if (append && loadedMessages.length > 0) {
@@ -622,11 +637,20 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   // Обработка прокрутки для автоматической загрузки
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
-    // Если прокрутили близко к верху (100px), загружаем еще
-    if (container.scrollTop < 100 && hasMoreMessages && !loadingMoreMessages) {
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    if (scrollTop < 100 && hasMoreMessages && !loadingMoreMessages) {
       loadMoreMessages();
     }
+    const nearBottom = scrollHeight - scrollTop - clientHeight < 120;
+    setShowScrollToBottom((prev) => (prev !== !nearBottom ? !nearBottom : prev));
   }, [hasMoreMessages, loadingMoreMessages, loadMoreMessages]);
+
+  const scrollToBottom = useCallback((smooth = true) => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+    }
+    setShowScrollToBottom(false);
+  }, []);
 
   // Отметить чат как прочитанный
   const markChatAsRead = useCallback(async () => {
@@ -1177,12 +1201,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
     };
   }, [chatId, currentUser.id, loadMessages, loadUsers]);
 
-  // Автоскролл
+  // Автоскролл при новых сообщениях
   useEffect(() => {
     setTimeout(() => {
       if (messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }
+      setShowScrollToBottom(false);
     }, 50);
   }, [messages]);
 
@@ -1591,7 +1616,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
         showToast('Ошибка отправки файла', 'error');
       });
       
-      xhr.open('POST', `${API_URL}/api/chats/${chatId}/attach`);
+      xhr.open('POST', `${getApiBaseUrl()}/api/chats/${chatId}/attach`);
       xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.getItem('token'));
       xhr.send(form);
     } catch (e: any) {
@@ -1659,7 +1684,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       form.append('file', file);
       form.append('kind', 'document');
       
-      const response = await fetch(`${API_URL}/api/chats/${chatId}/attach`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/chats/${chatId}/attach`, {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') },
         body: form
@@ -1929,6 +1954,19 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
     return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatDateSeparator = (timestamp: number) => {
+    const d = new Date(timestamp);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dDay = new Date(d);
+    dDay.setHours(0, 0, 0, 0);
+    if (dDay.getTime() === today.getTime()) return 'Сегодня';
+    if (dDay.getTime() === yesterday.getTime()) return 'Вчера';
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+  };
+
   const formatRecordingTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -2074,7 +2112,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
       <GroupVideoCall
         chatId={chatId}
         currentUserId={currentUser.id}
-        onClose={() => setInGroupCall(false)}
+        onClose={() => { setInGroupCall(false); setGroupCallVoiceOnly(false); }}
+        startWithVideo={!groupCallVoiceOnly}
       />
     );
   }
@@ -2346,11 +2385,18 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                 ⚙️
               </button>
               <button
-                className="video-call-btn"
-                onClick={() => setInGroupCall(true)}
-                title="Начать видеозвонок"
+                className="call-btn"
+                onClick={() => { setGroupCallVoiceOnly(true); setInGroupCall(true); }}
+                title="Голосовой чат (без видео)"
               >
-                📹 Видеозвонок
+                📞 Голосовой
+              </button>
+              <button
+                className="video-call-btn"
+                onClick={() => { setGroupCallVoiceOnly(false); setInGroupCall(true); }}
+                title="Видеозвонок с демонстрацией экрана"
+              >
+                📹 Видео / Экран
               </button>
               {(isChatOwner || isPlatformAdmin) && (
                 <button
@@ -2852,19 +2898,36 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
             </button>
           </div>
         )}
+        {messages.length === 0 && !loadingMoreMessages && (
+          <div className="chat-empty-state">
+            <div className="chat-empty-icon">💬</div>
+            <h3 className="chat-empty-title">Нет сообщений</h3>
+            <p className="chat-empty-desc">Напишите первое сообщение или прикрепите файл</p>
+            <p className="chat-empty-hint">Двойной клик по сообщению — ответить</p>
+          </div>
+        )}
         {messages.map((msg, idx) => {
           const sender = getUser(msg.senderId);
           const isMe = msg.senderId === currentUser.id;
           const msgReactions = (reactions.get(msg.id) || []) as Array<{userId: string, emoji: string}>;
           const prevMsg = idx > 0 ? messages[idx - 1] : null;
           const showAvatar = !prevMsg || prevMsg.senderId !== msg.senderId;
+          const prevDate = prevMsg ? new Date(prevMsg.createdAt).toDateString() : '';
+          const thisDate = new Date(msg.createdAt).toDateString();
+          const showDateSeparator = prevDate !== thisDate;
 
           return (
+            <React.Fragment key={msg.id}>
+              {showDateSeparator && (
+                <div className="message-date-separator">
+                  <span>{formatDateSeparator(msg.createdAt)}</span>
+                </div>
+              )}
             <div 
-              key={msg.id} 
               data-message-id={msg.id} 
               className={`message-wrapper message ${isMe ? 'message-me me' : ''} ${msg.expiresAt && msg.expiresAt < Date.now() ? 'expired' : ''} ${msg.senderId === currentUser.id ? 'sending' : 'received'}`}
               style={{ animationDelay: `${idx * 0.03}s` }}
+              onDoubleClick={() => !msg.deletedAt && setReplyingTo(msg)}
             >
               {!isMe && showAvatar && (
                 <div 
@@ -3260,7 +3323,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                         // Формируем полный URL для медиафайла
                         const attachmentUrl = msg.attachmentUrl.startsWith('http') 
                           ? msg.attachmentUrl 
-                          : `${API_URL}${msg.attachmentUrl.startsWith('/') ? '' : '/'}${msg.attachmentUrl}`;
+                          : `${getApiBaseUrl()}${msg.attachmentUrl.startsWith('/') ? '' : '/'}${msg.attachmentUrl}`;
                         
                         if (msg.attachmentUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
                           return <img src={attachmentUrl} alt="attachment" style={{ maxWidth: '100%', borderRadius: '8px' }} />;
@@ -3405,6 +3468,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
                 </div>
               </div>
             </div>
+            </React.Fragment>
           );
         })}
         {typingUsers.size > 0 && (
@@ -3412,13 +3476,25 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
             <span></span>
             <span></span>
             <span></span>
-            <span style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--subtle)' }}>
+            <span className="typing-indicator-names">
               {Array.from(typingUsers).map((userId: string) => getUser(userId).username).join(', ')} печатает...
             </span>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {showScrollToBottom && messages.length > 0 && (
+        <button
+          type="button"
+          className="scroll-to-bottom-fab"
+          onClick={() => scrollToBottom(true)}
+          title="Вниз к новым сообщениям"
+          aria-label="Прокрутить вниз"
+        >
+          ↓
+        </button>
+      )}
 
       {/* Список тредов */}
       {showThreads && !selectedThreadId && (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') && (

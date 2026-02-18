@@ -89,7 +89,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
           >
             <Shield size={24} color="#0a0e1a" />
           </motion.div>
-          <Link to="/" style={{ textDecoration: 'none' }}>
+          <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{
               fontSize: '22px',
               fontWeight: 900,
@@ -103,6 +103,19 @@ export default function Header({ user, onLogout }: HeaderProps) {
             }}>
               SafeGram
             </h1>
+            {typeof window !== 'undefined' && (window as any).electronAPI && (
+              <span style={{
+                padding: '2px 8px',
+                background: 'rgba(34, 197, 94, 0.2)',
+                border: '1px solid rgba(34, 197, 94, 0.5)',
+                borderRadius: '6px',
+                fontSize: '10px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                color: '#22c55e'
+              }}>Desktop</span>
+            )}
           </Link>
         </motion.div>
         <motion.span

@@ -1,0 +1,18 @@
+{
+  "name": "safegram",
+  "private": true,
+  "description": "SafeGram messenger - frontend (web), backend (server-go)",
+  "scripts": {
+    "dev": "npm run dev --prefix web",
+    "dev:web": "npm run dev --prefix web",
+    "dev:server": "cd server-go && go run .",
+    "dev:all": "concurrently -n server,web -c blue,green \"npm run dev:server\" \"npm run dev:web\"",
+    "build": "npm run build --prefix web",
+    "preview": "npm run preview --prefix web",
+    "server": "cd server-go && go run .",
+    "postinstall": "npm install --prefix web"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

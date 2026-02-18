@@ -70,6 +70,50 @@
 
 ---
 
+## Сервер на своём ПК + API через туннель
+
+Сервер крутится локально, в интернет он выходит через туннель (localtunnel, ngrok или Cloudflare). Фронт на Vercel обращается к API по публичному URL туннеля.
+
+**1. Запуск сервера и туннеля на ПК**
+
+- **Всё в одном (БД + бэкенд + туннель):** запусти **`USELOCALTUNNEL.bat`**.  
+  Скрипт поднимет PostgreSQL и Redis в Docker, соберёт и запустит Go-бэкенд, затем localtunnel на порт 8080.
+- **Либо** используй **`START_SIMPLE.bat`** или **`START_ALL.bat`** — там тоже есть выбор туннеля (localtunnel / Cloudflare / ngrok).
+
+**2. Установка туннеля (если ещё нет)**
+
+- **LocalTunnel:** `npm install -g localtunnel`, затем в скрипте уже есть `lt --port 8080`.
+- **Cloudflare:** скачай [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/), в скриптах путь `C:\cloudflared\cloudflared.exe tunnel --url http://127.0.0.1:8080`.
+- **ngrok:** скачай с https://ngrok.com/download, положи в `C:\ngrok\`, при необходимости задай authtoken.
+
+**3. Настройка бэкенда**
+
+В **`server-go/.env`** добавь в **`ALLOWED_ORIGINS`** публичный URL туннеля и домен Vercel (через запятую, без пробелов), например:
+
+```env
+ALLOWED_ORIGINS=https://твой-проект.vercel.app,https://твой-туннель.loca.lt
+```
+
+Для localtunnel домен будет вида `https://xxxxx.loca.lt`. После первого входа localtunnel может показать страницу «Click to continue» — это нормально, запросы с Vercel всё равно проходят.
+
+**4. Настройка фронта на Vercel**
+
+В настройках проекта на Vercel → **Environment Variables** задай (и пересобери деплой):
+
+- `VITE_API_URL` = публичный URL туннеля, например `https://xxxxx.loca.lt`
+- `VITE_WS_URL` = тот же URL, но протокол ws: `wss://xxxxx.loca.lt`
+
+Каждый раз при новом запуске localtunnel URL может меняться — тогда обнови переменные на Vercel и сделай Redeploy. У ngrok и Cloudflare на платном/постоянном плане можно зафиксировать поддомен.
+
+**5. Проверка**
+
+- В браузере открой `https://твой-туннель-url/health` — должен быть ответ `{"status":"ok"}`.
+- Открой сайт на Vercel и проверь вход и чаты.
+
+Пока сервер и туннель запущены на ПК, API доступен по этому URL. Когда ПК выключен или туннель закрыт, сайт на Vercel к API обратиться не сможет.
+
+---
+
 ## Вариант 1: Один сервер (VPS) — рекомендуемый старт
 
 **Подходит:** полный контроль, один домен, небольшой и средний трафик.

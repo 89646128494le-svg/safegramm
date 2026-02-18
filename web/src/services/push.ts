@@ -29,7 +29,6 @@ export async function setupPush(): Promise<boolean> {
     try {
       const { key } = await api('/api/push/vapid_public');
       if (!key) {
-        console.warn('VAPID public key not available - push notifications not configured');
         return false;
       }
       

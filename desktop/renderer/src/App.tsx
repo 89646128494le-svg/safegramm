@@ -2,9 +2,9 @@
  * SafeGram Desktop - Main App Component
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { apiClient } from './core/api/client';
+import { apiClient, setApiBaseUrl, getApiBaseUrl } from './core/api/client';
 import { cacheDB } from './core/cache/database';
 import WebSocketManager from './core/websocket/manager';
 import Login from './pages/Login';
@@ -24,22 +24,29 @@ function App() {
   }, []);
 
   /**
-   * Инициализация приложения
+   * Инициализация приложения.
+   * Токен хранится в localStorage — аккаунт остаётся после перезагрузки и закрытия приложения, пока пользователь не нажмёт «Выйти».
    */
   async function initializeApp() {
     try {
-      // Инициализация кэша
       await cacheDB.init();
 
-      // Проверка аутентификации
+      // В Electron подставляем URL сервера из настроек (туннель)
+      const electronAPI = (window as any).electronAPI;
+      if (electronAPI) {
+        const config = await electronAPI.getConfig();
+        if (config && config.serverUrl && String(config.serverUrl).trim()) {
+          setApiBaseUrl(String(config.serverUrl).trim());
+        }
+      }
+
+      // Восстановление сессии из localStorage (перезагрузка, повторное открытие приложения)
       const token = apiClient.getToken();
       if (token) {
         try {
           const userData = await apiClient.get('/api/users/me');
           setUser(userData);
           setIsAuthenticated(true);
-
-          // Инициализация WebSocket
           await initializeWebSocket(token);
         } catch (error) {
           console.error('Auth check failed:', error);
@@ -58,18 +65,7 @@ function App() {
    * Инициализация WebSocket
    */
   async function initializeWebSocket(token: string) {
-    // Используем тот же способ получения API URL, что и в apiClient
-    const getApiUrl = () => {
-      if (typeof import.meta !== 'undefined' && import.meta.env) {
-        return import.meta.env.VITE_API_URL || import.meta.env.API_URL || 'http://localhost:8080';
-      }
-      // Fallback для process.env (будет заменен Vite)
-      if (typeof process !== 'undefined' && process.env) {
-        return process.env.API_URL || 'http://localhost:8080';
-      }
-      return 'http://localhost:8080';
-    };
-    const apiUrl = getApiUrl();
+    const apiUrl = getApiBaseUrl();
     const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
 
     wsManager = new WebSocketManager({

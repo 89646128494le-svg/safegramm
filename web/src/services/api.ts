@@ -1,9 +1,50 @@
 
-// API URL: пустая строка = тот же origin (для деплоя за nginx); иначе явный URL бэкенда
-const API = (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL !== ''
-  ? import.meta.env.VITE_API_URL
-  : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080')
-).replace(/\/$/, '');
+const FALLBACK_API = 'http://localhost:8080';
+
+function normalizeBaseUrl(url: string): string {
+  const u = url.replace(/\/+$/, '');
+  if (!u) return FALLBACK_API;
+  if (!/^https?:\/\//i.test(u)) return FALLBACK_API;
+  try {
+    const parsed = new URL(u);
+    if (!parsed.hostname || parsed.hostname === '') return FALLBACK_API;
+    return u;
+  } catch {
+    return FALLBACK_API;
+  }
+}
+
+const DEFAULT_API = normalizeBaseUrl(
+  typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL.trim() !== ''
+    ? import.meta.env.VITE_API_URL.trim()
+    : (import.meta.env.DEV
+        ? FALLBACK_API
+        : (typeof window !== 'undefined' && window.location?.origin?.startsWith?.('http') ? window.location.origin : FALLBACK_API))
+);
+
+// Runtime config из /config.json (для деплоя на Vercel при API на своём ПК)
+let runtimeApiUrl: string | null = null;
+
+/** Загрузить config.json (apiUrl) — вызывать при старте приложения. */
+export function loadApiConfig(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  return fetch('/config.json')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((o: { apiUrl?: string } | null) => {
+      if (o && typeof o.apiUrl === 'string' && o.apiUrl.trim()) {
+        runtimeApiUrl = normalizeBaseUrl(o.apiUrl.trim());
+      }
+    })
+    .catch(() => {});
+}
+
+/** Базовый URL для запросов. Всегда возвращает валидный http(s) URL с хостом. */
+export function getApiBaseUrl(): string {
+  const proxy = typeof window !== 'undefined' ? (localStorage.getItem('safegram_proxy_url') || '').trim() : '';
+  return normalizeBaseUrl(runtimeApiUrl || proxy || DEFAULT_API);
+}
+
+const API = DEFAULT_API;
 
 // Кэш для GET запросов
 const cache = new Map<string, { data: any; expires: number }>();
@@ -59,7 +100,8 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
     if (token) headers['Authorization'] = 'Bearer ' + token;
     
     try {
-      const rsp = await fetch(API + path, { 
+      const base = getApiBaseUrl();
+      const rsp = await fetch((base.endsWith('/') ? base.slice(0, -1) : base) + path, { 
         method, 
         headers, 
         body: body ? JSON.stringify(body) : undefined 
@@ -116,8 +158,9 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
           }
           else if (j.error === 'unauthorized') msg = 'Требуется авторизация';
           else if (j.error === 'server_error') msg = 'Ошибка сервера';
+          else if (j.error === 'cannot_add_self') msg = 'Нельзя добавить себя в контакты';
+          else if (j.error === 'user_not_found') msg = 'Пользователь не найден';
           else if (j.error === 'not_found') {
-            // Определяем контекст по URL
             if (path.includes('/users/')) msg = 'Пользователь не найден';
             else if (path.includes('/chats/')) msg = 'Чат не найден';
             else if (path.includes('/servers/')) msg = 'Сервер не найден';
@@ -182,4 +225,5 @@ export function clearCache(path?: string): void {
   }
 }
 
-export const API_URL = API;
+/** Для обратной совместимости; при наличии прокси лучше использовать getApiBaseUrl(). */
+export const API_URL = DEFAULT_API;

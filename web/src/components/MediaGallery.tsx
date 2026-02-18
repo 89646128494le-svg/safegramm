@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { api, API_URL } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 
 interface MediaItem {
   id: string;
@@ -55,7 +55,7 @@ export default function MediaGallery({ chatId, onClose }: MediaGalleryProps) {
     // Если URL уже полный, используем как есть
     if (url.startsWith('http')) return url;
     // Иначе формируем полный URL
-    return `${API_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+    return `${getApiBaseUrl()}${url.startsWith('/') ? '' : '/'}${url}`;
   };
 
   const downloadMedia = (item: MediaItem) => {

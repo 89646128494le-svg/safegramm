@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Header from '../components/Header';
 import Chats from './chats/Chats';
@@ -26,10 +26,13 @@ import ConnectionStatus from '../components/ConnectionStatus';
 import IncomingCallNotification from '../components/IncomingCallNotification';
 import DMCall from '../components/DMCall';
 import MaintenanceBanner from '../components/MaintenanceBanner';
+import ServerStrip from '../components/ServerStrip';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
 
 export default function AppShell() {
+  const location = useLocation();
   const { user, setUser, setToken, setTheme, ui } = useStore();
+  const showServerStrip = location.pathname === '/app' || location.pathname === '/app/chats' || location.pathname === '/app/servers' || location.pathname.startsWith('/app/servers/');
   const [showStories, setShowStories] = useState(false);
   // Состояние для отображения Safety Assistant
   const [showSafety, setShowSafety] = useState(false); 
@@ -85,6 +88,30 @@ export default function AppShell() {
     document.documentElement.setAttribute('data-theme', ui.theme);
     initAppearance();
   }, [ui.theme]);
+
+  // Синхронизация статуса онлайн/офлайн при фокусе и сворачивании окна/вкладки
+  useEffect(() => {
+    if (!user) return;
+
+    const setStatus = (status: 'online' | 'offline' | 'away') => {
+      api('/api/users/me/status', 'POST', { status }).catch(() => {});
+    };
+
+    if (document.visibilityState === 'visible') {
+      setStatus('online');
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setStatus('online');
+      } else {
+        setStatus('away');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [user]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -166,6 +193,7 @@ export default function AppShell() {
 
   return (
     <motion.div 
+      className="app-shell"
       data-theme={ui.theme}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -177,7 +205,7 @@ export default function AppShell() {
       <Header user={user} onLogout={logout} />
       <motion.div 
         className="header" 
-        style={{ padding: 'var(--spacing-md) var(--spacing-lg)', borderTop: '1px solid var(--border-color)' }}
+        style={{ padding: 'var(--spacing-md) var(--spacing-lg)', borderTop: '1px solid var(--border-color)', flexShrink: 0 }}
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 30 }}
@@ -250,23 +278,28 @@ export default function AppShell() {
         </nav>
       </motion.div>
 
-      <AnimatePresence mode="wait">
-        <Routes>
-          <Route path="/" element={<Navigate to="/app/chats" replace />} />
-          <Route path="chats" element={<Chats />} />
-          <Route path="join/:link" element={<JoinChat />} />
-          <Route path="servers" element={<Servers />} />
-          <Route path="servers/join/:link" element={<JoinServer />} />
-          <Route path="servers/:id" element={<ServerView />} />
-          <Route path="contacts" element={<Contacts />} />
-          <Route path="search" element={<Search />} />
-          <Route path="bots" element={<Bots />} />
-          <Route path="profile" element={<Profile />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="feedback" element={<Feedback />} />
-          <Route path="admin" element={<Admin />} />
-        </Routes>
-      </AnimatePresence>
+      <div className={showServerStrip ? 'app-with-strip' : 'app-content'}>
+        {showServerStrip && <ServerStrip />}
+        <div className={showServerStrip ? 'app-content app-content-inner' : 'app-content'} style={showServerStrip ? undefined : { flex: 1 }}>
+          <AnimatePresence mode="wait">
+            <Routes>
+              <Route path="/" element={<Navigate to="/app/chats" replace />} />
+              <Route path="chats" element={<Chats />} />
+              <Route path="join/:link" element={<JoinChat />} />
+              <Route path="servers" element={<Servers />} />
+              <Route path="servers/join/:link" element={<JoinServer />} />
+              <Route path="servers/:id" element={<ServerView />} />
+              <Route path="contacts" element={<Contacts />} />
+              <Route path="search" element={<Search />} />
+              <Route path="bots" element={<Bots />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="feedback" element={<Feedback />} />
+              <Route path="admin" element={<Admin />} />
+            </Routes>
+          </AnimatePresence>
+        </div>
+      </div>
 
       {/* Модальное окно Историй */}
       <AnimatePresence>

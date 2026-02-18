@@ -271,3 +271,17 @@ func (h *Hub) HandleVoiceRoom(chatID, userID string, client *Client, join bool) 
 	}
 }
 
+// GetVoiceRoomParticipants возвращает копию списка userID в голосовой комнате по chatID (для отображения в сайдбаре).
+func (h *Hub) GetVoiceRoomParticipants(chatID string) []string {
+	h.voiceRoomsMu.RLock()
+	defer h.voiceRoomsMu.RUnlock()
+	room, ok := h.voiceRooms[chatID]
+	if !ok || len(room) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(room))
+	for uid := range room {
+		out = append(out, uid)
+	}
+	return out
+}

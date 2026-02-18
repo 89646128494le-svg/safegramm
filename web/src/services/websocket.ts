@@ -1,4 +1,5 @@
 // WebSocket клиент для Go бэкенда (стандартный WebSocket, не Socket.IO)
+import { getApiBaseUrl } from './api';
 
 let ws: WebSocket | null = null;
 let reconnectTimeout: NodeJS.Timeout | null = null;
@@ -12,13 +13,9 @@ export function getSocket(): WebSocket | null {
     return null;
   }
 
-  const base = (typeof import.meta.env.VITE_WS_URL === 'string' && import.meta.env.VITE_WS_URL !== '')
-    ? import.meta.env.VITE_WS_URL.replace(/\/$/, '')
-    : (typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL !== ''
-        ? import.meta.env.VITE_API_URL
-        : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080')).replace(/\/$/, '');
-  const wsOrigin = base.startsWith('http') ? base.replace(/^https?/, 'ws') : (typeof window !== 'undefined' ? (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host : 'ws://localhost:8080');
-  const wsUrl = wsOrigin + '/ws?token=' + encodeURIComponent(token);
+  const base = getApiBaseUrl().replace(/\/+$/, '');
+  const wsOrigin = base.startsWith('https') ? base.replace(/^https/, 'wss') : base.startsWith('http') ? base.replace(/^http/, 'ws') : 'ws://localhost:8080';
+  const wsUrl = (wsOrigin.endsWith('/') ? wsOrigin.slice(0, -1) : wsOrigin) + '/ws?token=' + encodeURIComponent(token);
 
   if (ws && ws.readyState === WebSocket.OPEN) {
     return ws;

@@ -188,6 +188,13 @@ func (c *Client) handleMessage(msg map[string]interface{}) {
 			if chatID, ok := msg["chatId"].(string); ok {
 				c.hub.HandleVoiceRoom(chatID, c.userID, c, false)
 			}
+		case "voice:mute", "voice:speaking":
+			if chatID, ok := msg["chatId"].(string); ok && chatID != "" {
+				msg["from"] = c.userID
+				if data, err := json.Marshal(msg); err == nil {
+					c.hub.BroadcastToChat(chatID, data)
+				}
+			}
 		}
 }
 

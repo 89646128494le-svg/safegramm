@@ -47,9 +47,29 @@ export default function SystemMonitor() {
   const loadHealth = async () => {
     try {
       const response = await api('/api/admin/system/health');
-      setHealth(response);
+      const data = response && typeof response === 'object' ? response : {};
+      setHealth({
+        status: data.status ?? 'healthy',
+        uptime: typeof data.uptime === 'number' ? data.uptime : 0,
+        memory: {
+          used: data.memory?.used ?? 0,
+          total: data.memory?.total ?? 1,
+          percentage: data.memory?.percentage ?? 0,
+        },
+        cpu: { usage: data.cpu?.usage ?? 0 },
+        database: {
+          status: data.database?.status ?? 'disconnected',
+          latency: data.database?.latency ?? 0,
+        },
+        websocket: {
+          connections: data.websocket?.connections ?? 0,
+          status: data.websocket?.status ?? 'inactive',
+        },
+        errors: Array.isArray(data.errors) ? data.errors : [],
+      });
     } catch (e: any) {
       showToast('Ошибка загрузки: ' + e.message, 'error');
+      setHealth(null);
     } finally {
       setLoading(false);
     }

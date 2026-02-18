@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api, API_URL } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
 import { showToast } from './Toast';
 
@@ -554,7 +554,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         formData.append('duration', Math.floor((Date.now() - (recordingStartTimeRef.current || Date.now())) / 1000).toString());
         
         try {
-          const response = await fetch(API_URL + '/api/calls/recordings', {
+          const response = await fetch(getApiBaseUrl() + '/api/calls/recordings', {
             method: 'POST',
             headers: {
               'Authorization': 'Bearer ' + localStorage.getItem('token')

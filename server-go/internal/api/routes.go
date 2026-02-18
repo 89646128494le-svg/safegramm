@@ -34,6 +34,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// WebSocket endpoint
 	router.GET("/ws", handleWebSocket(wsHub, cfg))
 
+	// Контакты
+	protected.GET("/contacts/list", ListContacts(db))
+	protected.GET("/contacts/search", ContactsSearch(db))
+	protected.POST("/contacts/add", AddContact(db))
+	protected.POST("/contacts/remove", RemoveContact(db))
+
 	// Пользователи
 	protected.GET("/users", GetUsers(db))
 	protected.GET("/users/me", GetCurrentUser(db))
@@ -150,7 +156,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/servers", GetServers(db))
 	// Более специфичные маршруты должны быть раньше общих
 	protected.POST("/servers/:id/channels", CreateChannel(db))
-	protected.GET("/servers/:id/channels", GetChannels(db))
+		protected.GET("/servers/:id/channels", GetChannels(db))
+		protected.GET("/servers/:id/voice-state", GetServerVoiceState(db, wsHub))
 	protected.DELETE("/servers/:id/channels/:channelId", DeleteChannel(db))
 	protected.PATCH("/servers/:id/channels/:channelId/category", SetChannelCategory(db))
 	protected.POST("/servers/:id/categories", CreateChannelCategory(db))
@@ -210,6 +217,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/admin/users/:id/promote", RequireAdmin(db), PromoteUser(db))
 	protected.POST("/admin/users/:id/demote", RequireAdmin(db), DemoteUser(db))
 	protected.GET("/admin/stats", RequireAdmin(db), GetAdminStats(db))
+	protected.GET("/admin/analytics", RequireAdmin(db), GetAdminAnalytics(db))
+	protected.GET("/admin/bans", RequireAdmin(db), GetAdminBans(db))
+	protected.POST("/admin/bans", RequireAdmin(db), CreateAdminBan(db))
+	protected.DELETE("/admin/bans/:id", RequireAdmin(db), DeleteAdminBan(db))
+	protected.GET("/admin/maintenance", RequireAdmin(db), GetAdminMaintenance(db))
+	protected.GET("/admin/system/health", RequireAdmin(db), GetSystemHealth(db))
 	protected.GET("/admin/feedback", RequireAdmin(db), GetAdminFeedback(db))
 	protected.GET("/admin/reports", RequireAdmin(db), GetAdminReports(db))
 	protected.GET("/admin/modqueue", RequireAdmin(db), GetAdminModQueue(db))

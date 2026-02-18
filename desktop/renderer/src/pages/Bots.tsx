@@ -2,7 +2,6 @@
  * Bots Page - Страница ботов
  */
 
-import React from 'react';
 import './Bots.css';
 
 interface BotsProps {
@@ -10,7 +9,7 @@ interface BotsProps {
   user: any;
 }
 
-export default function Bots({ wsManager, user }: BotsProps) {
+export default function Bots(_props: BotsProps) {
   return (
     <div className="bots-page">
       <h2>🤖 Боты</h2>

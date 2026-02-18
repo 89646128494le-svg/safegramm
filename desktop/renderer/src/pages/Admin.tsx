@@ -2,7 +2,7 @@
  * Admin Page - Страница администратора
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiClient } from '../core/api/client';
 import './Admin.css';
 
@@ -10,15 +10,23 @@ interface AdminProps {
   user: any;
 }
 
-export default function Admin({ user }: AdminProps) {
-  const [tab, setTab] = useState<'users' | 'stats' | 'mod' | 'reports' | 'feedback'>('users');
+export default function Admin({ user: _user }: AdminProps) {
+  const [tab, setTab] = useState<'users' | 'stats' | 'analytics' | 'bans' | 'health' | 'maintenance' | 'mod' | 'reports' | 'feedback'>('users');
   const [users, setUsers] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [bans, setBans] = useState<any[]>([]);
+  const [health, setHealth] = useState<any>(null);
+  const [maintenance, setMaintenance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (tab === 'users') loadUsers();
     if (tab === 'stats') loadStats();
+    if (tab === 'analytics') loadAnalytics();
+    if (tab === 'bans') loadBans();
+    if (tab === 'health') loadHealth();
+    if (tab === 'maintenance') loadMaintenance();
   }, [tab]);
 
   async function loadUsers() {
@@ -45,6 +53,54 @@ export default function Admin({ user }: AdminProps) {
     }
   }
 
+  async function loadAnalytics() {
+    try {
+      setLoading(true);
+      const r = await apiClient.get('/api/admin/analytics?range=7d');
+      setAnalytics(r);
+    } catch (e: any) {
+      setAnalytics(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadBans() {
+    try {
+      setLoading(true);
+      const r = await apiClient.get<{ bans: any[] }>('/api/admin/bans');
+      setBans(r?.bans || []);
+    } catch (e: any) {
+      setBans([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadHealth() {
+    try {
+      setLoading(true);
+      const r = await apiClient.get('/api/admin/system/health');
+      setHealth(r);
+    } catch (e: any) {
+      setHealth(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadMaintenance() {
+    try {
+      setLoading(true);
+      const r = await apiClient.get('/api/admin/maintenance');
+      setMaintenance(r);
+    } catch (e: any) {
+      setMaintenance(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function blockUser(userId: string) {
     if (!confirm('Заблокировать пользователя?')) return;
     try {
@@ -55,7 +111,16 @@ export default function Admin({ user }: AdminProps) {
     }
   }
 
-  if (loading && !users.length && !stats) {
+  async function unbanUser(userId: string) {
+    try {
+      await apiClient.delete('/api/admin/bans/' + userId);
+      loadBans();
+    } catch (e: any) {
+      alert('Ошибка: ' + (e.message || ''));
+    }
+  }
+
+  if (loading && !users.length && !stats && tab === 'users') {
     return (
       <div className="admin-page-loading">
         <div className="spinner"></div>
@@ -92,6 +157,18 @@ export default function Admin({ user }: AdminProps) {
         >
           Жалобы
         </button>
+        <button className={tab === 'analytics' ? 'active' : ''} onClick={() => setTab('analytics')}>
+          Аналитика
+        </button>
+        <button className={tab === 'bans' ? 'active' : ''} onClick={() => setTab('bans')}>
+          Баны
+        </button>
+        <button className={tab === 'health' ? 'active' : ''} onClick={() => setTab('health')}>
+          Здоровье
+        </button>
+        <button className={tab === 'maintenance' ? 'active' : ''} onClick={() => setTab('maintenance')}>
+          Техработы
+        </button>
         <button
           className={tab === 'feedback' ? 'active' : ''}
           onClick={() => setTab('feedback')}
@@ -127,23 +204,107 @@ export default function Admin({ user }: AdminProps) {
           </div>
         )}
 
-        {tab === 'stats' && stats && (
+        {tab === 'stats' && (
           <div className="admin-section">
             <h3>Статистика</h3>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-value">{stats.totalUsers || 0}</div>
-                <div className="stat-label">Пользователей</div>
+            {loading ? <p>Загрузка...</p> : stats && (
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-value">{(stats.stats && stats.stats.users) ?? stats.users ?? 0}</div>
+                  <div className="stat-label">Пользователей</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value">{(stats.stats && stats.stats.chats) ?? stats.chats ?? 0}</div>
+                  <div className="stat-label">Чатов</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value">{(stats.stats && stats.stats.messages) ?? stats.messages ?? 0}</div>
+                  <div className="stat-label">Сообщений</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value">{(stats.stats && stats.stats.online) ?? stats.online ?? 0}</div>
+                  <div className="stat-label">Онлайн</div>
+                </div>
               </div>
-              <div className="stat-card">
-                <div className="stat-value">{stats.totalChats || 0}</div>
-                <div className="stat-label">Чатов</div>
+            )}
+          </div>
+        )}
+
+        {tab === 'analytics' && (
+          <div className="admin-section">
+            <h3>Аналитика (7 дней)</h3>
+            {loading ? <p>Загрузка...</p> : analytics ? (
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-value">{analytics.users ?? 0}</div>
+                  <div className="stat-label">Пользователей</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value">{analytics.messages ?? 0}</div>
+                  <div className="stat-label">Сообщений</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value">{analytics.activeUsers ?? 0}</div>
+                  <div className="stat-label">Активных</div>
+                </div>
               </div>
-              <div className="stat-card">
-                <div className="stat-value">{stats.totalMessages || 0}</div>
-                <div className="stat-label">Сообщений</div>
+            ) : (
+              <p>Нет данных или ошибка загрузки.</p>
+            )}
+          </div>
+        )}
+
+        {tab === 'bans' && (
+          <div className="admin-section">
+            <h3>Заблокированные</h3>
+            {loading ? <p>Загрузка...</p> : bans.length === 0 ? (
+              <p>Нет заблокированных.</p>
+            ) : (
+              <div className="users-list">
+                {bans.map((b: any) => (
+                  <div key={b.id || b.userId} className="user-item">
+                    <div className="user-info">
+                      <div className="user-name">{b.username || b.userId}</div>
+                      {b.email && <div className="user-meta">{b.email}</div>}
+                    </div>
+                    <button type="button" className="btn btn-sm" onClick={() => unbanUser(b.userId || b.id)}>
+                      Разбанить
+                    </button>
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'health' && (
+          <div className="admin-section">
+            <h3>Здоровье системы</h3>
+            {loading ? <p>Загрузка...</p> : health ? (
+              <div>
+                <p><strong>Статус:</strong> {health.status}</p>
+                {health.services && (
+                  <ul>
+                    {health.services.map((s: any) => (
+                      <li key={s.name}>{s.name}: {s.status}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <p>Ошибка загрузки.</p>
+            )}
+          </div>
+        )}
+
+        {tab === 'maintenance' && (
+          <div className="admin-section">
+            <h3>Технические работы</h3>
+            {loading ? <p>Загрузка...</p> : maintenance !== null ? (
+              <p>Режим техработ: {maintenance.isActive ? 'включён' : 'выключен'}. {maintenance.message || ''}</p>
+            ) : (
+              <p>Ошибка загрузки.</p>
+            )}
           </div>
         )}
 

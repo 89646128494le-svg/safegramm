@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../services/api';
 import { getSocket } from '../services/websocket';
-import { deriveSharedKey, encryptPlaintext, decryptCiphertext, getMyPublicJwk } from '../services/crypto';
+import { deriveSessionKeyForChat, encryptPlaintext, decryptCiphertext, getMyPublicJwk } from '../services/crypto';
 
 interface SecretChatWindowProps {
   chatId: string;
@@ -99,7 +99,7 @@ export default function SecretChatWindow({ chatId, currentUser, peerUser, onClos
 
   useEffect(() => {
     initSecretChat();
-  }, [peerUser.id]);
+  }, [peerUser.id, chatId]);
 
   const initSecretChat = async () => {
     try {
@@ -113,8 +113,8 @@ export default function SecretChatWindow({ chatId, currentUser, peerUser, onClos
       // Получаем свой публичный ключ
       const myPubKey = await getMyPublicJwk();
 
-      // Выводим общий ключ
-      const key = await deriveSharedKey(peerKey.publicKeyJwk);
+      // Ключ сессии, привязанный к chatId (SafeGram Shield)
+      const key = await deriveSessionKeyForChat(peerKey.publicKeyJwk, chatId);
       setSharedKey(key);
 
       // Создаем или получаем секретный чат

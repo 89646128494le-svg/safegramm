@@ -180,47 +180,41 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 
 		// Генерируем 6-значный код
 		code := generateRandomCode(6)
-		
 		// Сохраняем код (действителен 10 минут)
 		StoreEmailCode(*user.Email, code, 10*time.Minute)
 
-		// Отправляем email
-		err := email.SendVerificationCode(*user.Email, code)
-		if err != nil {
-			// Если отправка не удалась, все равно возвращаем успех
-			// но в development режиме показываем код
-			nodeEnv := os.Getenv("NODE_ENV")
-			if nodeEnv == "development" || nodeEnv == "" {
-				c.JSON(http.StatusOK, gin.H{
-					"ok": true,
-					"message": "Код отправлен на email (или ошибка отправки - проверьте настройки)",
-					"error": err.Error(),
-					"code": code, // Только для development
-					"hasCloudCode": user.PinHash != "",
-				})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "failed_to_send_email",
-				"detail": "Не удалось отправить email. Проверьте настройки SMTP.",
+		nodeEnv := os.Getenv("NODE_ENV")
+		isDev := nodeEnv == "development" || nodeEnv == ""
+
+		if isDev {
+			// В разработке сразу возвращаем ответ с кодом, отправку письма — в фоне (не блокируем)
+			userEmail := *user.Email
+			go func() {
+				_ = email.SendVerificationCode(userEmail, code)
+			}()
+			c.JSON(http.StatusOK, gin.H{
+				"ok":          true,
+				"message":     "Код для входа (режим разработки). Используйте код ниже или проверьте почту.",
+				"hasCloudCode": user.PinHash != "",
+				"code":        code,
 			})
 			return
 		}
 
-		// Успешная отправка
-		nodeEnv := os.Getenv("NODE_ENV")
-		response := gin.H{
-			"ok": true,
-			"message": "Код отправлен на email",
+		// Production: отправляем email и ждём результат
+		err := email.SendVerificationCode(*user.Email, code)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":  "failed_to_send_email",
+				"detail": "Не удалось отправить email. Проверьте настройки SMTP.",
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"ok":          true,
+			"message":    "Код отправлен на email",
 			"hasCloudCode": user.PinHash != "",
-		}
-		
-		// В development режиме показываем код для тестирования
-		if nodeEnv == "development" || nodeEnv == "" {
-			response["code"] = code
-		}
-		
-		c.JSON(http.StatusOK, response)
+		})
 	}
 }
 

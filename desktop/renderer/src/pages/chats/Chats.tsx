@@ -2,7 +2,8 @@
  * Chats Page - Страница со списком чатов и окном чата
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../../core/api/client';
 import WebSocketManager from '../../core/websocket/manager';
 import EnhancedChatWindow from '../../components/EnhancedChatWindow';
@@ -25,20 +26,24 @@ interface ChatsProps {
 }
 
 export default function Chats({ wsManager, user }: ChatsProps) {
+  const [searchParams] = useSearchParams();
+  const chatIdFromUrl = searchParams.get('chatId');
   const [chats, setChats] = useState<Chat[]>([]);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(chatIdFromUrl || null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
+    if (chatIdFromUrl && chatIdFromUrl !== selectedChatId) {
+      setSelectedChatId(chatIdFromUrl);
+    }
+  }, [chatIdFromUrl]);
+
+  useEffect(() => {
     loadChats();
-    
-    // Подписка на WebSocket события
     if (wsManager) {
       const unsubscribe = wsManager.on('message', handleNewMessage);
-      return () => {
-        unsubscribe();
-      };
+      return () => unsubscribe();
     }
   }, [wsManager]);
 
@@ -54,7 +59,7 @@ export default function Chats({ wsManager, user }: ChatsProps) {
     }
   }
 
-  function handleNewMessage(data: any) {
+  function handleNewMessage(_data: any) {
     // Обновление списка чатов при новом сообщении
     loadChats();
   }
@@ -91,6 +96,21 @@ export default function Chats({ wsManager, user }: ChatsProps) {
     }
   }
 
+  async function createChannel() {
+    const name = prompt('Введите название канала:');
+    if (!name?.trim()) return;
+    try {
+      const response = await apiClient.post('/api/chats', {
+        type: 'channel',
+        name: name.trim()
+      });
+      setSelectedChatId(response.id);
+      loadChats();
+    } catch (error: any) {
+      alert(error.message || 'Не удалось создать канал');
+    }
+  }
+
   async function deleteChat(chatId: string) {
     if (!confirm('Вы уверены, что хотите удалить этот чат?')) return;
 
@@ -115,6 +135,11 @@ export default function Chats({ wsManager, user }: ChatsProps) {
     );
   });
 
+  const selectedChat = selectedChatId ? chats.find(c => c.id === selectedChatId) : null;
+  const chatInputLabel = selectedChat
+    ? `Чат: ${selectedChat.name || selectedChat.title || selectedChat.id.slice(0, 8)}`
+    : undefined;
+
   if (isLoading) {
     return (
       <div className="chats-page-loading">
@@ -127,12 +152,14 @@ export default function Chats({ wsManager, user }: ChatsProps) {
     <div className="chats-page">
       <div className="chats-sidebar">
         <div className="chats-header">
-          <h2>Чаты</h2>
-          <div className="chats-actions">
-            <button onClick={createDM} className="btn btn-sm">+ DM</button>
-            <button onClick={createGroup} className="btn btn-sm">+ Группа</button>
+          <h2>Мои чаты</h2>
+          <div className="chats-actions chats-actions-center">
+            <button onClick={createDM} className="btn btn-sm">💬 Личный чат</button>
+            <button onClick={createGroup} className="btn btn-sm">👥 Группа</button>
+            <button onClick={createChannel} className="btn btn-sm">📢 Канал</button>
           </div>
         </div>
+        <div className="chats-catalog">
         <div className="chats-search">
           <input
             type="text"
@@ -192,6 +219,7 @@ export default function Chats({ wsManager, user }: ChatsProps) {
             ))
           )}
         </div>
+        </div>
       </div>
       <div className="chats-content">
         {selectedChatId ? (
@@ -199,10 +227,16 @@ export default function Chats({ wsManager, user }: ChatsProps) {
             chatId={selectedChatId}
             currentUser={user}
             wsManager={wsManager}
+            inputLabel={chatInputLabel}
+            chatTitle={selectedChat?.name || selectedChat?.title || `Чат ${selectedChatId.slice(0, 8)}`}
           />
         ) : (
           <div className="chats-empty-content">
-            <p>Выберите чат для начала общения</p>
+            <div className="chats-empty-content-inner">
+              <div className="chats-empty-icon">💬</div>
+              <p className="chats-empty-title">Выберите чат для начала общения</p>
+              <p className="chats-empty-desc">Создайте новый чат или выберите существующий из списка слева</p>
+            </div>
           </div>
         )}
       </div>

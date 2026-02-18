@@ -2,7 +2,7 @@
  * AppShell - Главная оболочка приложения с навигацией
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import WebSocketManager from '../core/websocket/manager';
 import { apiClient } from '../core/api/client';
@@ -13,7 +13,9 @@ import Search from './Search';
 import Contacts from './Contacts';
 import Admin from './Admin';
 import Bots from './Bots';
-import Servers from './Servers';
+import ServerView from './ServerView';
+import JoinServer from './JoinServer';
+import JoinChat from './JoinChat';
 import Feedback from './Feedback';
 import Stories from '../components/Stories';
 import './AppShell.css';
@@ -49,6 +51,30 @@ export default function AppShell({ user, onLogout, wsManager }: AppShellProps) {
       });
     }
   }, [nav]);
+
+  // Синхронизация статуса онлайн/офлайн при фокусе и сворачивании окна
+  useEffect(() => {
+    if (!user) return;
+
+    const setStatus = (status: 'online' | 'offline' | 'away') => {
+      apiClient.post('/api/users/me/status', { status }).catch(() => {});
+    };
+
+    if (document.visibilityState === 'visible') {
+      setStatus('online');
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setStatus('online');
+      } else {
+        setStatus('away');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [user]);
 
   // Проверка прав доступа
   const hasAdminAccess = () => {
@@ -92,11 +118,17 @@ export default function AppShell({ user, onLogout, wsManager }: AppShellProps) {
         >
           💬 Чаты
         </Link>
+        <Link to="/join" className={`nav-link ${location.pathname === '/join' ? 'active' : ''}`}>
+          ➕ В чат по ссылке
+        </Link>
         <Link 
           to="/servers" 
           className={`nav-link ${location.pathname.startsWith('/servers') ? 'active' : ''}`}
         >
           🖥️ Серверы
+        </Link>
+        <Link to="/servers/join" className={`nav-link ${location.pathname === '/servers/join' ? 'active' : ''}`}>
+          ➕ В сервер по ссылке
         </Link>
         <Link 
           to="/contacts" 
@@ -154,7 +186,10 @@ export default function AppShell({ user, onLogout, wsManager }: AppShellProps) {
         <Routes>
           <Route path="/" element={<Chats wsManager={wsManager} user={user} />} />
           <Route path="/chats" element={<Chats wsManager={wsManager} user={user} />} />
-          <Route path="/servers" element={<Servers wsManager={wsManager} user={user} />} />
+          <Route path="/servers" element={<ServerView wsManager={wsManager} user={user} />} />
+          <Route path="/servers/join" element={<JoinServer />} />
+          <Route path="/servers/:id" element={<ServerView wsManager={wsManager} user={user} />} />
+          <Route path="/join" element={<JoinChat />} />
           <Route path="/contacts" element={<Contacts wsManager={wsManager} user={user} />} />
           <Route path="/search" element={<Search wsManager={wsManager} user={user} />} />
           <Route path="/bots" element={<Bots wsManager={wsManager} user={user} />} />

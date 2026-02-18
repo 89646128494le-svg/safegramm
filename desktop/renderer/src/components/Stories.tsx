@@ -2,7 +2,6 @@
  * Stories Component - Компонент историй
  */
 
-import React from 'react';
 import './Stories.css';
 
 interface StoriesProps {

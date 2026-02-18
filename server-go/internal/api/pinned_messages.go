@@ -167,9 +167,8 @@ func GetPinnedMessages(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем доступ к чату
-		var member models.ChatMember
-		if err := db.Where("chat_id = ? AND user_id = ?", chatID, userIDStr).First(&member).Error; err != nil {
+		// Проверяем доступ к чату (в т.ч. для чатов каналов — по членству в сервере)
+		if _, ok := ensureChatAccess(db, chatID, userIDStr); !ok {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
 		}

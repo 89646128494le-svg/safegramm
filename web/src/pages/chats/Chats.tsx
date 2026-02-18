@@ -133,9 +133,19 @@ export default function Chats() {
             const presenceData = data.data || data;
             const userId = presenceData.userId;
             const status = presenceData.status;
-            
-            // Обновляем статус пользователя
-            if (userId && status) {
+            const onlineIds: string[] = Array.isArray(presenceData.online) ? presenceData.online : [];
+
+            if (onlineIds.length > 0) {
+              const onlineSet = new Set(onlineIds);
+              setUsers(prev => {
+                const next = new Map<string, User>();
+                prev.forEach((u, id) => {
+                  next.set(id, { ...u, status: onlineSet.has(id) ? 'online' : 'offline' });
+                });
+                return next;
+              });
+              setCurrentUser(prev => prev ? { ...prev, status: onlineSet.has(prev.id) ? 'online' : 'offline' } : prev);
+            } else if (userId && status) {
               setUsers(prev => {
                 const newMap = new Map(prev);
                 const user = newMap.get(userId);
@@ -144,8 +154,6 @@ export default function Chats() {
                 }
                 return newMap;
               });
-              
-              // Обновляем статус текущего пользователя
               if (userId === currentUser?.id) {
                 setCurrentUser(prev => prev ? { ...prev, status: status === 'online' ? 'online' : 'offline' } : prev);
               }
@@ -526,76 +534,55 @@ export default function Chats() {
           </div>
         </div>
 
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)'}}>
-          <h2 className="title" style={{fontSize: '20px', fontWeight: '700'}}>Мои чаты</h2>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              onClick={() => setShowGlobalSearch(true)}
-              title="Глобальный поиск (Ctrl+K)"
-              style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: '6px',
-                padding: '6px 10px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              🔍
-            </button>
-            <span className="badge">{filteredChats.length}</span>
-          </div>
-        </div>
-        
-        {/* Фильтры чатов */}
-        <ChatFilters
-          activeFilter={activeFilter}
-          onFilterChange={setActiveFilter}
-          unreadCount={unreadCount}
-          starredCount={starredCount}
-        />
-        <div style={{ margin: 'var(--spacing-md) 0', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-          <button 
-            data-new-chat
-            onClick={() => setShowDMModal(true)}
-            className="btn btn-primary"
-            style={{ width: '100%' }}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-sm)' }}>
+          <h2 className="title chats-catalog-title">Мои чаты</h2>
+          <button
+            onClick={() => setShowGlobalSearch(true)}
+            title="Глобальный поиск (Ctrl+K)"
+            className="chats-catalog-search-btn"
           >
-            <span>💬</span> Личный чат
-          </button>
-          <button 
-            onClick={() => setShowGroupModal(true)}
-            className="btn btn-primary"
-            style={{ width: '100%' }}
-          >
-            <span>👥</span> Группа
-          </button>
-          <button 
-            onClick={() => setShowChannelModal(true)}
-            className="btn btn-primary"
-            style={{ width: '100%' }}
-          >
-            <span>📢</span> Канал
+            🔍
           </button>
         </div>
-        <hr />
-        {/* Поиск по чатам */}
-        <div style={{ marginBottom: 'var(--spacing-sm)', padding: '0 var(--spacing-sm)' }}>
+        {/* Поиск по чатам — в каталоге слева */}
+        <div className="chats-catalog-search-wrap">
           <input
             data-chat-search
             type="text"
-            placeholder="🔍 Поиск чатов..."
+            placeholder="Поиск чатов..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: 'var(--spacing-sm)',
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text-primary)',
-              fontSize: '13px'
-            }}
+            className="chats-catalog-search-input"
+          />
+        </div>
+        {/* Кнопки типа чата — каталог */}
+        <div className="chats-catalog-buttons">
+          <button data-new-chat onClick={() => setShowDMModal(true)} className="btn btn-primary">
+            <span>💬</span> Личный чат
+          </button>
+          <button onClick={() => setShowGroupModal(true)} className="btn btn-primary">
+            <span>👥</span> Группа
+          </button>
+          <button onClick={() => setShowChannelModal(true)} className="btn btn-primary">
+            <span>📢</span> Канал
+          </button>
+        </div>
+        <div className="chats-catalog-archived">
+          <button
+            type="button"
+            onClick={() => setShowArchived(!showArchived)}
+            className={showArchived ? 'active' : ''}
+          >
+            {showArchived ? '📂 Активные' : '📁 Архив'}
+          </button>
+        </div>
+        <div className="chats-catalog-filters">
+          <ChatFilters
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
+            unreadCount={unreadCount}
+            starredCount={starredCount}
+            vertical
           />
         </div>
         {loading ? (
@@ -611,25 +598,6 @@ export default function Chats() {
           </div>
         ) : (
           <>
-            <div style={{ marginBottom: 'var(--spacing-sm)' }}>
-              <button
-                onClick={() => {
-                  setShowArchived(!showArchived);
-                }}
-                style={{
-                  width: '100%',
-                  padding: 'var(--spacing-sm)',
-                  background: showArchived ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: showArchived ? 'white' : 'var(--text-primary)',
-                  cursor: 'pointer',
-                  fontSize: '13px'
-                }}
-              >
-                {showArchived ? '📂 Показать активные' : '📁 Показать архивированные'}
-              </button>
-            </div>
             {searchQuery.trim() && filteredChats.length === 0 && (
               <div className="empty-state" style={{ padding: 'var(--spacing-md)' }}>
                 <div className="empty-state-icon">🔍</div>
@@ -669,19 +637,21 @@ export default function Chats() {
           </>
         )}
       </div>
-      <div className="main">
-        {selectedChatId ? (
-          <EnhancedChatWindow
-            chatId={selectedChatId}
-            currentUser={currentUser}
-          />
-        ) : (
-          <div className="empty-state">
-            <div className="empty-state-icon">💬</div>
-            <div className="empty-state-title">Выберите чат для начала общения</div>
-            <div className="empty-state-description">Создайте новый чат или выберите существующий из списка</div>
-          </div>
-        )}
+      <div className="main chats-main">
+        <div className="chats-main-content">
+          {selectedChatId ? (
+            <EnhancedChatWindow
+              chatId={selectedChatId}
+              currentUser={currentUser}
+            />
+          ) : (
+            <div className="empty-state chats-empty-state">
+              <div className="empty-state-icon">💬</div>
+              <div className="empty-state-title">Выберите чат для начала общения</div>
+              <div className="empty-state-description">Создайте новый чат или выберите существующий из списка</div>
+            </div>
+          )}
+        </div>
       </div>
 
       <PromptModal
@@ -718,6 +688,15 @@ export default function Chats() {
         defaultValue=""
         confirmText="Создать"
         cancelText="Отмена"
+      />
+
+      <GlobalChatSearch
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
+        onSelectChat={(id) => {
+          setSelectedChatId(id);
+          setShowGlobalSearch(false);
+        }}
       />
     </div>
   );

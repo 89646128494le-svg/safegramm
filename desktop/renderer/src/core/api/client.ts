@@ -32,6 +32,18 @@ class ApiClient {
     this.loadToken();
   }
 
+  /** Установить базовый URL (для смены сервера / туннеля без пересборки) */
+  setBaseUrl(url: string) {
+    if (url && url.trim()) {
+      this.baseUrl = url.trim().replace(/\/$/, '');
+    }
+  }
+
+  /** Текущий базовый URL */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   /**
    * Загрузка токена из хранилища
    */
@@ -56,10 +68,18 @@ class ApiClient {
   }
 
   /**
-   * Получение токена
+   * Получение токена (из памяти или localStorage — сессия сохраняется после перезагрузки/закрытия)
    */
   getToken(): string | null {
-    return this.token;
+    if (this.token) return this.token;
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('token');
+      if (stored) {
+        this.token = stored;
+        return stored;
+      }
+    }
+    return null;
   }
 
   /**
@@ -185,7 +205,7 @@ class ApiClient {
   /**
    * Обработка ошибок
    */
-  private handleError(error: any, path: string): Error {
+  private handleError(error: any, _path: string): Error {
     if (error instanceof ApiError) {
       return error;
     }
@@ -319,5 +339,15 @@ const getApiUrl = () => {
 };
 
 export const apiClient = new ApiClient(getApiUrl());
+
+/** Установить URL сервера (вызов после получения конфига из Electron) */
+export function setApiBaseUrl(url: string): void {
+  apiClient.setBaseUrl(url);
+}
+
+/** Текущий URL API (для WebSocket и т.д.) */
+export function getApiBaseUrl(): string {
+  return apiClient.getBaseUrl();
+}
 
 export default apiClient;

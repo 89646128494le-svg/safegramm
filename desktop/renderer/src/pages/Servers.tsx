@@ -2,7 +2,7 @@
  * Servers Page - Страница серверов
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiClient } from '../core/api/client';
 import { useNavigate } from 'react-router-dom';
 import './Servers.css';
@@ -21,7 +21,7 @@ interface Server {
   createdAt: number;
 }
 
-export default function Servers({ wsManager, user }: ServersProps) {
+export default function Servers(_props: ServersProps) {
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();

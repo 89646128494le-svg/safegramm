@@ -2,7 +2,7 @@
  * Search Page - Страница поиска
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { apiClient } from '../core/api/client';
 import { useNavigate } from 'react-router-dom';
 import './Search.css';
@@ -12,7 +12,7 @@ interface SearchProps {
   user: any;
 }
 
-export default function Search({ wsManager, user }: SearchProps) {
+export default function Search(_props: SearchProps) {
   const [query, setQuery] = useState('');
   const [searchType, setSearchType] = useState<'all' | 'messages' | 'chats' | 'users'>('all');
   const [results, setResults] = useState<{

@@ -67,6 +67,15 @@ func GetUserStatus(userID string) (string, error) {
 	return client.Get(ctx, "status:"+userID).Result()
 }
 
+// Ping проверяет соединение с Redis. Если клиент не инициализирован, возвращает nil.
+func Ping() error {
+	if client == nil {
+		return nil
+	}
+	_, err := client.Ping(ctx).Result()
+	return err
+}
+
 // Close закрывает соединение с Redis
 func Close() error {
 	if client != nil {

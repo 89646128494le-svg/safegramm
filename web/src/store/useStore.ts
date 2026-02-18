@@ -14,6 +14,8 @@ interface UIState {
   theme: 'light' | 'dark' | 'red-black';
   sidebarOpen: boolean;
   notificationsEnabled: boolean;
+  /** URL прокси для API/WebSocket (как в Telegram). Пусто = прямое подключение. */
+  proxyUrl: string;
 }
 
 interface AppState {
@@ -25,6 +27,7 @@ interface AppState {
   setTheme: (theme: UIState['theme']) => void;
   setSidebarOpen: (open: boolean) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
+  setProxyUrl: (url: string) => void;
   logout: () => void;
 }
 
@@ -35,6 +38,7 @@ export const useStore = create<AppState>()((set) => ({
     theme: (typeof window !== 'undefined' ? localStorage.getItem('theme') : null) as UIState['theme'] || 'dark',
     sidebarOpen: true,
     notificationsEnabled: true,
+    proxyUrl: typeof window !== 'undefined' ? (localStorage.getItem('safegram_proxy_url') || '') : '',
   },
   setUser: (user) => set({ user }),
   setToken: (token) => {
@@ -56,6 +60,13 @@ export const useStore = create<AppState>()((set) => ({
   },
   setSidebarOpen: (open) => set((state) => ({ ui: { ...state.ui, sidebarOpen: open } })),
   setNotificationsEnabled: (enabled) => set((state) => ({ ui: { ...state.ui, notificationsEnabled: enabled } })),
+  setProxyUrl: (url) => {
+    if (typeof window !== 'undefined') {
+      if (url) localStorage.setItem('safegram_proxy_url', url);
+      else localStorage.removeItem('safegram_proxy_url');
+    }
+    set((state) => ({ ui: { ...state.ui, proxyUrl: url } }));
+  },
   logout: () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');

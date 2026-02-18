@@ -2,7 +2,7 @@
  * Profile Page - Страница профиля
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiClient } from '../core/api/client';
 import './Profile.css';
 

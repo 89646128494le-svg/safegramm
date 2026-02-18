@@ -7,6 +7,8 @@ interface ChatFiltersProps {
   onFilterChange: (filter: ChatFilter) => void;
   unreadCount?: number;
   starredCount?: number;
+  /** Вертикальный список в каталоге слева */
+  vertical?: boolean;
 }
 
 export default function ChatFilters({
@@ -14,6 +16,7 @@ export default function ChatFilters({
   onFilterChange,
   unreadCount = 0,
   starredCount = 0,
+  vertical = false,
 }: ChatFiltersProps) {
   const filters: Array<{ id: ChatFilter; label: string; icon: string; count?: number }> = [
     { id: 'all', label: 'Все', icon: '💬' },
@@ -24,15 +27,20 @@ export default function ChatFilters({
   ];
 
   return (
-    <div style={{
-      display: 'flex',
-      gap: '8px',
-      padding: '12px',
-      borderBottom: '1px solid var(--border)',
-      background: 'var(--bg-secondary)',
-      overflowX: 'auto',
-      flexWrap: 'nowrap'
-    }}>
+    <div
+      className={vertical ? 'chat-filters-catalog' : 'chat-filters-row'}
+      style={{
+        display: 'flex',
+        flexDirection: vertical ? 'column' : 'row',
+        gap: '8px',
+        padding: vertical ? '0 0 var(--spacing-md)' : '12px',
+        borderBottom: vertical ? 'none' : '1px solid var(--border)',
+        background: vertical ? 'transparent' : 'var(--bg-secondary)',
+        overflowX: vertical ? 'visible' : 'auto',
+        flexWrap: vertical ? 'nowrap' : 'wrap',
+        justifyContent: vertical ? 'stretch' : 'center',
+      }}
+    >
       {filters.map((filter) => (
         <button
           key={filter.id}

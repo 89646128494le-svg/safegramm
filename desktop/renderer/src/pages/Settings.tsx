@@ -2,7 +2,7 @@
  * Settings Page - Страница настроек
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiClient } from '../core/api/client';
 import './Settings.css';
 
@@ -10,8 +10,11 @@ interface SettingsProps {
   user: any;
 }
 
-export default function Settings({ user }: SettingsProps) {
-  const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security'>('notifications');
+export default function Settings({ user: _user }: SettingsProps) {
+  const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'connection'>('notifications');
+  const [serverUrl, setServerUrl] = useState('');
+  const [serverUrlSaving, setServerUrlSaving] = useState(false);
+  const hasElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
   const [notifications, setNotifications] = useState({
     pushEnabled: true,
     soundEnabled: true,
@@ -39,8 +42,27 @@ export default function Settings({ user }: SettingsProps) {
     loadSettings();
   }, []);
 
+  async function saveServerUrl() {
+    if (!(window as any).electronAPI) return;
+    setServerUrlSaving(true);
+    try {
+      await (window as any).electronAPI.setConfig('serverUrl', serverUrl.trim() || 'http://localhost:8080');
+      if (window.confirm('Адрес сервера сохранён. Перезагрузить приложение для применения?')) {
+        window.location.reload();
+      }
+    } catch (e: any) {
+      alert('Ошибка: ' + (e?.message || e));
+    } finally {
+      setServerUrlSaving(false);
+    }
+  }
+
   async function loadSettings() {
     try {
+      if (hasElectron && (window as any).electronAPI) {
+        const config = await (window as any).electronAPI.getConfig();
+        if (config && config.serverUrl != null) setServerUrl(String(config.serverUrl));
+      }
       const notifData = await apiClient.get('/api/users/me/notifications');
       if (notifData) setNotifications(prev => ({ ...prev, ...notifData }));
 
@@ -113,6 +135,14 @@ export default function Settings({ user }: SettingsProps) {
         >
           Безопасность
         </button>
+        {hasElectron && (
+          <button
+            className={activeTab === 'connection' ? 'active' : ''}
+            onClick={() => setActiveTab('connection')}
+          >
+            Подключение
+          </button>
+        )}
       </div>
 
       <div className="settings-content">
@@ -211,6 +241,26 @@ export default function Settings({ user }: SettingsProps) {
           <div className="settings-section">
             <h3>Безопасность</h3>
             <p>Функции безопасности будут добавлены в следующих версиях.</p>
+          </div>
+        )}
+
+        {activeTab === 'connection' && hasElectron && (
+          <div className="settings-section">
+            <h3>Подключение к серверу</h3>
+            <p className="settings-hint">Укажите адрес API (например, туннель ngrok или ваш ПК). По умолчанию — localhost.</p>
+            <div className="setting-item">
+              <label>Адрес сервера (API)</label>
+              <input
+                type="url"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                placeholder="https://your-tunnel.ngrok.io или http://localhost:8080"
+                className="settings-input"
+              />
+            </div>
+            <button onClick={saveServerUrl} disabled={serverUrlSaving} className="btn btn-primary">
+              {serverUrlSaving ? 'Сохранение...' : 'Сохранить'}
+            </button>
           </div>
         )}
       </div>

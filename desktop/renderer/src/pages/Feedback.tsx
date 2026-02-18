@@ -2,7 +2,7 @@
  * Feedback Page - Страница обратной связи
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { apiClient } from '../core/api/client';
 import './Feedback.css';
 
@@ -10,7 +10,7 @@ interface FeedbackProps {
   user: any;
 }
 
-export default function Feedback({ user }: FeedbackProps) {
+export default function Feedback({ user: _user }: FeedbackProps) {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [loading, setLoading] = useState(false);

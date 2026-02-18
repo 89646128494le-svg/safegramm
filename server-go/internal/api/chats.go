@@ -26,6 +26,57 @@ func parseInt(s string) int {
 	return val
 }
 
+// ensureChatAccess возвращает ChatMember, если пользователь имеет доступ к чату.
+// Для чатов типа "channel" при отсутствии в chat_members проверяет членство в сервере и при успехе добавляет пользователя в чат.
+// Для dm/group при отсутствии записи проверяет участников чата (восстановление доступа при рассинхроне).
+func ensureChatAccess(db *gorm.DB, chatID, userIDStr string) (*models.ChatMember, bool) {
+	var member models.ChatMember
+	if err := db.Where("chat_id = ? AND user_id = ?", chatID, userIDStr).First(&member).Error; err == nil {
+		return &member, true
+	}
+	var chat models.Chat
+	if err := db.First(&chat, "id = ?", chatID).Error; err != nil {
+		return nil, false
+	}
+	if chat.Type == "dm" || chat.Type == "group" {
+		var members []models.ChatMember
+		if err := db.Where("chat_id = ?", chatID).Find(&members).Error; err != nil {
+			return nil, false
+		}
+		for i := range members {
+			if members[i].UserID == userIDStr {
+				return &members[i], true
+			}
+		}
+		return nil, false
+	}
+	if chat.Type != "channel" {
+		return nil, false
+	}
+	var ch models.Channel
+	if err := db.Where("chat_id = ?", chatID).First(&ch).Error; err != nil {
+		return nil, false
+	}
+	var serverMember models.ServerMember
+	if err := db.Where("server_id = ? AND user_id = ?", ch.ServerID, userIDStr).First(&serverMember).Error; err != nil {
+		return nil, false
+	}
+	role := "member"
+	if serverMember.Role == "owner" || serverMember.Role == "admin" {
+		role = serverMember.Role
+	}
+	newMember := models.ChatMember{
+		ID:     uuid.New().String(),
+		ChatID: chatID,
+		UserID: userIDStr,
+		Role:   role,
+	}
+	if err := db.Create(&newMember).Error; err != nil {
+		return nil, false
+	}
+	return &newMember, true
+}
+
 // GetChats возвращает список чатов пользователя
 func GetChats(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -216,9 +267,9 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем доступ
-		var member models.ChatMember
-		if err := db.Where("chat_id = ? AND user_id = ?", chatID, userIDStr).First(&member).Error; err != nil {
+		// Проверяем доступ (в т.ч. для чатов каналов — по членству в сервере)
+		member, ok := ensureChatAccess(db, chatID, userIDStr)
+		if !ok || member == nil {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
 		}
@@ -275,14 +326,23 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 			messageIDs[i] = msg.ID
 		}
 		
-		var readReceipts []models.MessageReadReceipt
+		var readReceiptsSelf []models.MessageReadReceipt
 		if len(messageIDs) > 0 {
-			db.Where("message_id IN ? AND user_id = ?", messageIDs, userIDStr).Find(&readReceipts)
+			db.Where("message_id IN ? AND user_id = ?", messageIDs, userIDStr).Find(&readReceiptsSelf)
 		}
-		
 		readMap := make(map[string]bool)
-		for _, receipt := range readReceipts {
+		for _, receipt := range readReceiptsSelf {
 			readMap[receipt.MessageID] = true
+		}
+
+		// Все read receipts по сообщениям (для отображения «прочитано» у отправленных)
+		var allReceipts []models.MessageReadReceipt
+		if len(messageIDs) > 0 {
+			db.Where("message_id IN ?", messageIDs).Preload("User").Order("read_at DESC").Find(&allReceipts)
+		}
+		receiptsByMessage := make(map[string][]models.MessageReadReceipt)
+		for _, r := range allReceipts {
+			receiptsByMessage[r.MessageID] = append(receiptsByMessage[r.MessageID], r)
 		}
 
 		// Формируем ответ с информацией о replyToMessage и новых типах
@@ -400,9 +460,24 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 				}
 			}
 
-			// Добавляем статус прочтения (только для сообщений не от текущего пользователя)
 			if msg.SenderID != userIDStr {
 				msgData["isRead"] = readMap[msg.ID]
+			}
+			// Список прочитавших (для галочек «прочитано»)
+			if list := receiptsByMessage[msg.ID]; len(list) > 0 {
+				receiptsList := make([]gin.H, len(list))
+				for j, rec := range list {
+					receiptsList[j] = gin.H{
+						"userId": rec.UserID,
+						"readAt": rec.ReadAt,
+						"user": gin.H{
+							"id":       rec.User.ID,
+							"username": rec.User.Username,
+							"avatarUrl": rec.User.AvatarURL,
+						},
+					}
+				}
+				msgData["readReceipts"] = receiptsList
 			}
 
 			result[i] = msgData

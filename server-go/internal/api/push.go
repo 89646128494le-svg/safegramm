@@ -11,15 +11,15 @@ import (
 	"safegram-server/internal/models"
 )
 
-// GetVAPIDPublicKey возвращает публичный VAPID ключ
+// GetVAPIDPublicKey возвращает публичный VAPID ключ. Если ключ не настроен — 200 с key: null (клиент отключит push без ошибки в консоли).
 func GetVAPIDPublicKey() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		publicKey := os.Getenv("VAPID_PUBLIC_KEY")
 		if publicKey == "" {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "vapid_not_configured"})
+			c.JSON(http.StatusOK, gin.H{"key": nil, "configured": false})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"key": publicKey})
+		c.JSON(http.StatusOK, gin.H{"key": publicKey, "configured": true})
 	}
 }
 

@@ -10,17 +10,10 @@ interface CacheOptions {
   version?: number;
 }
 
-interface StoreConfig {
-  name: string;
-  keyPath: string;
-  indexes?: Array<{ name: string; keyPath: string; unique?: boolean }>;
-}
-
 class CacheDatabase {
   private db: IDBDatabase | null = null;
   private dbName: string;
   private version: number;
-  private stores: Map<string, IDBObjectStore> = new Map();
 
   constructor(options: CacheOptions = {}) {
     this.dbName = options.dbName || 'safegram-cache';

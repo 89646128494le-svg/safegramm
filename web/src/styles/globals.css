@@ -170,9 +170,9 @@ body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-u
 a { color: var(--accent); text-decoration: none; }
 input, button, select, textarea { background: #111827; color: var(--fg); border: 1px solid #374151; border-radius: 8px; padding: 10px 12px; }
 button { cursor: pointer; }
-.container { display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+.container { display: grid; grid-template-columns: 320px 1fr; height: 100%; min-height: 0; }
 .sidebar { border-right: 1px solid #374151; padding: 12px; overflow: auto; }
-.main { display: flex; flex-direction: column; height: 100vh; }
+.main { display: flex; flex-direction: column; height: 100%; min-height: 0; flex: 1; min-width: 0; }
 .header { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid #374151; }
 .messages { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .msg { padding: 10px 12px; border: 1px solid #374151; border-radius: 12px; max-width: 70%; }

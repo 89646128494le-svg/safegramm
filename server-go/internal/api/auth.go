@@ -152,13 +152,13 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 
 		// Если у пользователя есть email, требуется подтверждение
 		if user.Email != nil && *user.Email != "" {
-			// Если код email не предоставлен, возвращаем требование подтверждения
+			// Если код email не предоставлен — 200 с флагом, чтобы не было 401 в сети
 			if req.EmailCode == "" {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error":           "email_verification_required",
-					"message":          "Требуется подтверждение email",
-					"hasEmail":         true,
-					"hasCloudCode":     user.PinHash != "",
+				c.JSON(http.StatusOK, gin.H{
+					"error":       "email_verification_required",
+					"message":     "Требуется подтверждение email",
+					"hasEmail":    true,
+					"hasCloudCode": user.PinHash != "",
 				})
 				return
 			}
@@ -177,7 +177,7 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			// Если есть облачный код (PIN), проверяем его
 			if user.PinHash != "" {
 				if req.CloudCode == "" {
-					c.JSON(http.StatusUnauthorized, gin.H{
+					c.JSON(http.StatusOK, gin.H{
 						"error":       "cloud_code_required",
 						"message":     "Требуется облачный код",
 						"hasCloudCode": true,
@@ -196,7 +196,7 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			// Но если есть облачный код, все равно требуем его
 			if user.PinHash != "" {
 				if req.CloudCode == "" {
-					c.JSON(http.StatusUnauthorized, gin.H{
+					c.JSON(http.StatusOK, gin.H{
 						"error":       "cloud_code_required",
 						"message":     "Требуется облачный код",
 						"hasCloudCode": true,

@@ -7,8 +7,7 @@
  * - Закрытый ключ хранится в localStorage (для MVP). Для реального продукта: зашифровать его PIN'ом/паролем и держать в защищённом контейнере.
  */
 
-import { API_URL } from '../services/api';
-const API = API_URL;
+import { getApiBaseUrl } from '../services/api';
 
 async function importPublicKeyJwk(jwk) {
   return await crypto.subtle.importKey(
@@ -45,7 +44,7 @@ export async function ensureKeys() {
     localStorage.setItem('sg_priv', privPkcs8);
     // опубликуем публичный ключ
     const token = localStorage.getItem('token');
-    await fetch(API + '/api/users/public_key', {
+    await fetch(getApiBaseUrl() + '/api/users/public_key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       body: JSON.stringify({ publicKeyJwk: pubJwk })
@@ -53,7 +52,7 @@ export async function ensureKeys() {
   } else {
     // на всякий случай убеждаемся, что он опубликован
     const token = localStorage.getItem('token');
-    await fetch(API + '/api/users/public_key', {
+    await fetch(getApiBaseUrl() + '/api/users/public_key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       body: JSON.stringify({ publicKeyJwk: JSON.parse(pub) })

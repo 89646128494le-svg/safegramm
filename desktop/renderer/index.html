@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:8080 ws://localhost:8080 http://localhost:5173 ws://localhost:5173;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:8080 ws://localhost:8080 http://localhost:5174 ws://localhost:5174 https: wss:;">
   <title>SafeGram Desktop</title>
   <style>
     * {
@@ -11,20 +11,42 @@
       padding: 0;
       box-sizing: border-box;
     }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       background: #1a1a1a;
       color: #ffffff;
-      overflow: hidden;
     }
     #root {
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
+  <script>
+    window.__safeGramLoadStart = Date.now();
+    console.log('[SafeGram] index.html loaded');
+    window.addEventListener('error', function(e) {
+      console.error('[SafeGram] Global error:', e.message, e.filename, e.lineno, e.colno, e.error);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error('[SafeGram] Unhandled rejection:', e.reason);
+    });
+    setTimeout(function() {
+      if (!window.__safeGramAppMounted) {
+        console.error('[SafeGram] Приложение не загрузилось за 3 с. Проверьте вкладку Network: запросы к main-*.js и *.css.');
+      }
+    }, 3000);
+  </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

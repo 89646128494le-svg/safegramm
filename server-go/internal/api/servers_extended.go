@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"safegram-server/internal/models"
+	"safegram-server/internal/websocket"
 )
 
 // GetServerMembers возвращает участников сервера
@@ -177,12 +178,13 @@ func CreateChannel(db *gorm.DB) gin.HandlerFunc {
 			Position: req.Position,
 		}
 
-		// Создаем чат для сообщений канала
+		// Создаем чат для сообщений канала (уникальный InviteLink, чтобы не нарушать uniqueIndex)
 		channelChat := models.Chat{
-			ID:        uuid.New().String(),
-			Type:      "channel",
-			Name:      req.Name,
-			CreatedBy: userIDStr,
+			ID:         uuid.New().String(),
+			Type:       "channel",
+			Name:       req.Name,
+			CreatedBy:  userIDStr,
+			InviteLink: "ch:" + uuid.New().String(),
 		}
 		if err := db.Create(&channelChat).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
@@ -278,3 +280,32 @@ func DeleteChannel(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// GetServerVoiceState возвращает по каждому голосовому каналу сервера список userID участников (для отображения в сайдбаре в стиле Discord).
+func GetServerVoiceState(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		serverID := c.Param("id")
+		userID, _ := c.Get("userID")
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		var member models.ServerMember
+		if err := db.Where("server_id = ? AND user_id = ?", serverID, userIDStr).First(&member).Error; err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		var channels []models.Channel
+		db.Where("server_id = ? AND type = ?", serverID, "voice").Order("position ASC").Find(&channels)
+		out := make(map[string][]string)
+		for _, ch := range channels {
+			if ch.ChatID != "" {
+				participants := wsHub.GetVoiceRoomParticipants(ch.ChatID)
+				if len(participants) > 0 {
+					out[ch.ID] = participants
+				}
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"voiceState": out})
+	}
+}

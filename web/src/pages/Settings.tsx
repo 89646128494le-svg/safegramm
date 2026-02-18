@@ -11,6 +11,7 @@ import CalendarIntegration from '../components/CalendarIntegration';
 import TodoIntegration from '../components/TodoIntegration';
 import LanguageSelector from '../components/LanguageSelector';
 import { useTranslation } from '../i18n';
+import { useStore } from '../store/useStore';
 import '../styles/settings.css';
 
 interface NotificationSettings {
@@ -59,7 +60,9 @@ interface SecuritySettings {
 }
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'appearance' | 'tools'>('notifications');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'appearance' | 'connection' | 'tools'>('notifications');
+  const { ui, setProxyUrl } = useStore();
+  const [proxyInput, setProxyInput] = useState('');
   const [showBackupManager, setShowBackupManager] = useState(false);
   const [notifications, setNotifications] = useState<NotificationSettings>({
     pushEnabled: true,
@@ -116,6 +119,10 @@ export default function Settings() {
     loadSettings();
     loadUser();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'connection') setProxyInput(ui.proxyUrl || '');
+  }, [activeTab, ui.proxyUrl]);
 
   const loadUser = async () => {
     try {
@@ -308,6 +315,18 @@ export default function Settings() {
           onClick={() => setActiveTab('appearance')}
         >
           🖼️ Внешний вид
+        </button>
+        <button
+          className={`settings-tab ${activeTab === 'connection' ? 'active' : ''}`}
+          onClick={() => { setActiveTab('connection'); setProxyInput(ui.proxyUrl || ''); }}
+        >
+          🌐 Подключение
+        </button>
+        <button
+          className={`settings-tab ${activeTab === 'tools' ? 'active' : ''}`}
+          onClick={() => setActiveTab('tools')}
+        >
+          🔧 Инструменты
         </button>
       </div>
 
@@ -934,70 +953,35 @@ export default function Settings() {
           </div>
         )}
 
-        {activeTab === 'tools' && (
+        {activeTab === 'connection' && (
           <div className="settings-section">
-            <h2>Функции и инструменты</h2>
-            
+            <h2>Подключение (как в Telegram)</h2>
+            <p className="settings-description">
+              Прокси для API и WebSocket. Укажите полный URL сервера, через который идут запросы (например https://proxy.example.com). Оставьте пустым для прямого подключения.
+            </p>
             <div className="settings-group">
-              <h3>Экспорт и резервное копирование</h3>
+              <h3>Прокси / базовый URL</h3>
               <div className="settings-item">
                 <div className="settings-item-label">
-                  <span>Резервное копирование</span>
+                  <span>URL прокси или API</span>
                   <span className="settings-item-description">
-                    Создайте резервную копию всех ваших чатов и сообщений
+                    Все запросы и WebSocket будут идти через этот адрес. После изменения перезагрузите страницу.
                   </span>
                 </div>
+                <input
+                  type="url"
+                  value={proxyInput}
+                  onChange={e => setProxyInput(e.target.value)}
+                  onBlur={() => setProxyUrl(proxyInput.trim())}
+                  placeholder="https://api.example.com или оставьте пустым"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', marginTop: 8 }}
+                />
                 <button
-                  onClick={() => setShowBackupManager(true)}
-                  className="settings-button primary"
+                  onClick={() => { setProxyUrl(proxyInput.trim()); setSaveStatus('success'); setTimeout(() => setSaveStatus(null), 2000); }}
+                  className="settings-save-button"
+                  style={{ marginTop: 12 }}
                 >
-                  💾 Управление резервными копиями
-                </button>
-              </div>
-            </div>
-
-            <div className="settings-group">
-              <h3>Интеграции</h3>
-              <div className="settings-item">
-                <div className="settings-item-label">
-                  <span>Боты</span>
-                  <span className="settings-item-description">
-                    Управление ботами для автоматизации
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowBotManager(true)}
-                  className="settings-button primary"
-                >
-                  🤖 Управление ботами
-                </button>
-              </div>
-              <div className="settings-item">
-                <div className="settings-item-label">
-                  <span>Календарь</span>
-                  <span className="settings-item-description">
-                    Управление событиями и напоминаниями
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowCalendar(true)}
-                  className="settings-button primary"
-                >
-                  📅 Календарь
-                </button>
-              </div>
-              <div className="settings-item">
-                <div className="settings-item-label">
-                  <span>Задачи</span>
-                  <span className="settings-item-description">
-                    Управление задачами и todo списками
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowTodos(true)}
-                  className="settings-button primary"
-                >
-                  ✅ Задачи
+                  Сохранить
                 </button>
               </div>
             </div>

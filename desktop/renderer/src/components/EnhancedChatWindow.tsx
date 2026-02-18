@@ -23,9 +23,15 @@ interface EnhancedChatWindowProps {
   chatId: string;
   currentUser: any;
   wsManager: WebSocketManager | null;
+  /** Подпись над полем ввода: для сервера "Канал: #name", для мессенджера "Чат: name" */
+  channelName?: string;
+  /** Если задано, показывается вместо "Канал: #channelName" (например "Чат: Личный чат") */
+  inputLabel?: string;
+  /** Заголовок чата в шапке */
+  chatTitle?: string;
 }
 
-export default function EnhancedChatWindow({ chatId, currentUser, wsManager }: EnhancedChatWindowProps) {
+export default function EnhancedChatWindow({ chatId, currentUser, wsManager, channelName, inputLabel, chatTitle }: EnhancedChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -123,6 +129,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, wsManager }: E
 
   return (
     <div className="enhanced-chat-window">
+      {(chatTitle || inputLabel) && (
+        <div className="chat-window-header">
+          <h2 className="chat-window-title">{chatTitle || inputLabel}</h2>
+        </div>
+      )}
       <div className="chat-messages">
         {messages.map(message => {
           const sender = users.get(message.senderId);
@@ -172,18 +183,27 @@ export default function EnhancedChatWindow({ chatId, currentUser, wsManager }: E
         })}
         <div ref={messagesEndRef} />
       </div>
-      <div className="chat-input">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Введите сообщение..."
-          rows={1}
-          className="input-textarea"
-        />
-        <button onClick={handleSend} disabled={!text.trim()} className="btn btn-primary">
-          Отправить
-        </button>
+      <div className="chat-input-bar">
+        {(inputLabel || channelName) && (
+          <div className="chat-input-label">{inputLabel ?? `Канал: #${channelName}`}</div>
+        )}
+        <div className="chat-input-row">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ввод сообщения..."
+            rows={1}
+            className="input-textarea"
+          />
+          <div className="chat-input-actions">
+            <button type="button" className="chat-input-icon-btn" title="Поиск">🔍</button>
+            <button type="button" className="chat-input-icon-btn" title="Медиа">📎 Медиа</button>
+            <button onClick={handleSend} disabled={!text.trim()} className="btn btn-primary">
+              Отправить
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

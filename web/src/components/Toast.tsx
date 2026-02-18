@@ -155,10 +155,23 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
 let toastIdCounter = 0;
 const toastListeners = new Set<(toast: { id: string; message: string; type?: 'success' | 'error' | 'warning' | 'info' }) => void>();
 
+declare global {
+  interface Window {
+    electronAPI?: {
+      showNotification: (opts: { title: string; body: string }) => void;
+    };
+  }
+}
+
 export function showToast(message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') {
   const id = `toast-${++toastIdCounter}`;
   const toast = { id, message, type };
   toastListeners.forEach(listener => listener(toast));
+  if (typeof window !== 'undefined' && window.electronAPI?.showNotification) {
+    try {
+      window.electronAPI.showNotification({ title: 'SafeGram', body: message });
+    } catch (_) {}
+  }
   return id;
 }
 

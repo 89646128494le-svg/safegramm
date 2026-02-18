@@ -59,12 +59,13 @@ func CreateServer(db *gorm.DB) gin.HandlerFunc {
 		server.InviteLink = base64.URLEncoding.EncodeToString(b)
 		db.Model(&models.Server{}).Where("id = ?", server.ID).Update("invite_link", server.InviteLink)
 
-		// Создаем чат для канала по умолчанию
+		// Создаем чат для канала по умолчанию (уникальный InviteLink)
 		channelChat := models.Chat{
-			ID:        uuid.New().String(),
+			ID:         uuid.New().String(),
 			Type:      "channel",
 			Name:      "general",
 			CreatedBy: userIDStr,
+			InviteLink: "ch:" + uuid.New().String(),
 		}
 		db.Create(&channelChat)
 

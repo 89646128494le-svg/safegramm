@@ -2,7 +2,7 @@
  * Chats List Component
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { apiClient } from '../core/api/client';
 import WebSocketManager from '../core/websocket/manager';
 import './Chats.css';
@@ -50,7 +50,7 @@ export default function Chats({ selectedChatId, onSelectChat, wsManager }: Chats
     }
   }
 
-  function handleNewMessage(data: any) {
+  function handleNewMessage(_data: any) {
     // Обновление списка чатов при новом сообщении
     loadChats();
   }

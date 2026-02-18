@@ -8,8 +8,10 @@ import App from './App';
 import './styles/index.css';
 
 // Инициализация приложения
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root')!;
+ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+if (typeof window !== 'undefined') (window as any).__safeGramAppMounted = true;

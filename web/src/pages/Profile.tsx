@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { api, API_URL } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 import { showToast } from '../components/Toast';
 import { PromptModal } from '../components/Modal';
 
@@ -92,7 +92,7 @@ export default function Profile() {
       setUploadingAvatar(true);
       const form = new FormData();
       form.append('avatar', file);
-      const rsp = await fetch(`${API_URL}/api/users/me/avatar`, {
+      const rsp = await fetch(`${getApiBaseUrl()}/api/users/me/avatar`, {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') },
         body: form

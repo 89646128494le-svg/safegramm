@@ -80,9 +80,8 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем доступ к чату
-		var member models.ChatMember
-		if err := db.Where("chat_id = ? AND user_id = ?", req.ChatID, userIDStr).First(&member).Error; err != nil {
+		// Проверяем доступ к чату (в т.ч. для чатов каналов — по членству в сервере)
+		if _, ok := ensureChatAccess(db, req.ChatID, userIDStr); !ok {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
 		}
@@ -754,9 +753,8 @@ func MarkChatRead(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем доступ к чату
-		var member models.ChatMember
-		if err := db.Where("chat_id = ? AND user_id = ?", chatID, userIDStr).First(&member).Error; err != nil {
+		// Проверяем доступ к чату (в т.ч. для чатов каналов — по членству в сервере)
+		if _, ok := ensureChatAccess(db, chatID, userIDStr); !ok {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
 		}
@@ -840,7 +838,7 @@ func GetMessageReadReceipts(db *gorm.DB) gin.HandlerFunc {
 
 		// Получаем все записи о прочтении
 		var receipts []models.MessageReadReceipt
-		if err := db.Where("message_id = ?").
+		if err := db.Where("message_id = ?", messageID).
 			Preload("User").
 			Order("read_at DESC").
 			Find(&receipts).Error; err != nil {

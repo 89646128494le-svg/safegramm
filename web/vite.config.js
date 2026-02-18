@@ -12,18 +12,27 @@ export default defineConfig({
   },
   build: {
     minify: 'esbuild',
-    sourcemap: process.env.NODE_ENV === 'development', // Source maps только в dev
+    sourcemap: process.env.NODE_ENV === 'development',
+    target: 'es2020',
     rollupOptions: {
       output: {
-        // Разделение кода для лучшего кэширования
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'ui-vendor': ['framer-motion', 'lucide-react'],
-          'utils-vendor': ['zustand', '@tanstack/react-query']
-        }
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react/')) return 'react-vendor';
+            if (id.includes('react-router')) return 'router';
+            if (id.includes('framer-motion') || id.includes('lucide-react')) return 'ui-vendor';
+            if (id.includes('zustand') || id.includes('@tanstack/react-query')) return 'utils-vendor';
+            if (id.includes('jspdf') || id.includes('jszip')) return 'pdf-zip';
+          }
+          if (id.includes('pages/AppShell') || id.includes('pages/chats')) return 'app-shell';
+          if (id.includes('components/EnhancedChatWindow')) return 'chat-window';
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
       },
     },
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 800,
     // В production удаляем console.log
     ...(process.env.NODE_ENV === 'production' && {
       terserOptions: {

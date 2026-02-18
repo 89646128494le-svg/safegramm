@@ -5,6 +5,8 @@ import { api } from '../../services/api';
 import { showToast } from '../../components/Toast';
 import { ConfirmModal, PromptModal } from '../../components/Modal';
 import EnhancedChatWindow from '../../components/EnhancedChatWindow';
+import VoiceChannelList from '../../components/voice/VoiceChannelList';
+import VoiceChannelView from '../../components/voice/VoiceChannelView';
 import { useStore } from '../../store/useStore';
 
 interface Server {
@@ -61,6 +63,7 @@ export default function ServerView() {
     channelId: '',
     channelName: ''
   });
+  const [voiceState, setVoiceState] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (id) {
@@ -70,6 +73,23 @@ export default function ServerView() {
       loadMembers();
     }
   }, [id]);
+
+  const loadVoiceState = async () => {
+    if (!id) return;
+    try {
+      const data = await api(`/api/servers/${id}/voice-state`);
+      setVoiceState(data.voiceState || {});
+    } catch {
+      setVoiceState({});
+    }
+  };
+
+  useEffect(() => {
+    if (!id || !server) return;
+    loadVoiceState();
+    const t = setInterval(loadVoiceState, 5000);
+    return () => clearInterval(t);
+  }, [id, server?.id]);
 
   const loadServer = async () => {
     try {
@@ -108,7 +128,13 @@ export default function ServerView() {
   const loadMembers = async () => {
     try {
       const data = await api(`/api/servers/${id}/members`);
-      setMembers(data.members || []);
+      const raw = data.members || [];
+      setMembers(raw.map((m: any) => ({
+        id: m.userId ?? m.id,
+        username: m.user?.username ?? m.username ?? '?',
+        avatarUrl: m.user?.avatarUrl ?? m.avatarUrl,
+        role: m.role ?? 'member',
+      })));
     } catch (e: any) {
       console.error('Failed to load members:', e);
     } finally {
@@ -370,25 +396,12 @@ export default function ServerView() {
           <div className="small" style={{color: 'var(--subtle, #9ca3af)', fontWeight: '600', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.5px', marginBottom: '12px'}}>
             ГОЛОСОВЫЕ КАНАЛЫ
           </div>
-          {voiceChannels.length === 0 ? (
-            <div className="small" style={{color: 'var(--subtle, #9ca3af)', fontStyle: 'italic', padding: '8px'}}>
-              Нет каналов
-            </div>
-          ) : (
-            voiceChannels.map(channel => (
-              <div
-                key={channel.id}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  color: 'var(--fg, #e5e7eb)',
-                  marginBottom: '4px'
-                }}
-              >
-                🔊 {channel.name}
-              </div>
-            ))
-          )}
+          <VoiceChannelList
+            channels={voiceChannels}
+            selectedChannelId={selectedChannelId}
+            voiceState={voiceState}
+            onSelectChannel={(ch) => setSelectedChannelId(ch.id)}
+          />
         </div>
 
         <hr style={{margin: '20px 0'}} />
@@ -426,7 +439,7 @@ export default function ServerView() {
                   fontSize: '14px',
                   flexShrink: 0
                 }}>
-                  {member.username[0].toUpperCase()}
+                  {(member.username || '?')[0].toUpperCase()}
                 </div>
                 <div style={{flex: 1, minWidth: 0}}>
                   <div style={{fontSize: '14px', fontWeight: '500'}}>{member.username}</div>
@@ -440,27 +453,49 @@ export default function ServerView() {
         </div>
       </div>
 
-      <div className="main">
+      <div className="main" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {selectedChannelId ? (
           <div style={{
             padding: '24px',
             background: 'var(--panel, rgba(31, 41, 55, 0.6))',
             borderRadius: '12px',
-            height: '100%'
+            height: '100%',
+            minHeight: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
             <div style={{fontSize: '20px', fontWeight: '600', marginBottom: '12px'}}>
               Канал: #{channels.find(c => c.id === selectedChannelId)?.name || 'Неизвестный'}
             </div>
             {(() => {
               const ch = channels.find(c => c.id === selectedChannelId);
-              if (!ch?.chatId) {
-                return <div className="empty" style={{padding: '48px'}}>У канала нет chatId (переоткройте сервер/пересоздайте канал)</div>;
-              }
+              if (!ch) return null;
               if (!user) {
                 return <div className="empty" style={{padding: '48px'}}>Нужно войти</div>;
               }
+              if (ch.type === 'voice') {
+                if (!ch.chatId) {
+                  return <div className="empty" style={{padding: '48px'}}>У голосового канала нет привязки к чату</div>;
+                }
+                const membersMap = new Map(members.map((m) => [m.id, { username: m.username, avatarUrl: m.avatarUrl }]));
+                return (
+                  <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                    <VoiceChannelView
+                      chatId={ch.chatId}
+                      channelName={ch.name}
+                      currentUserId={user.id}
+                      autoJoin
+                      membersMap={membersMap}
+                    />
+                  </div>
+                );
+              }
+              if (!ch.chatId) {
+                return <div className="empty" style={{padding: '48px'}}>У канала нет chatId</div>;
+              }
               return (
-                <div style={{height: 'calc(100% - 48px)'}}>
+                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                   <EnhancedChatWindow
                     chatId={ch.chatId}
                     currentUser={{ id: user.id, username: user.username, avatarUrl: user.avatarUrl, status: user.status } as any}

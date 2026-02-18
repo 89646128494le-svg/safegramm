@@ -2,7 +2,7 @@
  * Main Page - Главная страница приложения
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import WebSocketManager from '../core/websocket/manager';
 import Chats from '../components/Chats';
 import ChatWindow from '../components/ChatWindow';

@@ -10,7 +10,7 @@ import (
 	"safegram-server/internal/redis"
 )
 
-// GetCurrentUser возвращает текущего пользователя
+// GetCurrentUser возвращает текущего пользователя (статус онлайн — из Redis).
 func GetCurrentUser(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, _ := c.Get("userID")
@@ -21,21 +21,26 @@ func GetCurrentUser(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Парсим роли из JSON строки
 		roles := user.ParseRoles()
+		status := user.Status
+		if isOnline, _ := redis.IsOnline(user.ID); isOnline {
+			status = "online"
+		} else if status == "" {
+			status = "offline"
+		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"id":                    user.ID,
-			"username":              user.Username,
-			"roles":                 roles,
-			"plan":                  user.Plan,
-			"avatarUrl":              user.AvatarURL,
-			"about":                 user.About,
-			"status":                user.Status,
-			"profileColor":          user.ProfileColor,
-			"showBio":               user.ShowBio,
-			"showAvatar":            user.ShowAvatar,
-			"lastSeen":              user.LastSeen,
+			"id":           user.ID,
+			"username":     user.Username,
+			"roles":        roles,
+			"plan":         user.Plan,
+			"avatarUrl":    user.AvatarURL,
+			"about":        user.About,
+			"status":       status,
+			"profileColor": user.ProfileColor,
+			"showBio":      user.ShowBio,
+			"showAvatar":   user.ShowAvatar,
+			"lastSeen":     user.LastSeen,
 		})
 	}
 }
