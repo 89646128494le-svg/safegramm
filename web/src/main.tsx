@@ -11,9 +11,12 @@ import './styles/mobile.css';
 
 i18n.setLocale(i18n.getLocale());
 
-// Загружаем config.json (apiUrl) перед первым рендером — для деплоя на Vercel при API на своём ПК
-loadApiConfig().then(() => {
-  createRoot(document.getElementById('root')!).render(
+// Конфиг API подгружается в фоне; первый рендер сразу — без ожидания config.json
+loadApiConfig();
+
+const root = document.getElementById('root');
+if (root) {
+  createRoot(root).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter
         future={{
@@ -25,4 +28,4 @@ loadApiConfig().then(() => {
       </BrowserRouter>
     </QueryClientProvider>
   );
-});
+}

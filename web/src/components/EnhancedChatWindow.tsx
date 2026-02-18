@@ -177,6 +177,7 @@ interface EnhancedChatWindowProps {
   chatId: string;
   currentUser: User;
   onClose?: () => void;
+  onBack?: () => void;
   chatMembers?: string[];
   onMarkAsRead?: () => void;
 }
@@ -227,7 +228,7 @@ const playCallSound = () => {
   }
 };
 
-export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatMembers, onMarkAsRead }: EnhancedChatWindowProps) {
+export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBack, chatMembers, onMarkAsRead }: EnhancedChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -2140,6 +2141,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, chatM
   return (
     <div className="enhanced-chat-window">
         <div className="chat-header">
+          {onBack && (
+            <button type="button" className="chat-back-btn-mobile" onClick={onBack} aria-label="Назад к списку чатов">
+              ←
+            </button>
+          )}
           <div className="chat-title">
             {chatInfoRef.current ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>

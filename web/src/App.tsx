@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Suspense, lazy } from 'react';
+import React, { useEffect, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { api } from './services/api';
 import { useStore } from './store/useStore';
@@ -15,54 +15,51 @@ const Register = lazy(() => import('./pages/Register'));
 const AppShell = lazy(() => import('./pages/AppShell'));
 
 const PageFallback = () => (
-  <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
-    <span style={{ color: 'var(--text-secondary)' }}>Загрузка...</span>
+  <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)' }}>
+    <div style={{ width: 24, height: 24, border: '2px solid rgba(124,108,255,0.3)', borderTopColor: '#7c6cff', borderRadius: '50%', animation: 'sg-spin 0.7s linear infinite' }} />
   </div>
 );
 
 export default function App() {
   const { token, setToken, setUser, user } = useStore();
-  const [authChecking, setAuthChecking] = useState(true);
+  const authChecked = useRef(false);
 
-  const checkAuth = async () => {
+  useEffect(() => {
+    if (authChecked.current) return;
+    authChecked.current = true;
     const t = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
     if (!t) {
       setUser(null);
-      setAuthChecking(false);
       return;
     }
-    try {
-      const userData = await api('/api/users/me');
-      setToken(t);
-      setUser(userData);
-    } catch (err: any) {
-      const status = err?.status;
-      const code = err?.errorCode || '';
-      const msg = (err?.message || '').toLowerCase();
-      if (status === 401 || status === 403 || code === 'unauthorized' || msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('авторизац')) {
-        setToken(null);
-        setUser(null);
-      } else if (!user) {
-        setUser(null);
-      }
-    } finally {
-      setAuthChecking(false);
+    api('/api/users/me')
+      .then((userData) => {
+        setToken(t);
+        setUser(userData);
+      })
+      .catch((err: any) => {
+        const status = err?.status;
+        const code = err?.errorCode || '';
+        const msg = (err?.message || '').toLowerCase();
+        if (status === 401 || status === 403 || code === 'unauthorized' || msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('авторизац') || msg.includes('токен')) {
+          setToken(null);
+          setUser(null);
+        }
+      });
+  }, [token, setToken, setUser]);
+
+  useEffect(() => {
+    if (token) import('./pages/AppShell');
+  }, [token]);
+
+  const handleAuthSuccess = () => {
+    const t = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+    if (t) {
+      api('/api/users/me').then((userData) => { setToken(t); setUser(userData); }).catch(() => { setToken(null); setUser(null); });
     }
   };
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const handleAuthSuccess = () => {
-    checkAuth();
-  };
-
-  const isAuthenticated = !!user && !!token;
-
-  if (authChecking) {
-    return <PageFallback />;
-  }
+  const isAuthenticated = !!(token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null));
 
   return (
     <ErrorBoundary>
@@ -70,6 +67,9 @@ export default function App() {
         <Routes>
         <Route path="/" element={
           isAuthenticated ? <Navigate to="/app/chats" replace /> : <Landing />
+        } />
+        <Route path="/app/*" element={
+          isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
         } />
         <Route path="/features" element={<Features />} />
         <Route path="/pricing" element={<Pricing />} />
@@ -81,9 +81,6 @@ export default function App() {
         } />
         <Route path="/register" element={
           isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
-        } />
-        <Route path="/app/*" element={
-          isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

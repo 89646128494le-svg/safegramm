@@ -2,6 +2,10 @@
 /* Импорт современного дизайна */
 @import './modern.css';
 
+@keyframes sg-spin {
+  to { transform: rotate(360deg); }
+}
+
 :root {
   --bg: #0a0e1a;
   --fg: #f0f4f8;

@@ -3,12 +3,16 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
+  },
   server: { 
     port: 5173, 
     host: true 
   },
   optimizeDeps: {
-    exclude: ['jspdf', 'jszip'] // Исключаем из предварительной оптимизации
+    include: ['react', 'react-dom', 'react/jsx-runtime', 'react-router-dom'],
+    exclude: ['jspdf', 'jszip'],
   },
   build: {
     minify: 'esbuild',
@@ -18,8 +22,7 @@ export default defineConfig({
       output: {
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
-            if (id.includes('react-dom') || id.includes('react/')) return 'react-vendor';
-            if (id.includes('react-router')) return 'router';
+            if (id.includes('react-dom') || id.includes('react/') || id.includes('react-router')) return 'react-vendor';
             if (id.includes('framer-motion') || id.includes('lucide-react')) return 'ui-vendor';
             if (id.includes('zustand') || id.includes('@tanstack/react-query')) return 'utils-vendor';
             if (id.includes('jspdf') || id.includes('jszip')) return 'pdf-zip';

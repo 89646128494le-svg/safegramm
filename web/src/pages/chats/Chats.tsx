@@ -9,6 +9,7 @@ import ChatFilters, { ChatFilter } from '../../components/ChatFilters';
 import GlobalChatSearch from '../../components/GlobalChatSearch';
 import ChatListItem from '../../components/ChatListItem';
 import { keyboardShortcuts, defaultChatShortcuts } from '../../utils/keyboardShortcuts';
+import { useStore } from '../../store/useStore';
 
 // Функция для воспроизведения звука звонка
 const playCallSound = () => {
@@ -65,6 +66,7 @@ interface User {
 }
 
 export default function Chats() {
+  const { ui, setSidebarOpen } = useStore();
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -78,6 +80,12 @@ export default function Chats() {
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [starredChats, setStarredChats] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
+  }, [setSidebarOpen]);
 
   useEffect(() => {
     loadUser();
@@ -476,24 +484,24 @@ export default function Chats() {
   if (!currentUser) {
     return (
       <div className="container">
-        <div className="empty">Загрузка...      </div>
-      
-      {/* Глобальный поиск */}
-      <GlobalChatSearch
-        isOpen={showGlobalSearch}
-        onClose={() => setShowGlobalSearch(false)}
-        onSelectChat={(chatId) => {
-          setSelectedChatId(chatId);
-          setShowGlobalSearch(false);
-        }}
-      />
-    </div>
-  );
-}
+        <div className="empty">Загрузка...</div>
+        <GlobalChatSearch
+          isOpen={showGlobalSearch}
+          onClose={() => setShowGlobalSearch(false)}
+          onSelectChat={(chatId) => {
+            setSelectedChatId(chatId);
+            setShowGlobalSearch(false);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="container">
-      <div className="sidebar">
+      <div className={`sidebar-overlay ${ui.sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} aria-hidden="true" />
+      <div className={`sidebar ${ui.sidebarOpen ? 'open' : ''}`} aria-hidden={!ui.sidebarOpen}>
+        <button type="button" className="sidebar-close-btn-mobile" onClick={() => setSidebarOpen(false)} aria-label="Закрыть">✕</button>
         {/* Профиль пользователя */}
         <div className="user-profile-card" style={{
           padding: 'var(--spacing-md)',
@@ -617,7 +625,10 @@ export default function Chats() {
                       unreadCount: (chat as any).unreadCount || 0,
                     }}
                     isSelected={selectedChatId === chat.id}
-                    onClick={() => setSelectedChatId(chat.id)}
+                    onClick={() => {
+                      setSelectedChatId(chat.id);
+                      if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false);
+                    }}
                     onArchive={() => {
                       if (chat.archivedAt) {
                         unarchiveChat(chat.id);
@@ -638,11 +649,23 @@ export default function Chats() {
         )}
       </div>
       <div className="main chats-main">
+        {!selectedChatId && (
+          <div className="chats-mobile-menu-bar">
+            <button type="button" className="chats-mobile-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Открыть список чатов">
+              <span aria-hidden>☰</span>
+            </button>
+            <span className="chats-mobile-menu-title">Чаты</span>
+          </div>
+        )}
         <div className="chats-main-content">
           {selectedChatId ? (
             <EnhancedChatWindow
               chatId={selectedChatId}
               currentUser={currentUser}
+              onBack={() => {
+                setSelectedChatId('');
+                setSidebarOpen(false);
+              }}
             />
           ) : (
             <div className="empty-state chats-empty-state">

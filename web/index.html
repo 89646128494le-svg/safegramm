@@ -7,25 +7,16 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <title>SafeGram</title>
+  <link rel="preload" href="/config.json" as="fetch" crossorigin />
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-    #root {
-      min-height: 100vh;
-    }
+    @keyframes sg-spin{to{transform:rotate(360deg)}}
+    body{margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+    #root{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0b1020 0%,#1a1f35 100%)}
+    #root .sg-spinner{width:24px;height:24px;border:2px solid rgba(124,108,255,.3);border-top-color:#7c6cff;border-radius:50%;animation:sg-spin .7s linear infinite}
   </style>
 </head>
 <body>
-  <div id="root">
-    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #0b1020 0%, #1a1f35 100%); color: #e2e8f0;">
-      <div>Загрузка SafeGram...</div>
-    </div>
-  </div>
+  <div id="root"><div class="sg-spinner" aria-hidden="true"></div></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
