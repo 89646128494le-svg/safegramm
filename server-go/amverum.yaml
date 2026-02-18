@@ -1,0 +1,14 @@
+# Конфигурация деплоя SafeGram server-go на Amvera (Amverum Cloud)
+# Документация: https://docs.amverum.com
+
+build:
+  # Сборка Go-приложения
+  build: go build -o main .
+  # Артефакт — бинарник в /app
+  artifacts: main
+
+run:
+  # Порт API (должен совпадать с PORT в переменных окружения)
+  port: 8080
+  # Команда запуска
+  run: ./main
