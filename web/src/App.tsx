@@ -3,8 +3,9 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { api } from './services/api';
 import { useStore } from './store/useStore';
 import ErrorBoundary from './components/ErrorBoundary';
+import Landing from './pages/Landing';
+import AppShell from './pages/AppShell';
 
-const Landing = lazy(() => import('./pages/Landing'));
 const Features = lazy(() => import('./pages/Features'));
 const Pricing = lazy(() => import('./pages/Pricing'));
 const About = lazy(() => import('./pages/About'));
@@ -12,7 +13,6 @@ const Privacy = lazy(() => import('./pages/Privacy'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
-const AppShell = lazy(() => import('./pages/AppShell'));
 
 const LOAD_TIMEOUT_MS = 12000;
 
@@ -65,10 +65,6 @@ export default function App() {
         }
       });
   }, [token, setToken, setUser]);
-
-  useEffect(() => {
-    if (token) import('./pages/AppShell');
-  }, [token]);
 
   const handleAuthSuccess = () => {
     const t = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
