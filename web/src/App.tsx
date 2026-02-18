@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, Suspense, lazy } from 'react';
+import React, { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { api } from './services/api';
 import { useStore } from './store/useStore';
@@ -14,11 +14,29 @@ const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const AppShell = lazy(() => import('./pages/AppShell'));
 
-const PageFallback = () => (
-  <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)' }}>
-    <div style={{ width: 24, height: 24, border: '2px solid rgba(124,108,255,0.3)', borderTopColor: '#7c6cff', borderRadius: '50%', animation: 'sg-spin 0.7s linear infinite' }} />
-  </div>
-);
+const LOAD_TIMEOUT_MS = 12000;
+
+function PageFallback() {
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setTimedOut(true), LOAD_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, []);
+  if (timedOut) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)', color: '#e2e8f0', fontFamily: 'system-ui' }}>
+        <p style={{ margin: 0, textAlign: 'center' }}>Загрузка занимает больше обычного.</p>
+        <p style={{ margin: 0, fontSize: 14, color: '#94a3b8' }}>Проверьте интернет и обновите страницу.</p>
+        <button type="button" onClick={() => window.location.reload()} style={{ padding: '10px 20px', background: '#7c6cff', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 14 }}>Обновить</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)' }}>
+      <div style={{ width: 24, height: 24, border: '2px solid rgba(124,108,255,0.3)', borderTopColor: '#7c6cff', borderRadius: '50%', animation: 'sg-spin 0.7s linear infinite' }} />
+    </div>
+  );
+}
 
 export default function App() {
   const { token, setToken, setUser, user } = useStore();
