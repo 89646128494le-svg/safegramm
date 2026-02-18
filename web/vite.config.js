@@ -22,7 +22,7 @@ export default defineConfig({
       output: {
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
-            if (id.includes('react-dom') || id.includes('react/') || id.includes('react-router')) return 'react-vendor';
+            if (id.includes('react-dom') || id.includes('react/') || id.includes('react-router')) return undefined;
             if (id.includes('framer-motion') || id.includes('lucide-react')) return 'ui-vendor';
             if (id.includes('zustand') || id.includes('@tanstack/react-query')) return 'utils-vendor';
             if (id.includes('jspdf') || id.includes('jszip')) return 'pdf-zip';
