@@ -1,10 +1,20 @@
-/* Landing Page Styles — без рамок, единый градиент */
+/* Landing Page Styles — без рамок, единый градиент, адаптация под все браузеры */
 .landing-page {
   min-height: 100vh;
+  min-height: -webkit-fill-available;
   background: linear-gradient(180deg, #030712 0%, #0a0e1a 22%, #0f172a 50%, #0c1222 78%, #030712 100%);
   color: #e9ecf5;
   overflow-x: hidden;
-  font-family: 'Inter', 'Roboto', 'Segoe UI', system-ui, -apple-system, Arial;
+  font-family: 'Inter', 'Roboto', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Пустое пространство по бокам — единообразно во всех браузерах */
+  box-sizing: border-box;
+}
+.landing-page *,
+.landing-page *::before,
+.landing-page *::after {
+  box-sizing: border-box;
 }
 
 /* Premium Animations */
@@ -137,14 +147,18 @@
   background: rgba(124, 108, 255, 0.45);
 }
 
-/* Hero phone mockup — без жёсткой рамки */
+/* Hero phone mockup — без рамок, единый фон */
 .phone-mockup {
   width: 320px;
+  max-width: 90vw;
   height: 640px;
+  max-height: 75vh;
   background: rgba(255,255,255,0.04);
-  border: none;
+  border: none !important;
+  outline: none !important;
   border-radius: 32px;
   padding: 16px;
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   box-shadow: 0 24px 64px rgba(0,0,0,0.4);
 }
@@ -156,7 +170,8 @@
   border-radius: 24px;
   overflow: hidden;
   padding: 16px;
-  border: none;
+  border: none !important;
+  outline: none !important;
 }
 
 .mockup-chat {
@@ -194,10 +209,11 @@
   background: linear-gradient(135deg, rgba(124,108,255,0.3), rgba(61,216,255,0.2));
 }
 
-/* Features section */
+/* Features section — без рамок */
 .features-section {
   padding: 120px 24px;
   background: rgba(15,22,43,0.5);
+  border: none !important;
 }
 
 .section-container {
@@ -461,11 +477,13 @@
   gap: 8px;
   padding: 8px 16px;
   background: rgba(124,108,255,0.12);
+  border: none !important;
   border-radius: 100px;
   font-size: 13px;
   font-weight: 600;
   color: #a78bfa;
   width: fit-content;
+  box-shadow: none !important;
 }
 
 .hero-title {
@@ -610,9 +628,11 @@
   gap: 8px;
   padding: 12px 8px;
   background: rgba(15,23,42,0.6);
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   border-radius: 0 16px 16px 0;
   border: none !important;
+  box-shadow: none !important;
 }
 
 .landing-sidebar-item {
@@ -637,6 +657,7 @@
   display: none;
 }
 
+/* Мобильная кнопка меню — нормальные три полоски, без тяжёлой рамки */
 .landing-sidebar-burger {
   display: none;
   position: fixed;
@@ -645,14 +666,28 @@
   z-index: 50;
   width: 48px;
   height: 48px;
-  border-radius: 14px;
-  background: rgba(124,108,255,0.2);
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: none !important;
+  box-shadow: none !important;
   color: #e9ecf5;
   cursor: pointer;
   align-items: center;
   justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.landing-sidebar-burger:hover {
+  background: rgba(255,255,255,0.12);
+}
+.landing-sidebar-burger:active {
+  background: rgba(255,255,255,0.06);
+}
+.landing-sidebar-burger svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2;
 }
 
 .landing-sidebar-overlay {
@@ -712,10 +747,16 @@
   }
 }
 
-/* ===== Landing Main ===== */
+/* ===== Landing Main — без рамок, пустое пространство под все браузеры ===== */
 .landing-main {
-  border: none;
-  outline: none;
+  border: none !important;
+  outline: none !important;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 /* ===== Dashboard Section ===== */
@@ -750,6 +791,7 @@
 .landing-dashboard-card {
   padding: 32px;
   background: rgba(255,255,255,0.04);
+  border: none !important;
   border-radius: 20px;
   transition: all 0.3s;
 }

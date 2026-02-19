@@ -1,7 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Users, Settings, Menu, X } from 'lucide-react';
+import { MessageCircle, Users, Settings, X } from 'lucide-react';
+
+/** Нормальная иконка «три полоски» для мобильного меню */
+function BurgerIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="18" x2="20" y2="18" />
+    </svg>
+  );
+}
 
 const items = [
   { path: '/app/chats', href: '/login', label: 'Чаты', icon: MessageCircle },
@@ -45,7 +56,7 @@ export default function LandingSidebar() {
         aria-label="Открыть меню"
         onClick={() => setOpen(true)}
       >
-        <Menu size={24} />
+        <BurgerIcon />
       </button>
       <AnimatePresence>
         {open && (
