@@ -88,3 +88,45 @@ func (c *Core) ReceivePacket(data []byte, key []byte) (msgType uint16, plain []b
 	}
 	return p.TypeID, plain, nil
 }
+
+// SendMessageSigned — V2: ratchet + Ed25519 подпись.
+func (c *Core) SendMessageSigned(sessionID uint64, msgType uint16, text string, sessionKey []byte, sendCounter *uint32, identityPriv []byte) ([]byte, error) {
+	if len(sessionKey) != crypto.AESKeySize {
+		return nil, crypto.ErrInvalidKey
+	}
+	step := *sendCounter
+	msgKey := crypto.RatchetMessageKey(sessionKey, uint64(step))
+	*sendCounter++
+	plain := []byte(text)
+	enc, err := crypto.EncryptGCM(msgKey, plain, nil)
+	if err != nil {
+		return nil, errors.Join(ErrEncrypt, err)
+	}
+	signedData := transport.SignedDataForPacket(msgType, sessionID, step, enc)
+	sig, err := crypto.SignEd25519(identityPriv, signedData)
+	if err != nil {
+		return nil, err
+	}
+	return transport.PackSigned(msgType, sessionID, step, enc, sig)
+}
+
+// ReceiveMessageSigned — V2: проверка подписи и расшифровка ratchet.
+func (c *Core) ReceiveMessageSigned(data []byte, sessionKey []byte, identityPub []byte) (msgType uint16, plain []byte, err error) {
+	if len(sessionKey) != crypto.AESKeySize {
+		return 0, nil, crypto.ErrInvalidKey
+	}
+	typeID, sessionID, ratchetStep, payload, signature, err := transport.UnpackSigned(data)
+	if err != nil {
+		return 0, nil, err
+	}
+	signedData := transport.SignedDataForPacket(typeID, sessionID, ratchetStep, payload)
+	if !crypto.VerifyEd25519(identityPub, signedData, signature) {
+		return 0, nil, crypto.ErrSignatureInvalid
+	}
+	msgKey := crypto.RatchetMessageKey(sessionKey, uint64(ratchetStep))
+	plain, err = crypto.DecryptGCM(msgKey, payload, nil)
+	if err != nil {
+		return 0, nil, errors.Join(ErrDecrypt, err)
+	}
+	return typeID, plain, nil
+}

@@ -120,13 +120,35 @@ func handleWebSocket(s *store.Store) http.HandlerFunc {
 				continue
 			}
 			frame := data[:lenSize+bodyLen]
-			msgType, plain, err := core.ReceivePacket(frame, sessionKey)
+			state.LastActivity = time.Now()
+
+			var msgType uint16
+			var plain []byte
+			tryV2 := len(frame) >= transport.MinPacketSizeV2 && u.IdentityPublicKey != nil && len(u.IdentityPublicKey) == 32
+			if tryV2 {
+				msgType, plain, err = core.ReceiveMessageSigned(frame, sessionKey, u.IdentityPublicKey)
+				if err == nil {
+					switch msgType {
+					case transport.TypeText:
+						log.Printf("[WS] [%s] msg (V2 signed): %s", u.Username, string(plain))
+						// Ответ в старом формате для совместимости; при необходимости можно V2
+						reply, _ := core.SendMessage(sessionID, transport.TypeText, "Сообщение получено и расшифровано", sessionKey)
+						_ = conn.WriteMessage(websocket.BinaryMessage, reply)
+					case transport.TypeTyping:
+						log.Printf("[WS] [%s] typing (V2)", u.Username)
+					case transport.TypeReadReceipt:
+						log.Printf("[WS] [%s] read receipt (V2)", u.Username)
+					default:
+						log.Printf("[WS] [%s] type %d (V2)", u.Username, msgType)
+					}
+					continue
+				}
+			}
+			msgType, plain, err = core.ReceivePacket(frame, sessionKey)
 			if err != nil {
 				log.Printf("[WS] receive: %v", err)
 				continue
 			}
-			state.LastActivity = time.Now()
-
 			switch msgType {
 			case transport.TypeText:
 				log.Printf("[WS] [%s] msg: %s", u.Username, string(plain))

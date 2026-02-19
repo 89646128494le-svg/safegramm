@@ -556,6 +556,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       const loadedMessages = (data.messages || []).map((m: any) => ({
         ...m,
         createdAt: m.createdAt ? (typeof m.createdAt === 'string' ? new Date(m.createdAt).getTime() : (typeof m.createdAt === 'number' ? m.createdAt : Date.now())) : Date.now(),
+        expiresAt: m.expiresAt ? (typeof m.expiresAt === 'string' ? new Date(m.expiresAt).getTime() : (typeof m.expiresAt === 'number' ? m.expiresAt : undefined)) : undefined,
         isRead: m.isRead !== undefined ? m.isRead : false,
         readReceipts: (m.readReceipts || []).map((r: any) => ({
           userId: r.userId,
@@ -1324,6 +1325,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         replyTo: replyingTo?.id || undefined,
         stickerId: stickerId || undefined,
         createdAt: Date.now(),
+        ...(expiresMs ? { expiresAt: Date.now() + expiresMs } : {}),
       };
       setMessages(prev => [...prev, optimisticMessage]);
       
@@ -1375,6 +1377,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           ...m,
           id: realId,
           createdAt: typeof response.createdAt === 'string' ? new Date(response.createdAt).getTime() : (typeof response.createdAt === 'number' ? response.createdAt : Date.now()),
+          expiresAt: response.expiresAt ? (typeof response.expiresAt === 'string' ? new Date(response.expiresAt).getTime() : response.expiresAt) : m.expiresAt,
         } : m));
         
         // Убираем класс отправки и добавляем класс получения

@@ -133,3 +133,30 @@ func GetPremiumStats(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// GetPlans возвращает список тарифов для сайта (доступно без авторизации в группе protected — для единообразия).
+func GetPlans(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		plans := []gin.H{
+			{
+				"id":          "free",
+				"name":        "Бесплатный",
+				"price":       0,
+				"priceLabel":  "0 ₽",
+				"period":      "навсегда",
+				"features":    []string{"До 100 МБ загрузки файлов", "До 50 чатов", "Базовый поиск", "E2EE шифрование", "Safety AI"},
+				"badge":       nil,
+			},
+			{
+				"id":          "premium",
+				"name":        "Premium",
+				"price":       299,
+				"priceLabel":  "299 ₽/мес",
+				"period":      "месяц",
+				"features":    []string{"До 2 ГБ загрузки файлов", "Неограниченное количество чатов", "Экспорт истории чатов", "Приоритетная поддержка", "Расширенные темы", "Расширенный поиск", "Все возможности Free"},
+				"badge":       "⭐ Рекомендуем",
+			},
+		}
+		c.JSON(http.StatusOK, gin.H{"plans": plans})
+	}
+}
+

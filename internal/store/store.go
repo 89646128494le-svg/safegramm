@@ -15,7 +15,8 @@ type User struct {
 	Email             string
 	Phone             string
 	PassHash          string
-	CloudPasswordHash string // 2FA: bcrypt/argon2
+	CloudPasswordHash string   // 2FA: bcrypt/argon2
+	IdentityPublicKey []byte   // Ed25519 public 32 bytes — для верификации подписей (wallet-style)
 	Salt              string
 	Roles             string
 	Plan              string

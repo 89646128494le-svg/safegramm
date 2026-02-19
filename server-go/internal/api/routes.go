@@ -237,8 +237,9 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/owner/settings", RequireOwner(db), UpdateSystemSettings(db))
 	protected.GET("/owner/premium/stats", RequireOwner(db), GetPremiumStats(db))
 
-	// Премиум подписка
+	// Премиум подписка и тарифы
 	protected.GET("/premium", GetPremiumInfo(db))                                    // Информация о премиум подписке текущего пользователя
+	protected.GET("/plans", GetPlans(db))                                            // Список тарифов для страницы «Тарифы»
 	protected.POST("/premium/subscribe/:id", RequireOwner(db), SubscribePremium(db)) // Активировать премиум (только владелец)
 
 	// Управление сервисами (для admin и owner)

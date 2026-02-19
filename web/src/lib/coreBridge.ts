@@ -1,7 +1,7 @@
 /**
  * Bridge: фронтенд → бинарный протокол Go-ядра.
- * Handshake: ECDH (X25519), сессионный ключ только в памяти.
- * Формат пакета: Len(4) || Type(2) || SessionID(8) || Payload(encrypted) || Checksum(32). LittleEndian.
+ * V2: Ed25519 подпись + ratchet (ключ на каждое сообщение). LittleEndian.
+ * Формат V2: Len(4) || Type(2) || SessionID(8) || RatchetStep(4) || Payload || Signature(64) || Checksum(32).
  */
 
 const KEY_SIZE = 32;
@@ -9,9 +9,13 @@ const SESSION_ID_SIZE = 8;
 const LEN_SIZE = 4;
 const TYPE_SIZE = 2;
 const CHECKSUM_SIZE = 32;
+const RATCHET_STEP_SIZE = 4;
+const SIGNATURE_SIZE = 64;
+const MIN_PACKET_V2 = LEN_SIZE + TYPE_SIZE + SESSION_ID_SIZE + RATCHET_STEP_SIZE + SIGNATURE_SIZE + CHECKSUM_SIZE;
 const GCM_NONCE_SIZE = 12;
 const GCM_TAG_SIZE = 16;
 const KDF_INFO = new TextEncoder().encode('safegram-session-v1');
+const RATCHET_INFO = new TextEncoder().encode('safegram-ratchet-v1');
 
 export const TypeText = 0x01;
 export const TypeTyping = 0x03;

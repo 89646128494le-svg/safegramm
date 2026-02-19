@@ -10,13 +10,17 @@ import (
 )
 
 const (
-	LenSize     = 4
-	TypeIDSize  = 2
-	SessionSize = 8
+	LenSize      = 4
+	TypeIDSize   = 2
+	SessionSize  = 8
 	ChecksumSize = crypto.HashSize
+	RatchetStepSize = 4
+	SignatureSize   = crypto.Ed25519SignatureSize
 
-	HeaderSize = LenSize + TypeIDSize + SessionSize
+	HeaderSize    = LenSize + TypeIDSize + SessionSize
+	HeaderSizeV2  = LenSize + TypeIDSize + SessionSize + RatchetStepSize
 	MinPacketSize = LenSize + TypeIDSize + SessionSize + ChecksumSize
+	MinPacketSizeV2 = LenSize + TypeIDSize + SessionSize + RatchetStepSize + SignatureSize + ChecksumSize
 )
 
 // Message type IDs (compact, Telegram-style). Payloads are binary; no raw JSON.
@@ -93,4 +97,72 @@ func Unpack(data []byte) (*Packet, error) {
 		SessionID: sessionID,
 		Payload:   out,
 	}, nil
+}
+
+// SignedDataForPacket возвращает данные для подписи Ed25519: typeID || sessionID || ratchetStep || payload.
+func SignedDataForPacket(typeID uint16, sessionID uint64, ratchetStep uint32, payload []byte) []byte {
+	buf := make([]byte, TypeIDSize+SessionSize+RatchetStepSize+len(payload))
+	binary.LittleEndian.PutUint16(buf[0:], typeID)
+	binary.LittleEndian.PutUint64(buf[2:], sessionID)
+	binary.LittleEndian.PutUint32(buf[10:], ratchetStep)
+	copy(buf[14:], payload)
+	return buf
+}
+
+// PackSigned кодирует пакет V2 (подпись + ratchet): typeID || sessionID || ratchetStep || payload || signature(64) || checksum(32).
+func PackSigned(typeID uint16, sessionID uint64, ratchetStep uint32, payload, signature []byte) ([]byte, error) {
+	if len(signature) != SignatureSize {
+		return nil, errors.New("transport: signature must be 64 bytes")
+	}
+	bodyLen := TypeIDSize + SessionSize + RatchetStepSize + len(payload) + SignatureSize + ChecksumSize
+	buf := make([]byte, LenSize+bodyLen)
+	binary.LittleEndian.PutUint32(buf[0:LenSize], uint32(bodyLen))
+	binary.LittleEndian.PutUint16(buf[LenSize:], typeID)
+	binary.LittleEndian.PutUint64(buf[LenSize+TypeIDSize:], sessionID)
+	binary.LittleEndian.PutUint32(buf[LenSize+TypeIDSize+SessionSize:], ratchetStep)
+	off := LenSize + TypeIDSize + SessionSize + RatchetStepSize
+	copy(buf[off:], payload)
+	copy(buf[off+len(payload):], signature)
+	checksum := crypto.Hash256(payload)
+	copy(buf[off+len(payload)+SignatureSize:], checksum[:])
+	return buf, nil
+}
+
+// UnpackSigned разбирает пакет V2; возвращает typeID, sessionID, ratchetStep, payload, signature. Checksum проверен.
+func UnpackSigned(data []byte) (typeID uint16, sessionID uint64, ratchetStep uint32, payload, signature []byte, err error) {
+	if len(data) < MinPacketSizeV2 {
+		err = ErrPacketTooShort
+		return
+	}
+	bodyLen := binary.LittleEndian.Uint32(data[0:LenSize])
+	if len(data) < LenSize+int(bodyLen) {
+		err = ErrPacketTooShort
+		return
+	}
+	body := data[LenSize : LenSize+bodyLen]
+	if len(body) < TypeIDSize+SessionSize+RatchetStepSize+SignatureSize+ChecksumSize {
+		err = ErrPacketTooShort
+		return
+	}
+	typeID = binary.LittleEndian.Uint16(body[0:TypeIDSize])
+	sessionID = binary.LittleEndian.Uint64(body[TypeIDSize : TypeIDSize+SessionSize])
+	ratchetStep = binary.LittleEndian.Uint32(body[TypeIDSize+SessionSize : TypeIDSize+SessionSize+RatchetStepSize])
+	off := TypeIDSize + SessionSize + RatchetStepSize
+	payloadLen := len(body) - off - SignatureSize - ChecksumSize
+	if payloadLen < 0 {
+		err = ErrPacketTooShort
+		return
+	}
+	payload = make([]byte, payloadLen)
+	copy(payload, body[off:off+payloadLen])
+	signature = make([]byte, SignatureSize)
+	copy(signature, body[off+payloadLen:off+payloadLen+SignatureSize])
+	checksumSlice := body[off+payloadLen+SignatureSize:]
+	var checksum [ChecksumSize]byte
+	copy(checksum[:], checksumSlice)
+	if !crypto.VerifyHash(payload, checksum) {
+		err = ErrChecksum
+		return
+	}
+	return typeID, sessionID, ratchetStep, payload, signature, nil
 }

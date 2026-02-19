@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -54,6 +55,7 @@ func runHTTPAPI(s *store.Store, g *transport.Guard) {
 	mux.HandleFunc("POST /api/security/sessions/terminate-others", authRequired(s, handleTerminateOtherSessions(s)))
 	mux.HandleFunc("GET /api/security/login-events", authRequired(s, handleLoginEvents(s)))
 	mux.HandleFunc("GET /api/security/protection", authRequired(s, handleProtection(s)))
+	mux.HandleFunc("GET /api/security/trust-score", authRequired(s, handleTrustScore(s)))
 	mux.HandleFunc("PUT /api/security/cloud-password", authRequired(s, handleSetCloudPassword(s)))
 	mux.HandleFunc("POST /api/safety/ask", authRequired(s, handleSafetyAsk(s)))
 	mux.HandleFunc("GET /api/maintenance/status", handleMaintenanceStatus(s))
@@ -114,10 +116,11 @@ func cors(h http.Handler) http.Handler {
 func handleRegister(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-			Email    string `json:"email"`
-			Phone    string `json:"phone"`
+			Username         string `json:"username"`
+			Password         string `json:"password"`
+			Email            string `json:"email"`
+			Phone            string `json:"phone"`
+			IdentityPublicKey string `json:"identity_public_key"` // base64 Ed25519 32 bytes — wallet-style; опционально
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonError(w, "Invalid request", http.StatusBadRequest)
@@ -137,20 +140,28 @@ func handleRegister(s *store.Store) http.HandlerFunc {
 			jsonError(w, "Server error", http.StatusInternalServerError)
 			return
 		}
+		var identityPub []byte
+		if req.IdentityPublicKey != "" {
+			identityPub, _ = base64.StdEncoding.DecodeString(req.IdentityPublicKey)
+			if len(identityPub) != 32 {
+				identityPub = nil
+			}
+		}
 		now := time.Now()
 		u := &store.User{
-			ID:            s.NextUserID(),
-			Username:      req.Username,
-			Email:         strings.TrimSpace(req.Email),
-			Phone:         strings.TrimSpace(req.Phone),
-			PassHash:      hash,
-			Roles:         "user",
-			Plan:          "free",
-			Status:        "offline",
-			About:         "",
-			EmailVerified: false,
-			CreatedAt:     now,
-			UpdatedAt:     now,
+			ID:                s.NextUserID(),
+			Username:          req.Username,
+			Email:             strings.TrimSpace(req.Email),
+			Phone:             strings.TrimSpace(req.Phone),
+			PassHash:          hash,
+			IdentityPublicKey: identityPub,
+			Roles:             "user",
+			Plan:              "free",
+			Status:            "offline",
+			About:             "",
+			EmailVerified:     false,
+			CreatedAt:         now,
+			UpdatedAt:         now,
 		}
 		s.PutUser(u)
 		userResponse(w, u, http.StatusCreated)
@@ -608,6 +619,19 @@ func handleProtection(s *store.Store) func(http.ResponseWriter, *http.Request, *
 			"protectionPercent": score,
 			"hasPassword": u.PassHash != "", "emailVerified": u.EmailVerified,
 			"hasCloudPassword": u.CloudPasswordHash != "", "hasPhone": u.Phone != "",
+		})
+	}
+}
+
+func handleTrustScore(s *store.Store) func(http.ResponseWriter, *http.Request, *store.User) {
+	return func(w http.ResponseWriter, _ *http.Request, u *store.User) {
+		identityVerified := u != nil && len(u.IdentityPublicKey) == 32
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"trustScore":        map[string]interface{}{"identityVerified": identityVerified, "sessionVerified": true},
+			"identityVerified":  identityVerified,
+			"sessionVerified":  true,
+			"hasIdentityPubKey": identityVerified,
 		})
 	}
 }

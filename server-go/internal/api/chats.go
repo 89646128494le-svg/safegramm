@@ -287,8 +287,9 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 		}
 		beforeID := c.Query("before") // ID сообщения, до которого загружать
 
+		now := time.Now()
 		var messages []models.Message
-		query := db.Where("chat_id = ? AND deleted_at IS NULL", chatID).
+		query := db.Where("chat_id = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?)", chatID, now).
 			Preload("Sender").
 			Preload("Reactions").
 			Preload("Reactions.User").

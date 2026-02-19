@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/binary"
 	"errors"
 	"io"
 )
@@ -27,6 +28,7 @@ var (
 	ErrInvalidInput     = errors.New("crypto: invalid input")
 	ErrKeyGen           = errors.New("crypto: key generation failed")
 	ErrSharedSecret     = errors.New("crypto: ECDH shared secret failed")
+	ErrSeedTooShort     = errors.New("crypto: seed must be at least 32 bytes")
 )
 
 // KeyPair holds a Curve25519 private and public key.
@@ -70,6 +72,13 @@ func SharedSecret(privateKey, peerPublicKey []byte) ([]byte, error) {
 		return nil, joinErr(ErrSharedSecret, err)
 	}
 	return secret, nil
+}
+
+// RatchetMessageKey derives a per-message key from session key and ratchet step.
+func RatchetMessageKey(sessionKey []byte, step uint64) []byte {
+	stepBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(stepBytes, step)
+	return DeriveAESKey(sessionKey, stepBytes, []byte("safegram-ratchet-v1"))
 }
 
 // DeriveAESKey derives a 32-byte AES-256 key from shared secret using SHA-256.

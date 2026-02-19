@@ -15,6 +15,7 @@ export default function Profile() {
     plan: '',
     createdAt: 0
   });
+  const [trustScore, setTrustScore] = useState<{ identityVerified?: boolean; sessionVerified?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -40,6 +41,12 @@ export default function Profile() {
         plan: user.plan || 'free',
         createdAt: user.createdAt || Date.now()
       });
+      try {
+        const ts = await api('/api/security/trust-score');
+        setTrustScore(ts || null);
+      } catch {
+        setTrustScore(null);
+      }
     } catch (e: any) {
       showToast('Ошибка загрузки профиля: ' + e.message, 'error');
     } finally {
