@@ -14,7 +14,7 @@ export function getSocket(): WebSocket | null {
   }
 
   const base = getApiBaseUrl().replace(/\/+$/, '');
-  const wsOrigin = base.startsWith('https') ? base.replace(/^https/, 'wss') : base.startsWith('http') ? base.replace(/^http/, 'ws') : 'ws://localhost:8080';
+  const wsOrigin = base.startsWith('https') ? base.replace(/^https/, 'wss') : base.startsWith('http') ? base.replace(/^http/, 'ws') : 'ws://localhost:8081';
   const wsUrl = (wsOrigin.endsWith('/') ? wsOrigin.slice(0, -1) : wsOrigin) + '/ws?token=' + encodeURIComponent(token);
 
   if (ws && ws.readyState === WebSocket.OPEN) {

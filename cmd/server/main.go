@@ -83,6 +83,22 @@ func reply(conn net.Conn, msg string) {
 	_, _ = conn.Write([]byte(msg + "\n"))
 }
 
+// connWithFirstByte возвращает первый прочитанный байт при следующем Read (для отсечения HTTP на порту TCP-протокола).
+type connWithFirstByte struct {
+	net.Conn
+	first byte
+	done  bool
+}
+
+func (c *connWithFirstByte) Read(p []byte) (n int, err error) {
+	if !c.done && len(p) > 0 {
+		p[0] = c.first
+		c.done = true
+		return 1, nil
+	}
+	return c.Conn.Read(p)
+}
+
 func handleConn(conn net.Conn, s *store.Store) {
 	defer conn.Close()
 	addr := conn.RemoteAddr().String()
@@ -92,6 +108,20 @@ func handleConn(conn net.Conn, s *store.Store) {
 	if guard.Blacklist.IsBlacklisted(ip) {
 		return
 	}
+
+	// Если на :8080 пришёл HTTP/WebSocket (браузер), сразу отклонить и не читать как бинарный протокол.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	one := make([]byte, 1)
+	if _, err := io.ReadFull(conn, one); err != nil {
+		return
+	}
+	_ = conn.SetReadDeadline(time.Time{})
+	if one[0] == 'G' {
+		// GET — HTTP; WebSocket и API на :8081
+		_, _ = conn.Write([]byte("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nUse port 8081 for WebSocket and HTTP API.\r\n"))
+		return
+	}
+	conn = &connWithFirstByte{Conn: conn, first: one[0]}
 
 	// Rate limit или PoW: не более 5 handshake/сек с одного IP; при превышении — задача PoW
 	doHandshake := guard.AllowHandshake(ip)
