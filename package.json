@@ -1,15 +1,15 @@
 {
   "name": "safegram",
   "private": true,
-  "description": "SafeGram messenger - frontend (web), backend (server-go)",
+  "description": "SafeGram — защищённый мессенджер. Бэкенд: Go (бинарный протокол, E2EE). Фронт: Next.js, Qt.",
   "scripts": {
     "dev": "npm run dev --prefix web",
     "dev:web": "npm run dev --prefix web",
-    "dev:server": "cd server-go && go run .",
+    "dev:server": "go run ./cmd/server",
     "dev:all": "concurrently -n server,web -c blue,green \"npm run dev:server\" \"npm run dev:web\"",
     "build": "npm run build --prefix web",
+    "build:server": "go build -o bin/server ./cmd/server",
     "preview": "npm run preview --prefix web",
-    "server": "cd server-go && go run .",
     "postinstall": "npm install --prefix web"
   },
   "devDependencies": {

@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "SafeGram",
+    "slug": "safegram-rn",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": { "backgroundColor": "#0a0e1a" },
+    "assetBundlePatterns": ["**/*"],
+    "ios": { "supportsTablet": true, "bundleIdentifier": "app.safegram" },
+    "android": { "adaptiveIcon": { "backgroundColor": "#0a0e1a" }, "package": "app.safegram" }
+  }
+}

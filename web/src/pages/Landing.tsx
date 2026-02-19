@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import Header from '../components/Header';
+import LandingSidebar from '../components/LandingSidebar';
+import LandingFooter from '../components/LandingFooter';
 import { useStore } from '../store/useStore';
 import { 
   Shield, 
@@ -13,10 +15,10 @@ import {
   Sparkles, 
   ArrowRight,
   Check,
-  Star,
-  Globe,
-  Download
+  Cloud,
+  EyeOff
 } from 'lucide-react';
+import '../styles/landing.css';
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -87,6 +89,8 @@ export default function Landing() {
   return (
     <div className="landing-page">
       <Header user={user} onLogout={() => {}} />
+      <LandingSidebar />
+      <main className="landing-main">
       {/* Hero Section */}
       <motion.section 
         className="hero-section"
@@ -243,6 +247,53 @@ export default function Landing() {
         </motion.div>
       </motion.section>
 
+      {/* Dashboard: ключевые фишки + Live Preview */}
+      <section id="dashboard" className="landing-dashboard">
+        <div className="landing-dashboard-inner">
+          <h2 className="landing-dashboard-title">Почему SafeGram</h2>
+          <div className="landing-dashboard-cards">
+            <motion.div className="landing-dashboard-card" whileHover={{ y: -4 }} transition={{ type: 'spring', stiffness: 300 }}>
+              <Lock className="landing-dashboard-card-icon" size={28} />
+              <h3>Сквозное шифрование</h3>
+              <p>Сообщения шифруются на устройстве. Сервер не хранит их в открытом виде.</p>
+            </motion.div>
+            <motion.div className="landing-dashboard-card" whileHover={{ y: -4 }} transition={{ type: 'spring', stiffness: 300 }}>
+              <Cloud className="landing-dashboard-card-icon" size={28} />
+              <h3>Облачное хранилище</h3>
+              <p>Медиа и файлы надёжно хранятся с шифрованием. Доступ только у вас.</p>
+            </motion.div>
+            <motion.div className="landing-dashboard-card" whileHover={{ y: -4 }} transition={{ type: 'spring', stiffness: 300 }}>
+              <EyeOff className="landing-dashboard-card-icon" size={28} />
+              <h3>Анонимность</h3>
+              <p>Минимум данных для работы. Никакой продажи персональной информации.</p>
+            </motion.div>
+          </div>
+          <div className="landing-live-preview">
+            <h3 className="landing-live-preview-title">Live Preview</h3>
+            <p className="landing-live-preview-desc">Так выглядит чат внутри SafeGram</p>
+            <div className="landing-live-preview-window">
+              <div className="landing-live-preview-header">
+                <span className="landing-live-preview-dot" />
+                <span>Чат с поддержкой</span>
+              </div>
+              <div className="landing-live-preview-chat">
+                <div className="landing-live-preview-msg received">
+                  <div className="landing-live-preview-avatar" />
+                  <div className="landing-live-preview-bubble">Привет! Как дела?</div>
+                </div>
+                <div className="landing-live-preview-msg sent">
+                  <div className="landing-live-preview-bubble">Отлично! Уже пользуюсь SafeGram 🔒</div>
+                </div>
+                <div className="landing-live-preview-msg received">
+                  <div className="landing-live-preview-avatar" />
+                  <div className="landing-live-preview-bubble">Круто. Шифрование на уровне.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section id="features" className="features-section">
         <motion.div
@@ -360,200 +411,23 @@ export default function Landing() {
             Присоединяйтесь к тысячам пользователей, которые уже выбрали безопасность
           </p>
           <motion.button
-            className="btn-primary btn-cta"
+            className="btn-primary btn-hero btn-cta"
             onClick={accept}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02, boxShadow: '0 16px 48px rgba(124,108,255,0.45)' }}
+            whileTap={{ scale: 0.98 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
             Начать бесплатно
             <ArrowRight size={20} />
           </motion.button>
-          <div className="cta-links">
-            <Link to="/privacy">Политика конфиденциальности</Link>
-            <span>•</span>
-            <Link to="/terms">Пользовательское соглашение</Link>
-          </div>
         </motion.div>
       </section>
 
-      <style>{`
-        .landing-page {
-          min-height: 100vh;
-          background: linear-gradient(180deg, #0a0e1a 0%, #1a1f35 100%);
-          color: #e9ecf5;
-          overflow-x: hidden;
-        }
-
-        .hero-section {
-          position: relative;
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 120px 24px 80px;
-          overflow: hidden;
-        }
-
-        .hero-background {
-          position: absolute;
-          inset: 0;
-          overflow: hidden;
-        }
-
-        .gradient-orb {
-          position: absolute;
-          border-radius: 50%;
-          filter: blur(80px);
-          opacity: 0.3;
-        }
-
-        .orb-1 {
-          width: 600px;
-          height: 600px;
-          background: radial-gradient(circle, rgba(124,108,255,0.8), transparent);
-          top: -200px;
-          left: -200px;
-        }
-
-        .orb-2 {
-          width: 500px;
-          height: 500px;
-          background: radial-gradient(circle, rgba(61,216,255,0.8), transparent);
-          bottom: -150px;
-          right: -150px;
-        }
-
-        .hero-content {
-          position: relative;
-          z-index: 2;
-          max-width: 1200px;
-          width: 100%;
-          text-align: center;
-        }
-
-        .hero-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 16px;
-          background: rgba(124,108,255,0.15);
-          border: 1px solid rgba(124,108,255,0.3);
-          border-radius: 999px;
-          font-size: 14px;
-          margin-bottom: 32px;
-          backdrop-filter: blur(10px);
-        }
-
-        .hero-title {
-          font-size: clamp(48px, 8vw, 96px);
-          font-weight: 900;
-          line-height: 1.1;
-          margin-bottom: 24px;
-          letter-spacing: -0.02em;
-        }
-
-        .gradient-text {
-          background: linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-
-        .hero-description {
-          font-size: 20px;
-          line-height: 1.6;
-          color: rgba(233,236,245,0.7);
-          max-width: 700px;
-          margin: 0 auto 48px;
-        }
-
-        .hero-cta {
-          display: flex;
-          gap: 16px;
-          justify-content: center;
-          margin-bottom: 80px;
-          flex-wrap: wrap;
-        }
-
-        .btn-hero {
-          padding: 16px 32px;
-          font-size: 16px;
-          font-weight: 700;
-          border-radius: 12px;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          border: none;
-          transition: all 0.3s;
-        }
-
-        .btn-primary {
-          background: linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%);
-          color: #0a0e1a;
-          box-shadow: 0 12px 40px rgba(124,108,255,0.4);
-        }
-
-        .btn-secondary {
-          background: rgba(255,255,255,0.1);
-          color: #e9ecf5;
-          border: 1px solid rgba(255,255,255,0.2);
-          backdrop-filter: blur(10px);
-          text-decoration: none;
-        }
-
-        .hero-stats {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 32px;
-          max-width: 800px;
-          margin: 0 auto;
-        }
-
-        .stat-item {
-          text-align: center;
-        }
-
-        .stat-value {
-          font-size: 48px;
-          font-weight: 900;
-          background: linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          margin-bottom: 8px;
-        }
-
-        .stat-label {
-          font-size: 14px;
-          color: rgba(233,236,245,0.6);
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-        }
-
-        .hero-visual {
-          position: absolute;
-          right: 5%;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: 1;
-          display: none;
-        }
-
-        @media (min-width: 1024px) {
-          .hero-visual {
-            display: block;
-          }
-          .hero-content {
-            text-align: left;
-            max-width: 600px;
-          }
-          .hero-cta {
-            justify-content: flex-start;
-          }
-        }
-
-        .phone-mockup {
+      <LandingFooter />
+      </main>
+    </div>
+  );
+}
           width: 320px;
           height: 640px;
           background: rgba(255,255,255,0.05);
@@ -814,10 +688,3 @@ export default function Landing() {
           transition: color 0.3s;
         }
 
-        .cta-links a:hover {
-          color: #7c6cff;
-        }
-      `}</style>
-    </div>
-  );
-}

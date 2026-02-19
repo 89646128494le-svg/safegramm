@@ -1,5 +1,5 @@
 
-const FALLBACK_API = 'http://localhost:8080';
+const FALLBACK_API = 'http://127.0.0.1:8081';
 
 function normalizeBaseUrl(url: string): string {
   const u = url.replace(/\/+$/, '');
