@@ -47,7 +47,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
   return (
     <motion.header
-      className="app-header"
+      className="app-header app-header-frameless"
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -56,13 +56,15 @@ export default function Header({ user, onLogout }: HeaderProps) {
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '16px 24px',
-        background: 'rgba(11, 16, 32, 0.95)',
-        backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        background: 'rgba(3, 7, 18, 0.6)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        border: 'none',
+        borderBottom: 'none',
+        boxShadow: 'none',
         position: 'sticky',
         top: 0,
         zIndex: 100,
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
       }}
     >
       <motion.div
@@ -134,14 +136,14 @@ export default function Header({ user, onLogout }: HeaderProps) {
           transition={{ type: "spring", stiffness: 400, damping: 15 }}
           style={{
             padding: '4px 10px',
-            background: 'rgba(124, 108, 255, 0.2)',
-            border: '1px solid rgba(124, 108, 255, 0.4)',
+            background: 'rgba(124, 108, 255, 0.15)',
+            border: 'none',
             borderRadius: '8px',
             fontSize: '11px',
             fontWeight: 700,
             textTransform: 'uppercase',
             letterSpacing: '1px',
-            color: '#7c6cff'
+            color: '#a78bfa'
           }}
         >
           BETA
@@ -291,8 +293,8 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 to="/login"
                 style={{
                   padding: '10px 16px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: 'none',
                   borderRadius: '10px',
                   color: '#e9ecf5',
                   textDecoration: 'none',
@@ -358,7 +360,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 width: 'min(320px, 85vw)',
                 background: 'rgba(11, 16, 32, 0.98)',
                 backdropFilter: 'blur(20px)',
-                borderLeft: '1px solid rgba(255,255,255,0.1)',
+                borderLeft: 'none',
                 zIndex: 1000,
                 padding: '24px 16px',
                 paddingTop: 'max(24px, env(safe-area-inset-top))',

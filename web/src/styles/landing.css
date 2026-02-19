@@ -1,10 +1,10 @@
-/* Landing Page Styles */
+/* Landing Page Styles — без рамок, единый градиент */
 .landing-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #0a0e1a 0%, #1a1f35 100%);
+  background: linear-gradient(180deg, #030712 0%, #0a0e1a 22%, #0f172a 50%, #0c1222 78%, #030712 100%);
   color: #e9ecf5;
   overflow-x: hidden;
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial;
+  font-family: 'Inter', 'Roboto', 'Segoe UI', system-ui, -apple-system, Arial;
 }
 
 /* Premium Animations */
@@ -23,18 +23,19 @@
   100% { background-position: 1000px 0; }
 }
 
-/* Glassmorphism */
+/* Glassmorphism — без видимых рамок */
 .glass {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: none;
   border-radius: 20px;
 }
 
 .glass-strong {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(30px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 20px;
 }
 
 /* Premium Buttons */
@@ -104,46 +105,58 @@
   background-clip: text;
 }
 
-/* Premium Scrollbar */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+/* Хедер без рамок на лендинге */
+.landing-page .app-header-frameless,
+.landing-page .app-header {
+  border: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
 }
 
-::-webkit-scrollbar-track {
-  background: rgba(15, 22, 43, 0.5);
-  border-radius: 10px;
+/* Тонкий скроллбар без рамок */
+.landing-page ::-webkit-scrollbar,
+.landing-page::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #7c6cff, #3dd8ff);
-  border-radius: 10px;
-  transition: all 0.3s;
+.landing-page ::-webkit-scrollbar-track,
+.landing-page::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #8a7cff, #4de8ff);
+.landing-page ::-webkit-scrollbar-thumb,
+.landing-page::-webkit-scrollbar-thumb {
+  background: rgba(124, 108, 255, 0.25);
+  border-radius: 3px;
+  transition: background 0.2s;
 }
 
-/* Hero phone mockup */
+.landing-page ::-webkit-scrollbar-thumb:hover,
+.landing-page::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 108, 255, 0.45);
+}
+
+/* Hero phone mockup — без жёсткой рамки */
 .phone-mockup {
   width: 320px;
   height: 640px;
-  background: rgba(255,255,255,0.05);
-  border: 2px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  border: none;
   border-radius: 32px;
   padding: 16px;
   backdrop-filter: blur(20px);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.4);
 }
 
 .phone-screen {
   width: 100%;
   height: 100%;
-  background: rgba(11,16,32,0.8);
+  background: rgba(10,14,26,0.85);
   border-radius: 24px;
   overflow: hidden;
   padding: 16px;
+  border: none;
 }
 
 .mockup-chat {
@@ -222,17 +235,16 @@
 
 .feature-card {
   padding: 32px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  border: none;
   border-radius: 20px;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
   transition: all 0.3s;
 }
 
 .feature-card:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(124,108,255,0.5);
-  box-shadow: 0 12px 40px rgba(124,108,255,0.2);
+  background: rgba(255,255,255,0.07);
+  box-shadow: 0 12px 40px rgba(124,108,255,0.15);
 }
 
 .feature-icon {
@@ -292,7 +304,8 @@
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: rgba(124,108,255,0.1);
+  background: rgba(124,108,255,0.08);
+  border: none;
   border-radius: 12px;
 }
 
@@ -324,22 +337,22 @@
 .crypto-circle.outer {
   width: 300px;
   height: 300px;
-  border: 2px solid rgba(124,108,255,0.3);
+  border: 1px solid rgba(124,108,255,0.25);
   animation: rotate 20s linear infinite;
 }
 
 .crypto-circle.middle {
   width: 200px;
   height: 200px;
-  border: 2px solid rgba(61,216,255,0.3);
+  border: 1px solid rgba(61,216,255,0.25);
   animation: rotate 15s linear infinite reverse;
 }
 
 .crypto-circle.inner {
   width: 100px;
   height: 100px;
-  background: linear-gradient(135deg, rgba(124,108,255,0.2), rgba(61,216,255,0.2));
-  border: 2px solid rgba(124,108,255,0.5);
+  background: linear-gradient(135deg, rgba(124,108,255,0.15), rgba(61,216,255,0.15));
+  border: none;
 }
 
 @keyframes rotate {
@@ -389,4 +402,26 @@
   color: rgba(233,236,245,0.8);
   text-decoration: none;
   transition: color 0.3s;
+}
+
+/* Основная область и сайдбар без рамок */
+.landing-main {
+  border: none;
+  outline: none;
+}
+
+.landing-sidebar,
+.landing-sidebar-burger,
+.landing-sidebar-drawer {
+  border: none !important;
+}
+
+.landing-sidebar-drawer {
+  box-shadow: 0 0 40px rgba(0,0,0,0.3);
+}
+
+.hero-section,
+.hero-content,
+.hero-background {
+  border: none;
 }

@@ -42,9 +42,9 @@ export default function Navigation() {
                 textDecoration: 'none',
                 fontSize: '14px',
                 fontWeight: 600,
-                color: isActive ? '#7c6cff' : 'rgba(233, 236, 245, 0.8)',
-                background: isActive ? 'rgba(124, 108, 255, 0.15)' : 'transparent',
-                border: isActive ? '1px solid rgba(124, 108, 255, 0.3)' : '1px solid transparent',
+                color: isActive ? '#a78bfa' : 'rgba(233, 236, 245, 0.85)',
+                background: isActive ? 'rgba(124, 108, 255, 0.12)' : 'transparent',
+                border: 'none',
                 transition: 'all 0.2s'
               }}
             >
