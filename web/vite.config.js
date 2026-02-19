@@ -26,14 +26,8 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 1200,
-    // В production удаляем console.log
     ...(process.env.NODE_ENV === 'production' && {
-      terserOptions: {
-        compress: {
-          drop_console: true,
-          drop_debugger: true
-        }
-      }
-    })
-  }
+      esbuild: { drop: ['console', 'debugger'] },
+    }),
+  },
 });
