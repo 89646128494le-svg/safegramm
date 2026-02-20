@@ -37,6 +37,7 @@ func GetCurrentUser(db *gorm.DB) gin.HandlerFunc {
 			"avatarUrl":    user.AvatarURL,
 			"about":        user.About,
 			"status":       status,
+			"statusText":   user.StatusText,
 			"profileColor": user.ProfileColor,
 			"showBio":      user.ShowBio,
 			"showAvatar":   user.ShowAvatar,

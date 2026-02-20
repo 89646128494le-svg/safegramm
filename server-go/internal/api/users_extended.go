@@ -25,6 +25,8 @@ func UpdateUser(db *gorm.DB) gin.HandlerFunc {
 			Username     string `json:"username"`
 			Email        string `json:"email"`
 			About        string `json:"about"`
+			Status       string `json:"status"`
+			StatusText   string `json:"statusText"`
 			ProfileColor string `json:"profileColor"`
 			ShowBio      *bool  `json:"showBio"`
 			ShowAvatar   *bool  `json:"showAvatar"`
@@ -67,6 +69,12 @@ func UpdateUser(db *gorm.DB) gin.HandlerFunc {
 		if req.ShowAvatar != nil {
 			updates["show_avatar"] = *req.ShowAvatar
 		}
+		if req.Status != "" {
+			updates["status"] = req.Status
+		}
+		if req.StatusText != "" || req.Status == "dnd" {
+			updates["status_text"] = req.StatusText
+		}
 
 		if len(updates) > 0 {
 			db.Model(&user).Updates(updates)
@@ -88,7 +96,8 @@ func UpdateUserStatus(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var req struct {
-			Status string `json:"status" binding:"required"`
+			Status     string `json:"status" binding:"required"`
+			StatusText string `json:"statusText"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -96,7 +105,7 @@ func UpdateUserStatus(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		allowedStatuses := []string{"online", "offline", "away", "busy", "invisible"}
+		allowedStatuses := []string{"online", "offline", "away", "busy", "invisible", "dnd"}
 		valid := false
 		for _, s := range allowedStatuses {
 			if req.Status == s {
@@ -115,6 +124,9 @@ func UpdateUserStatus(db *gorm.DB) gin.HandlerFunc {
 		}
 		if req.Status == "offline" {
 			updates["last_seen"] = &now
+		}
+		if req.StatusText != "" || req.Status == "dnd" {
+			updates["status_text"] = req.StatusText
 		}
 
 		db.Model(&models.User{}).Where("id = ?", userIDStr).Updates(updates)
@@ -163,6 +175,33 @@ func ChangePassword(db *gorm.DB) gin.HandlerFunc {
 
 		db.Model(&user).Update("pass_hash", string(hashedPassword))
 		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// GetUserByUsername возвращает публичный профиль по username (для короткой ссылки /u/username)
+// Публичный endpoint, аутентификация не требуется.
+func GetUserByUsername(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		username := c.Param("username")
+		if username == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
+			return
+		}
+		var user models.User
+		if err := db.Where("LOWER(username) = LOWER(?)", username).First(&user).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		// Только публичные поля
+		c.JSON(http.StatusOK, gin.H{
+			"id":           user.ID,
+			"username":     user.Username,
+			"avatarUrl":    user.AvatarURL,
+			"about":        user.About,
+			"profileColor": user.ProfileColor,
+			"status":       user.Status,
+			"statusText":   user.StatusText,
+		})
 	}
 }
 

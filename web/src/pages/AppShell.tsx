@@ -3,12 +3,16 @@ import { Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-r
 import { motion, AnimatePresence } from 'framer-motion';
 import Header from '../components/Header';
 import Chats from './chats/Chats';
+import Premium from './Premium';
+import Onboarding from './Onboarding';
 import Contacts from './contacts/Contacts';
 import Search from './search/Search';
 import Bots from './Bots';
 import Profile from './Profile';
 import Settings from './Settings';
+import SessionsPage from './SessionsPage';
 import Feedback from './Feedback';
+import Reports from './Reports';
 import Admin from './admin/Admin';
 import JoinChat from './JoinChat';
 import Servers from './servers/Servers';
@@ -31,7 +35,7 @@ import { getSocket, sendWebSocketMessage } from '../services/websocket';
 
 export default function AppShell() {
   const location = useLocation();
-  const { user, setUser, setToken, setTheme, ui } = useStore();
+  const { user, setUser, setToken, setTheme, ui, logout: doLogout } = useStore();
   const showServerStrip = location.pathname === '/app' || location.pathname === '/app/chats' || location.pathname === '/app/servers' || location.pathname.startsWith('/app/servers/');
   const [showStories, setShowStories] = useState(false);
   // Состояние для отображения Safety Assistant
@@ -88,6 +92,26 @@ export default function AppShell() {
     document.documentElement.setAttribute('data-theme', ui.theme);
     initAppearance();
   }, [ui.theme]);
+
+  // Автовыход по неактивности
+  useEffect(() => {
+    if (!ui.autoLogoutMinutes || !user) return;
+    let t: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        doLogout();
+        nav('/login');
+      }, ui.autoLogoutMinutes * 60 * 1000);
+    };
+    reset();
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(ev => window.addEventListener(ev, reset));
+    return () => {
+      clearTimeout(t);
+      events.forEach(ev => window.removeEventListener(ev, reset));
+    };
+  }, [user, ui.autoLogoutMinutes, doLogout, nav]);
 
   // Синхронизация статуса онлайн/офлайн при фокусе и сворачивании окна/вкладки
   useEffect(() => {
@@ -158,9 +182,9 @@ export default function AppShell() {
     };
   }, []);
 
-  const logout = () => { 
-    setToken(null);
-    setUser(null);
+  const logout = () => {
+    if (!window.confirm('Вы уверены, что хотите выйти?')) return;
+    doLogout();
     nav('/login');
   };
 
@@ -221,7 +245,16 @@ export default function AppShell() {
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link to="/app/contacts" className="btn btn-ghost" style={{ textDecoration: 'none' }}>👥 Контакты</Link>
           </motion.div>
-          
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/app/chats?secret=1" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Секретный чат (E2EE)">🔒 Секретный чат</Link>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/app/premium" className="btn btn-ghost" style={{ textDecoration: 'none' }}>⭐ Тарифы</Link>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/app/reports" className="btn btn-ghost" style={{ textDecoration: 'none' }}>🚩 Жалобы</Link>
+          </motion.div>
+
           <div style={{ flex: 1 }} /> {/* Распорка */}
 
           {/* Кнопка Safety AI */}
@@ -256,6 +289,9 @@ export default function AppShell() {
 
           {/* Остальные кнопки */}
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/app/sessions" className="btn btn-ghost" style={{ textDecoration: 'none' }}>📱 Сессии</Link>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }}>⚙️</Link>
           </motion.div>
 
@@ -280,7 +316,7 @@ export default function AppShell() {
 
       <div className={showServerStrip ? 'app-with-strip' : 'app-content'}>
         {showServerStrip && <ServerStrip />}
-        <div className={showServerStrip ? 'app-content app-content-inner' : 'app-content'} style={showServerStrip ? undefined : { flex: 1 }}>
+        <div id="main" className={showServerStrip ? 'app-content app-content-inner' : 'app-content'} style={showServerStrip ? undefined : { flex: 1 }}>
           <AnimatePresence mode="wait">
             <Routes>
               <Route path="/" element={<Navigate to="/app/chats" replace />} />
@@ -293,8 +329,12 @@ export default function AppShell() {
               <Route path="search" element={<Search />} />
               <Route path="bots" element={<Bots />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="premium" element={<Premium />} />
+              <Route path="onboarding" element={<Onboarding />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="sessions" element={<SessionsPage />} />
               <Route path="feedback" element={<Feedback />} />
+              <Route path="reports" element={<Reports />} />
               <Route path="admin" element={<Admin />} />
             </Routes>
           </AnimatePresence>

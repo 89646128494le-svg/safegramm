@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { getSocket } from '../../services/websocket';
 import EnhancedChatWindow from '../../components/EnhancedChatWindow';
@@ -8,8 +9,10 @@ import { PromptModal } from '../../components/Modal';
 import ChatFilters, { ChatFilter } from '../../components/ChatFilters';
 import GlobalChatSearch from '../../components/GlobalChatSearch';
 import ChatListItem from '../../components/ChatListItem';
+import { SkeletonGrid } from '../../components/Loading';
 import { keyboardShortcuts, defaultChatShortcuts } from '../../utils/keyboardShortcuts';
 import { useStore } from '../../store/useStore';
+import SecretChatWindow from '../../components/SecretChatWindow';
 
 // Функция для воспроизведения звука звонка
 const playCallSound = () => {
@@ -80,6 +83,16 @@ export default function Chats() {
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [starredChats, setStarredChats] = useState<Set<string>>(new Set());
+  const [showSecretChatModal, setShowSecretChatModal] = useState(false);
+  const [secretChatTarget, setSecretChatTarget] = useState<{ chatId: string; peerUser: User } | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get('secret') === '1') {
+      setShowSecretChatModal(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
@@ -477,7 +490,16 @@ export default function Chats() {
     return true;
   });
 
-  // Подсчет статистики для фильтров
+  // Сортировка: закреплённые (starred) вверху, затем по времени последнего сообщения
+  const sortedFilteredChats = [...filteredChats].sort((a, b) => {
+    const aStarred = starredChats.has(a.id) ? 1 : 0;
+    const bStarred = starredChats.has(b.id) ? 1 : 0;
+    if (bStarred !== aStarred) return bStarred - aStarred;
+    const aTime = (a.lastMessage as any)?.createdAt ? (typeof (a.lastMessage as any).createdAt === 'number' ? (a.lastMessage as any).createdAt : new Date((a.lastMessage as any).createdAt).getTime()) : 0;
+    const bTime = (b.lastMessage as any)?.createdAt ? (typeof (b.lastMessage as any).createdAt === 'number' ? (b.lastMessage as any).createdAt : new Date((b.lastMessage as any).createdAt).getTime()) : 0;
+    return bTime - aTime;
+  });
+
   const unreadCount = chats.filter(c => (c as any).unreadCount > 0).length;
   const starredCount = starredChats.size;
 
@@ -568,6 +590,9 @@ export default function Chats() {
           <button data-new-chat onClick={() => setShowDMModal(true)} className="btn btn-primary">
             <span>💬</span> Личный чат
           </button>
+          <button type="button" onClick={() => setShowSecretChatModal(true)} className="btn btn-primary" title="Секретный чат (E2EE)">
+            <span>🔒</span> Секретный чат
+          </button>
           <button onClick={() => setShowGroupModal(true)} className="btn btn-primary">
             <span>👥</span> Группа
           </button>
@@ -594,9 +619,8 @@ export default function Chats() {
           />
         </div>
         {loading ? (
-          <div className="empty-state">
-            <div className="spinner"></div>
-            <div style={{marginTop: 'var(--spacing-md)'}}>Загрузка...</div>
+          <div className="chat-list">
+            <SkeletonGrid count={8} type="chat" />
           </div>
         ) : chats.length === 0 ? (
           <div className="empty-state">
@@ -606,7 +630,7 @@ export default function Chats() {
           </div>
         ) : (
           <>
-            {searchQuery.trim() && filteredChats.length === 0 && (
+            {searchQuery.trim() && sortedFilteredChats.length === 0 && (
               <div className="empty-state" style={{ padding: 'var(--spacing-md)' }}>
                 <div className="empty-state-icon">🔍</div>
                 <div className="empty-state-title">Ничего не найдено</div>
@@ -614,7 +638,7 @@ export default function Chats() {
               </div>
             )}
             <div className="chat-list">
-              {filteredChats.map(chat => {
+              {sortedFilteredChats.map(chat => {
                 const isStarred = starredChats.has(chat.id);
                 return (
                   <ChatListItem
@@ -666,6 +690,9 @@ export default function Chats() {
                 setSelectedChatId('');
                 setSidebarOpen(false);
               }}
+              mutedUntil={(chats.find(c => c.id === selectedChatId) as any)?.mutedUntil ?? null}
+              chatDescription={(chats.find(c => c.id === selectedChatId) as any)?.description ?? null}
+              onMuteChange={() => loadChats()}
             />
           ) : (
             <div className="empty-state chats-empty-state">

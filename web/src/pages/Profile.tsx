@@ -8,13 +8,16 @@ export default function Profile() {
   const [profile, setProfile] = useState<any>({ 
     displayName: '', 
     status: 'online', 
+    statusText: '',
     bio: '', 
     links: [] as string[],
     username: '',
     avatarUrl: '',
     plan: '',
+    roles: [] as string[],
     createdAt: 0
   });
+  const [trustScore, setTrustScore] = useState<{ identityVerified?: boolean; sessionVerified?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -33,13 +36,21 @@ export default function Profile() {
       setProfile({
         displayName: user.username || '',
         status: user.status || 'online',
+        statusText: user.statusText || '',
         bio: user.about || user.bio || '',
         links: user.links || [],
         username: user.username || '',
         avatarUrl: user.avatarUrl || '',
         plan: user.plan || 'free',
+        roles: Array.isArray(user.roles) ? user.roles : (user.roles ? String(user.roles).split(',').map((r: string) => r.trim()).filter(Boolean) : []),
         createdAt: user.createdAt || Date.now()
       });
+      try {
+        const ts = await api('/api/security/trust-score');
+        setTrustScore(ts || null);
+      } catch {
+        setTrustScore(null);
+      }
     } catch (e: any) {
       showToast('Ошибка загрузки профиля: ' + e.message, 'error');
     } finally {
@@ -54,6 +65,7 @@ export default function Profile() {
         username: profile.username,
         about: profile.bio,
         status: profile.status,
+        statusText: profile.statusText || '',
         profileColor: profile.profileColor
       });
       showToast('Профиль сохранён', 'success');
@@ -133,6 +145,7 @@ export default function Profile() {
     { value: 'online', label: '🟢 В сети' },
     { value: 'away', label: '🟡 Отошёл' },
     { value: 'busy', label: '🔴 Занят' },
+    { value: 'dnd', label: '🔕 Не беспокоить' },
     { value: 'invisible', label: '⚪ Невидимка' },
     { value: 'offline', label: '⚫ Офлайн' }
   ];
@@ -263,7 +276,68 @@ export default function Profile() {
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
+          {profile.status === 'dnd' && (
+            <div style={{ marginTop: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
+                Подпись (например: «Встреча до 15:00»)
+              </label>
+              <input
+                type="text"
+                placeholder="Не беспокоить до..."
+                value={profile.statusText || ''}
+                onChange={e => setProfile({ ...profile, statusText: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  background: 'var(--panel-2, #111827)',
+                  border: '1px solid var(--border, #374151)',
+                  borderRadius: '8px',
+                  color: 'var(--fg, #e5e7eb)'
+                }}
+              />
+            </div>
+          )}
         </div>
+
+        {profile.username && (
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>Ссылка на профиль</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <code style={{
+                padding: '10px 12px',
+                background: 'var(--panel-2, #111827)',
+                border: '1px solid var(--border, #374151)',
+                borderRadius: '8px',
+                fontSize: '14px',
+                flex: 1,
+                minWidth: 0
+              }}>
+                {typeof window !== 'undefined' ? `${window.location.origin}/u/${profile.username}` : `/u/${profile.username}`}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = typeof window !== 'undefined' ? `${window.location.origin}/u/${profile.username}` : '';
+                  if (url && navigator.clipboard) {
+                    navigator.clipboard.writeText(url);
+                    showToast('Ссылка скопирована', 'success');
+                  }
+                }}
+                style={{
+                  padding: '10px 16px',
+                  background: 'var(--accent, #3b82f6)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Копировать
+              </button>
+            </div>
+          </div>
+        )}
 
         <div style={{marginBottom: '24px'}}>
           <label style={{display: 'block', marginBottom: '8px', fontWeight: '600'}}>
@@ -357,7 +431,7 @@ export default function Profile() {
           )}
         </div>
 
-        {profile.plan && (
+        {(profile.plan || (profile.roles && profile.roles.length > 0)) && (
           <div style={{
             padding: '12px',
             background: 'rgba(59, 130, 246, 0.1)',
@@ -366,7 +440,33 @@ export default function Profile() {
             marginBottom: '24px'
           }}>
             <div className="small" style={{color: 'var(--accent, #3b82f6)'}}>
-              Тариф: <strong>{profile.plan.toUpperCase()}</strong>
+              {profile.plan && <span>Тариф: <strong>{profile.plan.toUpperCase()}</strong></span>}
+              {profile.plan && profile.roles?.length > 0 && ' · '}
+              {profile.roles?.length > 0 && (
+                <span>Роли: {profile.roles.map((r: string) => (
+                  <span key={r} style={{ marginRight: '6px', padding: '2px 6px', borderRadius: '4px', background: r === 'owner' ? 'rgba(124, 58, 237, 0.3)' : 'rgba(59, 130, 246, 0.2)' }}>{r}</span>
+                ))}</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {trustScore != null && (
+          <div style={{
+            padding: '16px',
+            background: 'rgba(124, 108, 255, 0.08)',
+            border: '1px solid rgba(124, 108, 255, 0.2)',
+            borderRadius: '12px',
+            marginBottom: '24px'
+          }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--fg, #e5e7eb)' }}>Уровень доверия (Trust Score)</div>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <span style={{ color: trustScore.identityVerified ? '#10b981' : 'var(--subtle, #9ca3af)' }}>
+                {trustScore.identityVerified ? '✓ Идентичность верифицирована (Ed25519)' : '— Идентичность не привязана'}
+              </span>
+              <span style={{ color: trustScore.sessionVerified ? '#10b981' : 'var(--subtle, #9ca3af)' }}>
+                {trustScore.sessionVerified ? '✓ Сессия верифицирована' : '— Сессия не верифицирована'}
+              </span>
             </div>
           </div>
         )}

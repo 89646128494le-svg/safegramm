@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { api, getApiBaseUrl } from '../services/api';
 import { getSocket, sendWebSocketMessage, closeSocket } from '../services/websocket';
 import { notifyNewMessage, notifyCall, hasNotificationPermission } from '../services/notifications';
@@ -41,6 +42,7 @@ import GifPicker from './GifPicker';
 import LocationPicker from './LocationPicker';
 import GroupChannelSettings from './GroupChannelSettings';
 import AudioPlayer from './AudioPlayer';
+import VirtualizedMessages from './VirtualizedMessages';
 import { showToast } from './Toast';
 import { ConfirmModal, PromptModal } from './Modal';
 import { getChatBackground, getChatColor } from '../services/appearance';
@@ -114,8 +116,8 @@ interface Message {
   deletedAt?: number;
   expiresAt?: number;
   createdAt: number;
-  isRead?: boolean; // Прочитано ли сообщение текущим пользователем
-  readReceipts?: Array<{ // Список пользователей, прочитавших сообщение
+  isRead?: boolean;
+  readReceipts?: Array<{
     userId: string;
     readAt: number;
     user?: {
@@ -126,6 +128,8 @@ interface Message {
   }>;
   gifUrl?: string;
   sending?: boolean;
+  failed?: boolean;
+  retryPayload?: { text?: string; attachmentUrl?: string; stickerId?: string; replyTo?: string };
 }
 
 interface Sticker {
@@ -180,6 +184,9 @@ interface EnhancedChatWindowProps {
   onBack?: () => void;
   chatMembers?: string[];
   onMarkAsRead?: () => void;
+  mutedUntil?: number | null;
+  chatDescription?: string | null;
+  onMuteChange?: (muted: boolean) => void;
 }
 
 // Функция для воспроизведения звука сообщения
@@ -228,7 +235,9 @@ const playCallSound = () => {
   }
 };
 
-export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBack, chatMembers, onMarkAsRead }: EnhancedChatWindowProps) {
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBack, chatMembers, onMarkAsRead, mutedUntil, chatDescription, onMuteChange }: EnhancedChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -248,6 +257,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [showThreads, setShowThreads] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showMediaGallery, setShowMediaGallery] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState<string | null>(null);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
@@ -296,6 +306,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [showAppearanceSettings, setShowAppearanceSettings] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [trustScore, setTrustScore] = useState<{ identityVerified?: boolean; sessionVerified?: boolean } | null>(null);
   const [showStatistics, setShowStatistics] = useState(false);
   const [showBackupManager, setShowBackupManager] = useState(false);
   const [showBotManager, setShowBotManager] = useState(false);
@@ -327,6 +338,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   });
   const [isPageVisible, setIsPageVisible] = useState(!document.hidden);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [messagesAreaHeight, setMessagesAreaHeight] = useState(500);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -537,6 +549,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [chatId, currentUser?.id, currentUser?.roles]);
 
+  useEffect(() => {
+    if (!chatId) return;
+    api('/api/security/trust-score').then((ts: { identityVerified?: boolean; sessionVerified?: boolean }) => setTrustScore(ts)).catch(() => setTrustScore(null));
+  }, [chatId]);
+
   // Загрузка сообщений с пагинацией
   const loadMessages = useCallback(async (beforeId?: string, append: boolean = false) => {
     if (!chatId) return;
@@ -556,6 +573,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       const loadedMessages = (data.messages || []).map((m: any) => ({
         ...m,
         createdAt: m.createdAt ? (typeof m.createdAt === 'string' ? new Date(m.createdAt).getTime() : (typeof m.createdAt === 'number' ? m.createdAt : Date.now())) : Date.now(),
+        expiresAt: m.expiresAt ? (typeof m.expiresAt === 'string' ? new Date(m.expiresAt).getTime() : (typeof m.expiresAt === 'number' ? m.expiresAt : undefined)) : undefined,
         isRead: m.isRead !== undefined ? m.isRead : false,
         readReceipts: (m.readReceipts || []).map((r: any) => ({
           userId: r.userId,
@@ -645,6 +663,15 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     const nearBottom = scrollHeight - scrollTop - clientHeight < 120;
     setShowScrollToBottom((prev) => (prev !== !nearBottom ? !nearBottom : prev));
   }, [hasMoreMessages, loadingMoreMessages, loadMoreMessages]);
+
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setMessagesAreaHeight(el.clientHeight));
+    ro.observe(el);
+    setMessagesAreaHeight(el.clientHeight);
+    return () => ro.disconnect();
+  }, [chatId]);
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (messagesEndRef.current) {
@@ -1286,6 +1313,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     // Проверяем, что есть хотя бы текст, вложение или стикер
     const finalText = messageText !== undefined ? messageText : text.trim();
     if (!finalText && !attachmentUrl && !stickerId) return;
+    if (trustScore && trustScore.sessionVerified === false) {
+      showToast('Сессия не верифицирована. Рекомендуем включить 2FA в настройках безопасности.', 'warning');
+    }
 
     try {
       const payload: any = {
@@ -1324,6 +1354,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         replyTo: replyingTo?.id || undefined,
         stickerId: stickerId || undefined,
         createdAt: Date.now(),
+        ...(expiresMs ? { expiresAt: Date.now() + expiresMs } : {}),
       };
       setMessages(prev => [...prev, optimisticMessage]);
       
@@ -1375,6 +1406,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           ...m,
           id: realId,
           createdAt: typeof response.createdAt === 'string' ? new Date(response.createdAt).getTime() : (typeof response.createdAt === 'number' ? response.createdAt : Date.now()),
+          expiresAt: response.expiresAt ? (typeof response.expiresAt === 'string' ? new Date(response.expiresAt).getTime() : response.expiresAt) : m.expiresAt,
         } : m));
         
         // Убираем класс отправки и добавляем класс получения
@@ -1405,8 +1437,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           removeFromOfflineQueue(optimisticMessage.id);
         }
       } catch (e: any) {
-        // Удаляем временное сообщение при ошибке
-        setMessages(prev => prev.filter(m => m.id !== tempId));
+        setMessages(prev => prev.map(m => m.id === tempId ? {
+          ...m,
+          failed: true,
+          retryPayload: { text: finalText || undefined, attachmentUrl: attachmentUrl || undefined, stickerId: stickerId || undefined, replyTo: replyingTo?.id }
+        } : m));
         showToast('Ошибка отправки: ' + e.message, 'error');
         throw e;
       }
@@ -1523,12 +1558,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   };
 
-  // Отправка файла с прогрессом и сжатием
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB
+  const SINGLE_UPLOAD_MAX = 50 * 1024 * 1024; // 50 MB
+
+  // Отправка файла с прогрессом и сжатием (при размере > 50 MB — чанками)
   const sendFile = async (file: File, isVoiceMessage: boolean = false) => {
     try {
       let fileToUpload = file;
-      
-      // Сжимаем изображения если нужно
       if (!isVoiceMessage && file.type.startsWith('image/') && shouldCompressImage(file)) {
         try {
           fileToUpload = await compressImage(file, { maxSizeKB: 500, quality: 0.8 });
@@ -1537,16 +1573,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           console.warn('Failed to compress image, using original:', e);
         }
       }
-      
-      const form = new FormData();
-      form.append('file', fileToUpload);
-      
-      // Для голосовых сообщений используем специальное имя поля
-      if (isVoiceMessage) {
-        form.append('kind', 'voice');
-      }
-      
-      // Создаем временное сообщение с прогрессом
+
       const tempId = 'temp-upload-' + Date.now();
       const tempMessage: Message = {
         id: tempId,
@@ -1558,65 +1585,99 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         createdAt: Date.now(),
       };
       setMessages(prev => [...prev, tempMessage]);
-      
-      const xhr = new XMLHttpRequest();
-      
-      // Отслеживаем прогресс
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const progress = Math.round((e.loaded / e.total) * 100);
-          setMessages(prev => prev.map(m => 
-            m.id === tempId ? { ...m, uploadProgress: progress } : m
-          ));
+
+      const updateProgress = (p: number) => {
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, uploadProgress: p } : m));
+      };
+      const removeTemp = () => setMessages(prev => prev.filter(m => m.id !== tempId));
+
+      if (fileToUpload.size > SINGLE_UPLOAD_MAX) {
+        const totalChunks = Math.ceil(fileToUpload.size / CHUNK_SIZE);
+        const initRes = await api(`/api/chats/${chatId}/attach/init`, 'POST', {
+          filename: fileToUpload.name,
+          totalSize: fileToUpload.size,
+          totalChunks,
+        });
+        const uploadId = initRes.uploadId;
+        if (!uploadId) throw new Error('Не получен uploadId');
+        const token = localStorage.getItem('token');
+        const base = getApiBaseUrl();
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, fileToUpload.size);
+          const chunk = fileToUpload.slice(start, end);
+          const form = new FormData();
+          form.append('uploadId', uploadId);
+          form.append('index', String(i));
+          form.append('chunk', chunk);
+          const r = await fetch(`${base}/api/chats/${chatId}/attach/chunk`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + token },
+            body: form,
+          });
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.detail || err.error || 'chunk_upload_failed');
+          }
+          updateProgress(Math.round(((i + 1) / totalChunks) * 100));
         }
+        const completeRes = await api(`/api/chats/${chatId}/attach/complete`, 'POST', {
+          uploadId,
+          filename: fileToUpload.name,
+          totalChunks,
+          text: isVoiceMessage ? '' : text.trim() || '',
+        });
+        const attachmentUrl = completeRes?.url || completeRes?.message?.attachmentUrl;
+        if (!attachmentUrl) throw new Error('Не получен URL вложения');
+        removeTemp();
+        if (!isVoiceMessage) {
+          setText('');
+          setReplyingTo(null);
+        }
+        await loadMessages(undefined, false);
+        showToast('Файл загружен (чанками)', 'success');
+        return;
+      }
+
+      const form = new FormData();
+      form.append('file', fileToUpload);
+      if (isVoiceMessage) form.append('kind', 'voice');
+      const xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) updateProgress(Math.round((e.loaded / e.total) * 100));
       });
-      
       xhr.addEventListener('load', async () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
             const attachmentUrl = data.url || data.attachmentUrl || data.attachment_url;
-            
-            if (!attachmentUrl) {
-              throw new Error('Не получен URL вложения');
-            }
-            
-            // Удаляем временное сообщение
-            setMessages(prev => prev.filter(m => m.id !== tempId));
-            
-            // Отправляем сообщение с вложением
+            if (!attachmentUrl) throw new Error('Не получен URL вложения');
+            removeTemp();
             await api(`/api/chats/${chatId}/messages`, 'POST', {
-              text: isVoiceMessage ? '' : text.trim() || '', // Для голосовых сообщений без текста
-              attachmentUrl: attachmentUrl,
-              replyTo: replyingTo?.id || null
+              text: isVoiceMessage ? '' : text.trim() || '',
+              attachmentUrl,
+              replyTo: replyingTo?.id || null,
             });
-            
             if (!isVoiceMessage) {
               setText('');
               setReplyingTo(null);
             }
-            
             await loadMessages(undefined, false);
-            
-            if (!isVoiceMessage) {
-              showToast('Файл загружен', 'success');
-            }
+            if (!isVoiceMessage) showToast('Файл загружен', 'success');
           } catch (e: any) {
-            setMessages(prev => prev.filter(m => m.id !== tempId));
+            removeTemp();
             throw e;
           }
         } else {
-          setMessages(prev => prev.filter(m => m.id !== tempId));
+          removeTemp();
           const errorData = JSON.parse(xhr.responseText || '{}');
           throw new Error(errorData.error || errorData.detail || 'upload_error');
         }
       });
-      
       xhr.addEventListener('error', () => {
-        setMessages(prev => prev.filter(m => m.id !== tempId));
+        removeTemp();
         showToast('Ошибка отправки файла', 'error');
       });
-      
       xhr.open('POST', `${getApiBaseUrl()}/api/chats/${chatId}/attach`);
       xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.getItem('token'));
       xhr.send(form);
@@ -1865,8 +1926,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       }
       
       await api(`/api/messages/${forwardMessageId}/forward`, 'POST', {
-        targetChatId,
-        comment: forwardComment.trim() || undefined
+        chatId: targetChatId,
+        text: forwardComment.trim() || ''
       });
       
       showToast('Сообщение переслано', 'success');
@@ -2232,8 +2293,35 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               </button>
             </div>
           ) : null}
+          {chatDescription && (
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title={chatDescription}>
+              О чате: {chatDescription}
+            </div>
+          )}
         </div>
         <div className="chat-header-actions">
+          <button
+            className="search-btn"
+            onClick={async () => {
+              try {
+                if (mutedUntil != null) {
+                  await api(`/api/chats/${chatId}/mute`, 'DELETE');
+                  onMuteChange?.(false);
+                  showToast('Уведомления включены', 'success');
+                } else {
+                  await api(`/api/chats/${chatId}/mute`, 'POST', { mutedUntil: null });
+                  onMuteChange?.(true);
+                  showToast('Чат в тихом режиме', 'success');
+                }
+              } catch (e: any) {
+                showToast('Ошибка: ' + e.message, 'error');
+              }
+            }}
+            title={mutedUntil != null ? 'Включить уведомления' : 'Тихий чат (отключить уведомления)'}
+            style={{ background: mutedUntil != null ? 'var(--accent-primary)' : 'transparent', border: 'none', cursor: 'pointer', padding: '8px', borderRadius: 'var(--radius-sm)', fontSize: '14px' }}
+          >
+            {mutedUntil != null ? '🔔' : '🔕'}
+          </button>
           <button
             className="search-btn"
             onClick={() => setShowSearch(!showSearch)}
@@ -2877,6 +2965,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         ref={messagesContainerRef}
         className="messages-container chat-messages"
         onScroll={handleScroll}
+        data-chat-font-size={ui.chatFontSize || 'normal'}
       >
         {/* Кнопка загрузки старых сообщений */}
         {hasMoreMessages && (
@@ -2912,7 +3001,30 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             <p className="chat-empty-hint">Двойной клик по сообщению — ответить</p>
           </div>
         )}
-        {messages.map((msg, idx) => {
+        {messages.length > 50 ? (
+          <VirtualizedMessages
+            messages={messages}
+            currentUser={currentUser}
+            getUser={(id) => users.get(id)}
+            reactions={reactions}
+            onReactionClick={addReaction}
+            onReplyClick={setReplyingTo}
+            onForwardClick={(id) => { setForwardMessageId(id); loadAvailableChats(); setShowForwardModal(true); }}
+            onSaveClick={() => {}}
+            onPinClick={() => {}}
+            onEditClick={(m) => setEditingMessage(m)}
+            onDeleteClick={(id, forAll) => deleteMessage(id, forAll)}
+            onThreadClick={(id) => setSelectedThreadId(id)}
+            onUserProfileClick={setShowUserProfile}
+            formatTime={formatTime}
+            chatType={chatInfoRef.current?.type as 'dm' | 'group' | 'channel' | undefined}
+            threads={threads}
+            pinnedMessages={pinnedMessages}
+            isMessageSaved={() => false}
+            containerHeight={Math.max(300, messagesAreaHeight - 20)}
+          />
+        ) : null}
+        {messages.length > 0 && messages.length <= 50 && messages.map((msg, idx) => {
           const sender = getUser(msg.senderId);
           const isMe = msg.senderId === currentUser.id;
           const msgReactions = (reactions.get(msg.id) || []) as Array<{userId: string, emoji: string}>;
@@ -2921,6 +3033,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           const prevDate = prevMsg ? new Date(prevMsg.createdAt).toDateString() : '';
           const thisDate = new Date(msg.createdAt).toDateString();
           const showDateSeparator = prevDate !== thisDate;
+          const isExpired = msg.expiresAt != null && msg.expiresAt < Date.now();
+          const expiresInMs = msg.expiresAt != null && msg.expiresAt > Date.now() ? msg.expiresAt - Date.now() : 0;
 
           return (
             <React.Fragment key={msg.id}>
@@ -2929,10 +3043,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   <span>{formatDateSeparator(msg.createdAt)}</span>
                 </div>
               )}
-            <div 
-              data-message-id={msg.id} 
+            <motion.div
+              data-message-id={msg.id}
               className={`message-wrapper message ${isMe ? 'message-me me' : ''} ${msg.expiresAt && msg.expiresAt < Date.now() ? 'expired' : ''} ${msg.senderId === currentUser.id ? 'sending' : 'received'}`}
-              style={{ animationDelay: `${idx * 0.03}s` }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               onDoubleClick={() => !msg.deletedAt && setReplyingTo(msg)}
             >
               {!isMe && showAvatar && (
@@ -3084,6 +3200,10 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   </div>
                 )}
                 <div className="message-bubble">
+                  {isExpired ? (
+                    <div className="message-text" style={{ fontStyle: 'italic', color: 'var(--text-tertiary)', padding: '8px 0' }}>Сообщение исчезло</div>
+                  ) : (
+                  <>
                   {msg.stickerId && (
                     <div className="message-sticker" style={{
                       padding: '8px',
@@ -3372,31 +3492,49 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   <div className="message-meta">
                     <span>{formatTime(msg.createdAt)}</span>
                     {msg.editedAt && <span className="edited">(изменено)</span>}
-                    {isMe && (
+                    {isMe && msg.failed && (
+                      <>
+                        <span style={{ color: 'var(--danger)', fontSize: '11px', marginRight: 6 }}>Не доставлено</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const payload = msg.retryPayload;
+                            setMessages(prev => prev.filter(m => m.id !== msg.id));
+                            if (payload) sendMessage(payload.text, payload.attachmentUrl, payload.stickerId);
+                          }}
+                          style={{ fontSize: '11px', padding: '2px 6px', cursor: 'pointer', background: 'var(--accent-primary)', color: '#fff', border: 'none', borderRadius: 4 }}
+                        >
+                          Повторить
+                        </button>
+                      </>
+                    )}
+                    {isMe && !msg.failed && (
                       <span className="read-status" title={(() => {
                         if (msg.readReceipts && msg.readReceipts.length > 0) {
                           const lastRead = msg.readReceipts[msg.readReceipts.length - 1];
                           return `Прочитано ${formatTime(lastRead.readAt)}`;
                         }
-                        return 'Не прочитано';
+                        return 'Доставлено';
                       })()}>
                         {(() => {
-                          // Для DM чатов показываем простой статус
                           if (chatInfoRef.current?.type === 'dm') {
-                            if (msg.readReceipts && msg.readReceipts.length > 0) {
-                              return '✓✓'; // Прочитано (двойная галочка)
-                            }
-                            return '✓'; // Доставлено (одна галочка)
+                            if (msg.readReceipts && msg.readReceipts.length > 0) return '✓✓';
+                            return '✓';
                           }
-                          // Для групповых чатов показываем количество прочитавших
-                          if (msg.readReceipts && msg.readReceipts.length > 0) {
-                            return `✓✓ ${msg.readReceipts.length}`;
-                          }
+                          if (msg.readReceipts && msg.readReceipts.length > 0) return `✓✓ ${msg.readReceipts.length}`;
                           return '✓';
                         })()}
                       </span>
                     )}
+                    {msg.expiresAt != null && !isExpired && expiresInMs > 0 && (
+                      <span className="message-expires" style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--text-tertiary)' }} title="Самоуничтожающееся">
+                        ⏱ {expiresInMs >= 60000 ? `${Math.ceil(expiresInMs / 60000)} мин` : `${Math.ceil(expiresInMs / 1000)} с`}
+                      </span>
+                    )}
                   </div>
+                </div>
+                  </>
+                  )}
                 </div>
                 {msgReactions.length > 0 && (
                   <div className="message-reactions">
@@ -3413,8 +3551,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   </div>
                 )}
                 <div className="message-actions">
-                  <button onClick={() => addReaction(msg.id, '👍')}>👍</button>
-                  <button onClick={() => addReaction(msg.id, '❤️')}>❤️</button>
+                  {QUICK_REACTIONS.map(emoji => (
+                    <button key={emoji} onClick={() => addReaction(msg.id, emoji)} title={emoji}>{emoji}</button>
+                  ))}
                   <button onClick={() => setReplyingTo(msg)}>Ответить</button>
                   <button onClick={() => {
                     setForwardMessageId(msg.id);
@@ -3473,7 +3612,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   )}
                 </div>
               </div>
-            </div>
+            </motion.div>
             </React.Fragment>
           );
         })}
@@ -3745,6 +3884,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       )}
 
       <div className="chat-input-container">
+        {trustScore != null && (
+          <div style={{ padding: '4px 12px', fontSize: '11px', color: trustScore.sessionVerified && trustScore.identityVerified ? 'var(--success, #10b981)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {trustScore.sessionVerified && trustScore.identityVerified ? '✓ Safety: сессия верифицирована' : 'Safety: включите 2FA в настройках для верификации'}
+          </div>
+        )}
         {isRecording && (
           <div className="recording-indicator" style={{
             display: 'flex',
@@ -3986,11 +4130,27 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowStickerPicker(false);
               setShowGifPicker(false);
               setShowLocationPicker(false);
+              setShowQuickReplies(false);
             }}
             title="Эмодзи"
           >
             😀
           </button>
+          {(ui.quickReplies?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowQuickReplies(!showQuickReplies);
+                setShowEmojiPicker(false);
+                setShowStickerPicker(false);
+                setShowGifPicker(false);
+              }}
+              title="Быстрые ответы"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', fontSize: '16px' }}
+            >
+              ⚡
+            </button>
+          )}
           <button
             className="sticker-btn"
             onClick={() => {
@@ -3998,6 +4158,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowEmojiPicker(false);
               setShowGifPicker(false);
               setShowLocationPicker(false);
+              setShowQuickReplies(false);
             }}
             title="Стикеры"
           >
@@ -4010,6 +4171,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowEmojiPicker(false);
               setShowStickerPicker(false);
               setShowLocationPicker(false);
+              setShowQuickReplies(false);
             }}
             title="GIF"
           >
@@ -4023,6 +4185,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowStickerPicker(false);
               setShowGifPicker(false);
               setShowExpirePicker(false);
+              setShowQuickReplies(false);
             }}
             title="Геолокация"
           >
@@ -4036,6 +4199,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowStickerPicker(false);
               setShowGifPicker(false);
               setShowLocationPicker(false);
+              setShowQuickReplies(false);
             }}
             title="Самоуничтожающееся сообщение"
             style={{
@@ -4135,6 +4299,49 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   }}
                   onClose={() => setShowEmojiPicker(false)}
                 />
+              </div>
+            )}
+            {showQuickReplies && (ui.quickReplies?.length ?? 0) > 0 && (
+              <div style={{
+                position: 'absolute',
+                bottom: '100%',
+                right: 0,
+                marginBottom: '8px',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                padding: '8px',
+                maxWidth: 280,
+                maxHeight: 200,
+                overflowY: 'auto',
+                zIndex: 1000
+              }}>
+                {(ui.quickReplies || []).filter(Boolean).map((phrase, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setText(prev => (prev ? prev + ' ' + phrase : phrase));
+                      setShowQuickReplies(false);
+                      inputRef.current?.focus();
+                    }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '8px 12px',
+                      marginBottom: '4px',
+                      textAlign: 'left',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    {phrase}
+                  </button>
+                ))}
               </div>
             )}
             {showStickerPicker && (

@@ -61,7 +61,7 @@ interface SecuritySettings {
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'appearance' | 'connection' | 'tools'>('notifications');
-  const { ui, setProxyUrl } = useStore();
+  const { ui, setProxyUrl, setAutoLogoutMinutes, setSoundMessage, setSoundCall, setSoundMention, setChatFontSize, setQuickReplies, setTheme } = useStore();
   const [proxyInput, setProxyInput] = useState('');
   const [showBackupManager, setShowBackupManager] = useState(false);
   const [notifications, setNotifications] = useState<NotificationSettings>({
@@ -368,6 +368,28 @@ export default function Settings() {
                   className="settings-toggle"
                 />
               </label>
+
+              <div className="settings-group">
+                <h3>Включить звук отдельно</h3>
+                <label className="settings-item">
+                  <div className="settings-item-label">
+                    <span>Звук сообщений</span>
+                  </div>
+                  <input type="checkbox" checked={ui.soundMessage} onChange={e => setSoundMessage(e.target.checked)} className="settings-toggle" />
+                </label>
+                <label className="settings-item">
+                  <div className="settings-item-label">
+                    <span>Звук звонков</span>
+                  </div>
+                  <input type="checkbox" checked={ui.soundCall} onChange={e => setSoundCall(e.target.checked)} className="settings-toggle" />
+                </label>
+                <label className="settings-item">
+                  <div className="settings-item-label">
+                    <span>Звук упоминаний</span>
+                  </div>
+                  <input type="checkbox" checked={ui.soundMention} onChange={e => setSoundMention(e.target.checked)} className="settings-toggle" />
+                </label>
+              </div>
 
               {notifications.soundEnabled && (
                 <>
@@ -788,6 +810,25 @@ export default function Settings() {
             <p className="settings-description">
               Выберите тему оформления для SafeGram. Вы можете создать свою собственную тему или выбрать из готовых.
             </p>
+            <div className="settings-group">
+              <h3>Готовые темы</h3>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setTheme('contrast')}
+                  className={`settings-button ${ui.theme === 'contrast' ? 'primary' : ''}`}
+                >
+                  Контрастная
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTheme('muted')}
+                  className={`settings-button ${ui.theme === 'muted' ? 'primary' : ''}`}
+                >
+                  Приглушённая
+                </button>
+              </div>
+            </div>
             <button
               onClick={() => setShowThemePicker(true)}
               className="settings-save-button"
@@ -804,6 +845,25 @@ export default function Settings() {
           <div className="settings-section">
             <h2>Безопасность</h2>
             
+            <div className="settings-group">
+              <h3>Автовыход</h3>
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Выйти через X минут неактивности</span>
+                  <span className="settings-item-description">0 = выключено. При неактивности (мышь, клавиатура) произойдёт выход.</span>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={ui.autoLogoutMinutes}
+                  onChange={e => setAutoLogoutMinutes(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  style={{ width: 80, padding: '8px', borderRadius: '8px', marginTop: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5' }}
+                />
+                <span style={{ marginLeft: 8, fontSize: 14 }}>мин</span>
+              </div>
+            </div>
+
             <div className="settings-group">
               <h3>Защита аккаунта</h3>
               <div className="settings-item">
@@ -869,6 +929,44 @@ export default function Settings() {
           <div className="settings-section">
             <h2>Функции и инструменты</h2>
             
+            <div className="settings-group">
+              <h3>Быстрые ответы / шаблоны</h3>
+              <p className="settings-item-description" style={{ marginBottom: 8 }}>
+                Фразы для ввода по короткой команде или кнопке в чате (например: /1, /2 или кнопка выбора).
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {(ui.quickReplies || []).map((phrase, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={phrase}
+                      onChange={e => {
+                        const next = [...(ui.quickReplies || [])];
+                        next[idx] = e.target.value;
+                        setQuickReplies(next);
+                      }}
+                      placeholder="Фраза"
+                      style={{ flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#e9ecf5' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setQuickReplies((ui.quickReplies || []).filter((_, i) => i !== idx))}
+                      className="settings-button danger"
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setQuickReplies([...(ui.quickReplies || []), ''])}
+                  className="settings-button primary"
+                >
+                  + Добавить фразу
+                </button>
+              </div>
+            </div>
+
             <div className="settings-group">
               <h3>Экспорт и резервное копирование</h3>
               <div className="settings-item">
@@ -941,6 +1039,26 @@ export default function Settings() {
             <p className="settings-description">
               Настройте размер шрифта, компактный режим, анимации и другие параметры интерфейса.
             </p>
+            <div className="settings-group">
+              <h3>Размер шрифта в чате</h3>
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Только для текста сообщений</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  {(['small', 'normal', 'large'] as const).map(size => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setChatFontSize(size)}
+                      className={`settings-button ${ui.chatFontSize === size ? 'primary' : ''}`}
+                    >
+                      {size === 'small' ? 'Маленький' : size === 'normal' ? 'Обычный' : 'Крупный'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
             <button
               onClick={() => setShowAppearanceSettings(true)}
               className="settings-save-button"

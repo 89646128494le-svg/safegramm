@@ -26,12 +26,24 @@ export default function UserProfile({ userId, currentUserId, onClose }: UserProf
   const [editBio, setEditBio] = useState('');
   const [editStatus, setEditStatus] = useState<'online' | 'offline' | 'away' | 'busy' | 'invisible'>('online');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isOwnProfile = userId === currentUserId;
 
   useEffect(() => {
     loadUser();
   }, [userId]);
+
+  useEffect(() => {
+    if (!isOwnProfile && userId) {
+      api('/api/users/me/blocked')
+        .then((data: { blocked?: Array<{ id: string }> }) => {
+          const list = data.blocked || data as unknown as Array<{ id: string }>;
+          setIsBlocked(Array.isArray(list) && list.some((b: any) => (b.id || b.userId) === userId));
+        })
+        .catch(() => setIsBlocked(false));
+    }
+  }, [userId, isOwnProfile]);
 
   const loadUser = async () => {
     try {
@@ -246,6 +258,44 @@ export default function UserProfile({ userId, currentUserId, onClose }: UserProf
               <button onClick={() => setIsEditing(true)} className="edit-btn">
                 ✏️ Редактировать профиль
               </button>
+            )}
+            {!isOwnProfile && (
+              <div style={{ marginTop: 16 }}>
+                <a href={`/u/${user.username}`} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginBottom: 8, color: 'var(--accent-primary)', fontSize: 14 }}>Ссылка на профиль</a>
+                <br />
+                {isBlocked ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await api(`/api/users/me/block/${userId}`, 'DELETE');
+                        setIsBlocked(false);
+                      } catch (e: any) {
+                        alert('Ошибка: ' + (e.message || 'unknown'));
+                      }
+                    }}
+                    className="cancel-btn"
+                    style={{ marginTop: 8 }}
+                  >
+                    Разблокировать
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await api(`/api/users/me/block/${userId}`, 'POST');
+                        setIsBlocked(true);
+                      } catch (e: any) {
+                        alert('Ошибка: ' + (e.message || 'unknown'));
+                      }
+                    }}
+                    style={{ marginTop: 8, background: 'var(--danger, #ef4444)', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    Заблокировать
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
