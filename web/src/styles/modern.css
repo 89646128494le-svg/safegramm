@@ -240,11 +240,13 @@ textarea {
   min-height: 100px;
 }
 
-/* Оболочка приложения: шапка сверху, контент занимает остаток */
+/* Оболочка приложения: шапка сверху, контент занимает остаток (ПК-версия — на всю ширину) */
 .app-shell {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
 }
 .app-content {
   flex: 1;
@@ -252,6 +254,7 @@ textarea {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 /* Discord-style: полоса серверов слева */
@@ -335,16 +338,21 @@ textarea {
   background: var(--success, #22c55e);
 }
 
-/* Контейнеры: слева — КАТАЛОГ (кнопки + список чатов), справа — ЧАТ (фильтры + контент) */
+/* Контейнеры: слева — КАТАЛОГ (кнопки + список чатов), справа — ЧАТ (ПК: сайдбар шире, контент на всю ширину) */
 .container {
   display: grid;
-  grid-template-columns: minmax(240px, 280px) 1fr;
+  grid-template-columns: minmax(280px, 320px) 1fr;
   grid-template-areas: "sidebar main";
   height: 100%;
   min-height: 0;
   overflow: hidden;
   position: relative;
   width: 100%;
+}
+@media (min-width: 1280px) {
+  .container {
+    grid-template-columns: minmax(300px, 360px) 1fr;
+  }
 }
 .app-content .container {
   height: 100%;

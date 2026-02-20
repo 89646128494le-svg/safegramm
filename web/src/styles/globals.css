@@ -170,7 +170,9 @@
 }
 
 * { box-sizing: border-box; }
+html, body { width: 100%; max-width: 100vw; overflow-x: hidden; }
 body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial; }
+#root { width: 100%; min-height: 100vh; }
 a { color: var(--accent); text-decoration: none; }
 input, button, select, textarea { background: #111827; color: var(--fg); border: 1px solid #374151; border-radius: 8px; padding: 10px 12px; }
 button { cursor: pointer; }
