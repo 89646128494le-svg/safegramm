@@ -48,6 +48,8 @@ interface PrivacySettings {
   showBio: boolean;
   showAvatar: boolean;
   showLastSeen: boolean;
+  lastSeenPrivacy?: 'everyone' | 'contacts' | 'never';
+  require2fa?: boolean;
   showReadReceipts: boolean;
   allowGroupInvites: boolean;
   profileColor: string;
@@ -93,6 +95,8 @@ export default function Settings() {
     showBio: true,
     showAvatar: true,
     showLastSeen: true,
+    lastSeenPrivacy: 'everyone',
+    require2fa: false,
     showReadReceipts: true,
     allowGroupInvites: true,
     profileColor: '#3b82f6'
@@ -143,10 +147,17 @@ export default function Settings() {
         console.log('Notifications settings not found, using defaults');
       }
 
-      // Загружаем настройки приватности
+      // Загружаем настройки приватности (GET возвращает lastSeenPrivacy, require2fa)
       try {
         const privacyData = await api('/api/users/me/privacy');
-        setPrivacy(prev => ({ ...prev, ...privacyData }));
+        const lastSeen = (privacyData as any).lastSeenPrivacy ?? (privacyData as any).lastSeen ?? 'everyone';
+        setPrivacy(prev => ({
+          ...prev,
+          ...privacyData,
+          lastSeenPrivacy: lastSeen === 'everyone' || lastSeen === 'contacts' || lastSeen === 'never' ? lastSeen : 'everyone',
+          showLastSeen: lastSeen !== 'never',
+          require2fa: !!(privacyData as any).require2fa
+        }));
       } catch (e) {
         // Используем данные из профиля пользователя
         loadUser();
@@ -175,7 +186,12 @@ export default function Settings() {
     setSaving(true);
     setSaveStatus(null);
     try {
-      await api('/api/users/me/privacy', 'POST', privacy);
+      await api('/api/users/me/privacy', 'POST', {
+        showBio: privacy.showBio,
+        showAvatar: privacy.showAvatar,
+        lastSeenPrivacy: privacy.lastSeenPrivacy ?? (privacy.showLastSeen ? 'everyone' : 'never'),
+        require2fa: privacy.require2fa
+      });
       setSaveStatus('success');
       setTimeout(() => setSaveStatus(null), 2000);
       await loadUser();
@@ -700,15 +716,36 @@ export default function Settings() {
                 />
               </label>
 
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <span>Кому показывать время последнего визита</span>
+                  <span className="settings-item-description">Никому / только контактам / всем</span>
+                </div>
+                <select
+                  value={privacy.lastSeenPrivacy ?? (privacy.showLastSeen ? 'everyone' : 'never')}
+                  onChange={e => setPrivacy(prev => ({
+                    ...prev,
+                    lastSeenPrivacy: e.target.value as 'everyone' | 'contacts' | 'never',
+                    showLastSeen: e.target.value !== 'never'
+                  }))}
+                  className="settings-select"
+                  style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, minWidth: 200 }}
+                >
+                  <option value="never">Никому</option>
+                  <option value="contacts">Только контактам</option>
+                  <option value="everyone">Всем</option>
+                </select>
+              </div>
+
               <label className="settings-item">
                 <div className="settings-item-label">
-                  <span>Показывать время последнего визита</span>
-                  <span className="settings-item-description">Другие пользователи увидят, когда вы были в сети</span>
+                  <span>Требовать двухэтапную верификацию при входе с нового устройства</span>
+                  <span className="settings-item-description">При включении 2FA станет обязательной при каждом входе</span>
                 </div>
                 <input
                   type="checkbox"
-                  checked={privacy.showLastSeen}
-                  onChange={e => setPrivacy(prev => ({ ...prev, showLastSeen: e.target.checked }))}
+                  checked={!!privacy.require2fa}
+                  onChange={e => setPrivacy(prev => ({ ...prev, require2fa: e.target.checked }))}
                   className="settings-toggle"
                 />
               </label>

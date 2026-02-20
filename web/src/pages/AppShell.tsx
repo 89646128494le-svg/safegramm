@@ -158,9 +158,11 @@ export default function AppShell() {
     };
   }, []);
 
-  const logout = () => { 
+  const logout = () => {
+    if (!window.confirm('Вы уверены, что хотите выйти?')) return;
     setToken(null);
     setUser(null);
+    if (typeof localStorage !== 'undefined') localStorage.removeItem('token');
     nav('/login');
   };
 
@@ -256,6 +258,9 @@ export default function AppShell() {
 
           {/* Остальные кнопки */}
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/app/sessions" className="btn btn-ghost" style={{ textDecoration: 'none' }}>📱 Сессии</Link>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }}>⚙️</Link>
           </motion.div>
 
@@ -294,6 +299,7 @@ export default function AppShell() {
               <Route path="bots" element={<Bots />} />
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="sessions" element={<SessionsPage />} />
               <Route path="feedback" element={<Feedback />} />
               <Route path="admin" element={<Admin />} />
             </Routes>
