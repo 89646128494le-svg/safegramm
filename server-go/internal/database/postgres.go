@@ -2,23 +2,40 @@ package database
 
 import (
 	"fmt"
+	"strings"
 
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func Connect(databaseURL string) (*gorm.DB, error) {
-	// Подключаемся напрямую через GORM с DSN
-	// Используем postgres.Open вместо postgres.New для избежания проблем с параметрами
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
-		PrepareStmt: false, // Отключаем prepared statements для избежания проблем с параметрами
-	})
+	if databaseURL == "" {
+		databaseURL = "sqlite:safegram.db"
+	}
+	config := &gorm.Config{PrepareStmt: false}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect via GORM: %w", err)
+	if strings.HasPrefix(databaseURL, "sqlite:") {
+		path := strings.TrimPrefix(databaseURL, "sqlite:")
+		if path == "" {
+			path = "safegram.db"
+		}
+		db, err := gorm.Open(sqlite.Open(path), config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect via SQLite: %w", err)
+		}
+		return db, nil
 	}
 
-	return db, nil
+	db, err := gorm.Open(postgres.Open(databaseURL), config)
+	if err == nil {
+		return db, nil
+	}
+	db2, sqliteErr := gorm.Open(sqlite.Open("safegram.db"), config)
+	if sqliteErr != nil {
+		return nil, fmt.Errorf("postgres failed (%v), sqlite fallback failed: %w", err, sqliteErr)
+	}
+	return db2, nil
 }
 
 func Close(db *gorm.DB) error {
@@ -28,4 +45,3 @@ func Close(db *gorm.DB) error {
 	}
 	return sqlDB.Close()
 }
-

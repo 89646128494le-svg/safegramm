@@ -4,12 +4,12 @@ import (
 	"time"
 )
 
-// MaintenanceMode модель для хранения информации о технических работах
+// MaintenanceMode model
 type MaintenanceMode struct {
-	ID        string    `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID        string    `json:"id" gorm:"primaryKey"`
 	IsActive  bool      `json:"isActive" gorm:"default:false;index"`
-	Timestamp string    `json:"timestamp"`                    // Время проведения работ (текстовое описание)
-	Message   string    `json:"message" gorm:"type:text"`     // Описание работ
+	Timestamp string    `json:"timestamp"`
+	Message   string    `json:"message" gorm:"type:text"`
 	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime"`
 	UpdatedAt time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
 }

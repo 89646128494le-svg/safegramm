@@ -98,9 +98,14 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
     const token = localStorage.getItem('token');
     const headers: Record<string,string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
-    
+
+    const base = getApiBaseUrl();
+    // LocalTunnel (loca.lt) возвращает 511 без этого заголовка — нужен для обхода страницы «Network Authentication Required»
+    if (base.includes('loca.lt')) {
+      headers['Bypass-Tunnel-Reminder'] = 'true';
+    }
+
     try {
-      const base = getApiBaseUrl();
       const rsp = await fetch((base.endsWith('/') ? base.slice(0, -1) : base) + path, { 
         method, 
         headers, 

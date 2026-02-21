@@ -23,7 +23,11 @@ func main() {
 
 	// Инициализация конфигурации
 	cfg := config.Load()
-
+	// Use SQLite when postgres localhost is set
+	if strings.Contains(cfg.DatabaseURL, "localhost") && (strings.Contains(cfg.DatabaseURL, "5432") || strings.Contains(cfg.DatabaseURL, "safegram")) {
+		cfg.DatabaseURL = "sqlite:safegram.db"
+		log.Println("Using SQLite (safegram.db) for local development")
+	}
 	// Инициализация базы данных
 	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
@@ -114,7 +118,7 @@ func main() {
 	api.SetupRoutes(router, db, wsHub, cfg)
 
 	// Запуск сервера
-	port := os.Getenv("PORT")
+	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		port = "8080"
 	}
