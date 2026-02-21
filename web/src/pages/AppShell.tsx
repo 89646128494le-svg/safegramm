@@ -207,7 +207,7 @@ export default function AppShell() {
       <Header user={user} onLogout={logout} />
       <motion.div 
         className="header" 
-        style={{ padding: 'var(--spacing-md) var(--spacing-lg)', borderTop: '1px solid var(--border-color)', flexShrink: 0 }}
+        style={{ padding: 'var(--spacing-md) var(--spacing-lg)', flexShrink: 0 }}
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 30 }}

@@ -170,9 +170,10 @@
 }
 
 * { box-sizing: border-box; }
-html, body { width: 100%; max-width: 100vw; overflow-x: hidden; }
-body { margin: 0; background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial; }
-#root { width: 100%; min-height: 100vh; }
+html { width: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html, body { width: 100%; max-width: 100vw; overflow-x: hidden; margin: 0; padding: 0; border: none; outline: none; }
+body { background: var(--bg); color: var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial; min-height: 100vh; min-height: 100dvh; }
+#root { width: 100%; max-width: 100%; min-height: 100vh; min-height: 100dvh; border: none; outline: none; }
 a { color: var(--accent); text-decoration: none; }
 input, button, select, textarea { background: #111827; color: var(--fg); border: 1px solid #374151; border-radius: 8px; padding: 10px 12px; }
 button { cursor: pointer; }

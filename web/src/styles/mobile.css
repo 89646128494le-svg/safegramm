@@ -1,4 +1,4 @@
-/* Мобильная адаптивность для SafeGram */
+/* Адаптация SafeGram: все экраны и браузеры */
 
 /* На десктопе мобильные элементы скрыты */
 .chat-back-btn-mobile,
@@ -45,10 +45,12 @@
     padding-right: max(16px, env(safe-area-inset-right));
   }
 
-  /* Контейнер приложения */
+  /* Контейнер приложения — без рамок, на весь экран */
   .app-container {
-    width: 100vw;
+    width: 100%;
+    max-width: 100vw;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
   }
 
@@ -419,23 +421,30 @@
   }
 }
 
-/* Очень маленькие экраны */
+/* Очень маленькие экраны (320px и меньше) */
 @media (max-width: 360px) {
   .message {
     max-width: 90%;
     padding: 8px 10px;
     font-size: 13px;
   }
-
   .chat-input {
     font-size: 14px;
     padding: 8px 10px;
   }
-
   button {
     padding: 8px 12px;
     font-size: 13px;
   }
+  .app-shell .header {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+}
+
+@media (max-width: 320px) {
+  .sidebar.open { width: 100%; max-width: 100%; }
+  .chat-list-item { padding: 10px 12px; min-height: 56px; }
 }
 
 /* Ландшафтная ориентация на мобильных */
