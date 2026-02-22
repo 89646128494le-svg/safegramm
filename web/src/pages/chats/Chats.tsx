@@ -63,10 +63,11 @@ interface User {
   username: string;
   avatarUrl?: string;
   status?: string;
+  roles?: string[] | string;
 }
 
 export default function Chats() {
-  const { ui, setSidebarOpen } = useStore();
+  const { ui, setSidebarOpen, maintenance } = useStore();
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -264,13 +265,13 @@ export default function Chats() {
       const data = await api('/api/users');
       const usersMap = new Map<string, User>();
       data.users?.forEach((u: any) => {
-        // Преобразуем isOnline в status
         const status = u.isOnline ? 'online' : (u.status || 'offline');
         usersMap.set(u.id, {
           id: u.id,
           username: u.username,
           avatarUrl: u.avatarUrl,
-          status: status,
+          status,
+          roles: u.roles,
         });
       });
       setUsers(usersMap);
@@ -384,6 +385,13 @@ export default function Chats() {
       return 'Личный чат';
     }
     return chat.name || (chat.type === 'group' ? 'Группа' : 'Канал');
+  };
+
+  const getChatUser = (chat: Chat): User | null => {
+    if (chat.type !== 'dm') return null;
+    const otherMemberId = chat.members.find(id => id !== currentUser?.id);
+    if (!otherMemberId) return null;
+    return users.get(otherMemberId) || null;
   };
 
   const loadStarredChats = () => {
@@ -641,6 +649,7 @@ export default function Chats() {
                     onUnstar={() => toggleStarChat(chat.id)}
                     getChatName={getChatName}
                     getChatPreview={getChatPreview}
+                    getChatUser={getChatUser}
                   />
                 );
               })}
@@ -649,6 +658,27 @@ export default function Chats() {
         )}
       </div>
       <div className="main chats-main">
+        {maintenance?.isActive && (
+          <div
+            style={{
+              flexShrink: 0,
+              padding: '10px 16px',
+              background: 'linear-gradient(135deg, rgba(255,193,7,0.2), rgba(255,152,0,0.2))',
+              borderBottom: '1px solid rgba(255,152,0,0.4)',
+              color: '#fef3c7',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span style={{ flexShrink: 0 }}>⚠️</span>
+            <span>{maintenance.message || 'Ведутся технические работы.'}</span>
+            {maintenance.timestamp && (
+              <span style={{ opacity: 0.9, fontSize: '12px' }}> • {maintenance.timestamp}</span>
+            )}
+          </div>
+        )}
         {!selectedChatId && (
           <div className="chats-mobile-menu-bar">
             <button type="button" className="chats-mobile-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Открыть список чатов">

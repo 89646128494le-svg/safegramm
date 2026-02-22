@@ -39,8 +39,8 @@ const defaultServices: Service[] = [
     description: 'Backend API (Go/Node.js)',
     type: 'api',
     status: 'running',
-    url: import.meta.env.VITE_API_URL || 'http://localhost:8080',
-    port: 8080,
+    url: import.meta.env.VITE_API_URL || 'http://localhost:8082',
+    port: 8082,
     health: {
       status: 'healthy',
       lastCheck: Date.now(),

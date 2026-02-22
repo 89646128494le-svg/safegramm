@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { api } from './services/api';
 import { useStore } from './store/useStore';
 import ErrorBoundary from './components/ErrorBoundary';
+import MaintenanceBanner from './components/MaintenanceBanner';
 import Landing from './pages/Landing';
 import AppShell from './pages/AppShell';
 
@@ -13,6 +14,7 @@ const Privacy = lazy(() => import('./pages/Privacy'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const PremiumApply = lazy(() => import('./pages/PremiumApply'));
 
 const LOAD_TIMEOUT_MS = 12000;
 
@@ -41,19 +43,24 @@ function PageFallback() {
 export default function App() {
   const { token, setToken, setUser, user } = useStore();
   const authChecked = useRef(false);
+  const hasStoredToken = !!(token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null));
+  const [authCheckDone, setAuthCheckDone] = useState(!hasStoredToken);
 
   useEffect(() => {
     if (authChecked.current) return;
-    authChecked.current = true;
     const t = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
     if (!t) {
       setUser(null);
+      setAuthCheckDone(true);
+      authChecked.current = true;
       return;
     }
+    authChecked.current = true;
     api('/api/users/me')
       .then((userData) => {
         setToken(t);
         setUser(userData);
+        setAuthCheckDone(true);
       })
       .catch((err: any) => {
         const status = err?.status;
@@ -63,6 +70,7 @@ export default function App() {
           setToken(null);
           setUser(null);
         }
+        setAuthCheckDone(true);
       });
   }, [token, setToken, setUser]);
 
@@ -73,10 +81,23 @@ export default function App() {
     }
   };
 
-  const isAuthenticated = !!(token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null));
+  const isAuthenticated = !!user;
+  const checkingAuth = hasStoredToken && !authCheckDone;
+
+  if (checkingAuth) {
+    return (
+      <ErrorBoundary>
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)', color: '#e2e8f0', fontFamily: 'system-ui' }}>
+          <div style={{ width: 28, height: 28, border: '2px solid rgba(124,108,255,0.3)', borderTopColor: '#7c6cff', borderRadius: '50%', animation: 'sg-spin 0.7s linear infinite' }} />
+          <p style={{ margin: 0, fontSize: 15 }}>Проверка входа...</p>
+        </div>
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <ErrorBoundary>
+      <MaintenanceBanner />
       <Suspense fallback={<PageFallback />}>
         <Routes>
         <Route path="/" element={
@@ -96,6 +117,7 @@ export default function App() {
         <Route path="/register" element={
           isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
         } />
+        <Route path="/premium-apply" element={<PremiumApply />} />
         <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

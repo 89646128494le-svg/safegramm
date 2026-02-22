@@ -114,7 +114,12 @@ export default function Pricing() {
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
           gap: '32px',
-          marginBottom: '80px'
+          marginBottom: '80px',
+          justifyContent: 'center',
+          justifyItems: 'center',
+          maxWidth: '1200px',
+          marginLeft: 'auto',
+          marginRight: 'auto'
         }}>
           {plans.map((plan, idx) => {
             const Icon = plan.icon;
@@ -128,6 +133,8 @@ export default function Pricing() {
                 style={{
                   position: 'relative',
                   padding: '40px',
+                  width: '100%',
+                  maxWidth: '360px',
                   background: plan.popular
                     ? 'linear-gradient(135deg, rgba(124,108,255,0.15), rgba(61,216,255,0.15))'
                     : 'rgba(255, 255, 255, 0.05)',
@@ -253,7 +260,7 @@ export default function Pricing() {
                   style={{ width: '100%' }}
                 >
                   <Link
-                    to="/register"
+                    to={plan.name === 'Free' ? '/register' : `/login?redirect=${encodeURIComponent('/premium-apply')}&plan=${encodeURIComponent(plan.name.toLowerCase())}`}
                     style={{
                       display: 'block',
                       width: '100%',

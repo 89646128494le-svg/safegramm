@@ -12,10 +12,15 @@ import BroadcastManager from '../../components/admin/BroadcastManager';
 import AdminLogs from '../../components/admin/AdminLogs';
 import SystemMonitor from '../../components/admin/SystemMonitor';
 import AdminMessaging from '../../components/admin/AdminMessaging';
+import SecurityDashboard from '../../components/admin/SecurityDashboard';
+import SupportTab from '../../components/admin/SupportTab';
+import LiveLogs from '../../components/admin/LiveLogs';
+import { ADMIN_TABS, canAccessAdminTab, getRoleLabel, getRoleLevel, isSystemOwner, canBlockUser, canDemoteUser, canPromoteTo, ROLE_LEVEL } from '../../utils/roles';
+
+type AdminTabId = typeof ADMIN_TABS[number]['id'];
 
 export default function Admin() {
-  const [tab, setTab] = useState<'users'|'analytics'|'bans'|'maintenance'|'broadcast'|'messages'|'logs'|'monitor'|'mod'|'reports'|'feedback'|'push'|'services'|'webhook'|'owner'>('users');
-  const [isOwner, setIsOwner] = useState(false);
+  const [tab, setTab] = useState<AdminTabId>('users');
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
@@ -26,15 +31,29 @@ export default function Admin() {
     try {
       const u = await api('/api/users/me');
       setUser(u);
-      const roles = Array.isArray(u.roles) ? u.roles : (u.roles ? String(u.roles).split(',').map((r: string) => r.trim()) : []);
-      setIsOwner(roles.includes('owner'));
+      const firstTab = ADMIN_TABS.find(t => canAccessAdminTab(u, t.id));
+      if (firstTab) setTab(firstTab.id);
     } catch (e) {
       console.error('Failed to load user:', e);
     }
   };
+
+  const roleLabel = user ? getRoleLabel(user) : '';
+
   return (
     <div style={{padding: '24px', maxWidth: 1400, margin: '0 auto'}}>
-      <h2 style={{marginBottom: '24px', fontSize: '28px', fontWeight: '700'}}>Панель управления</h2>
+      <h2 style={{marginBottom: '24px', fontSize: '28px', fontWeight: '700'}}>
+        Панель управления
+        {roleLabel && (
+          <span style={{ fontSize: '14px', fontWeight: '500', color: 'var(--subtle, #9ca3af)', marginLeft: '12px' }}>
+            {roleLabel === 'Владелец' && '👑 Владелец'}
+            {roleLabel === 'Тех. Админ' && '⚙️ Тех. Админ'}
+            {roleLabel === 'Служба безопасности' && '🛡️ Служба безопасности'}
+            {roleLabel === 'Модератор' && '🛡️ Модератор'}
+            {roleLabel === 'Техподдержка' && '🎫 Техподдержка'}
+          </span>
+        )}
+      </h2>
       <div style={{
         display: 'flex', 
         gap: '8px', 
@@ -43,235 +62,67 @@ export default function Admin() {
         borderBottom: '1px solid var(--border, #374151)',
         paddingBottom: '16px'
       }}>
-        <button 
-          onClick={()=>setTab('users')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'users' ? '600' : '400',
-            background: tab === 'users' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'users' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          👥 Пользователи
-        </button>
-        <button 
-          onClick={()=>setTab('analytics')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'analytics' ? '600' : '400',
-            background: tab === 'analytics' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'analytics' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          📊 Аналитика
-        </button>
-        <button 
-          onClick={()=>setTab('bans')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'bans' ? '600' : '400',
-            background: tab === 'bans' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'bans' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          🚫 Баны и муты
-        </button>
-        <button 
-          onClick={()=>setTab('maintenance')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'maintenance' ? '600' : '400',
-            background: tab === 'maintenance' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'maintenance' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          🔧 Техработы
-        </button>
-        <button 
-          onClick={()=>setTab('broadcast')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'broadcast' ? '600' : '400',
-            background: tab === 'broadcast' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'broadcast' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          📢 Рассылка
-        </button>
-        <button 
-          onClick={()=>setTab('messages')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'messages' ? '600' : '400',
-            background: tab === 'messages' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'messages' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          📧 Письма & Тех.работы
-        </button>
-        <button 
-          onClick={()=>setTab('logs')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'logs' ? '600' : '400',
-            background: tab === 'logs' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'logs' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          📜 Логи
-        </button>
-        <button 
-          onClick={()=>setTab('monitor')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'monitor' ? '600' : '400',
-            background: tab === 'monitor' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'monitor' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          🖥️ Мониторинг
-        </button>
-        <button 
-          onClick={()=>setTab('mod')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'mod' ? '600' : '400',
-            background: tab === 'mod' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'mod' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          🛡️ Модерация
-        </button>
-        <button 
-          onClick={()=>setTab('reports')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'reports' ? '600' : '400',
-            background: tab === 'reports' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'reports' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          ⚠️ Жалобы
-        </button>
-        <button 
-          onClick={()=>setTab('feedback')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'feedback' ? '600' : '400',
-            background: tab === 'feedback' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'feedback' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          💬 Фидбек
-        </button>
-        <button 
-          onClick={()=>setTab('push')} 
-          style={{
-            padding: '10px 16px',
-            fontWeight: tab === 'push' ? '600' : '400',
-            background: tab === 'push' ? 'var(--accent, #3b82f6)' : 'transparent',
-            color: tab === 'push' ? '#fff' : 'var(--fg, #e5e7eb)',
-            border: '1px solid var(--border, #374151)',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          🔔 Уведомления
-        </button>
-        {(isOwner || user?.roles?.includes('admin')) && (
-          <>
-            <button 
-              onClick={()=>setTab('services')} 
+        {ADMIN_TABS.map(({ id, label }) => {
+          if (!canAccessAdminTab(user, id)) return null;
+          return (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
               style={{
                 padding: '10px 16px',
-                fontWeight: tab === 'services' ? '600' : '400',
-                background: tab === 'services' ? 'var(--accent, #3b82f6)' : 'transparent',
-                color: tab === 'services' ? '#fff' : 'var(--fg, #e5e7eb)',
+                fontWeight: tab === id ? '600' : '400',
+                background: tab === id ? 'var(--accent, #3b82f6)' : 'transparent',
+                color: tab === id ? '#fff' : 'var(--fg, #e5e7eb)',
                 border: '1px solid var(--border, #374151)',
                 borderRadius: '8px',
                 cursor: 'pointer'
               }}
             >
-              ⚙️ Сервисы
+              {label}
             </button>
-            <button 
-              onClick={()=>setTab('webhook')} 
-              style={{
-                padding: '10px 16px',
-                fontWeight: tab === 'webhook' ? '600' : '400',
-                background: tab === 'webhook' ? 'var(--accent, #3b82f6)' : 'transparent',
-                color: tab === 'webhook' ? '#fff' : 'var(--fg, #e5e7eb)',
-                border: '1px solid var(--border, #374151)',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              🔗 Webhook
-            </button>
-          </>
-        )}
+          );
+        })}
       </div>
-      {tab==='users' && <UsersTab/>}
-      {tab==='analytics' && <AnalyticsDashboard />}
-      {tab==='bans' && <BanMuteManager />}
-      {tab==='maintenance' && (isOwner || user?.roles?.includes('admin')) && <MaintenanceManager />}
-      {tab==='broadcast' && (isOwner || user?.roles?.includes('admin')) && <BroadcastManager />}
-      {tab==='messages' && (isOwner || user?.roles?.includes('admin')) && <AdminMessaging />}
-      {tab==='logs' && <AdminLogs />}
-      {tab==='monitor' && (isOwner || user?.roles?.includes('admin')) && <SystemMonitor />}
-      {tab==='mod' && <ModTab/>}
-      {tab==='reports' && <ReportsTab/>}
-      {tab==='feedback' && <FeedbackTab/>}
-      {tab==='push' && <PushTab/>}
-      {tab==='services' && (isOwner || user?.roles?.includes('admin')) && <ServiceManager />}
-      {tab==='webhook' && (isOwner || user?.roles?.includes('admin')) && <WebhookManager />}
-      {tab==='owner' && isOwner && <OwnerTab/>}
+      {tab==='sovereign' && canAccessAdminTab(user, 'sovereign') && <OwnerTab currentUser={user} />}
+      {tab==='users' && canAccessAdminTab(user, 'users') && <UsersTab currentUser={user} />}
+      {tab==='analytics' && canAccessAdminTab(user, 'analytics') && <AnalyticsDashboard />}
+      {tab==='bans' && canAccessAdminTab(user, 'bans') && <BanMuteManager />}
+      {tab==='maintenance' && canAccessAdminTab(user, 'maintenance') && <MaintenanceManager />}
+      {tab==='broadcast' && canAccessAdminTab(user, 'broadcast') && <BroadcastManager />}
+      {tab==='messages' && canAccessAdminTab(user, 'messages') && <AdminMessaging />}
+      {tab==='logs' && canAccessAdminTab(user, 'logs') && <AdminLogs />}
+      {tab==='monitor' && canAccessAdminTab(user, 'monitor') && <SystemMonitor />}
+      {tab==='security' && canAccessAdminTab(user, 'security') && <SecurityDashboard />}
+      {tab==='mod' && canAccessAdminTab(user, 'mod') && <ModTab/>}
+      {tab==='reports' && canAccessAdminTab(user, 'reports') && <ReportsTab/>}
+      {tab==='feedback' && canAccessAdminTab(user, 'feedback') && <FeedbackTab/>}
+      {tab==='premium_apps' && canAccessAdminTab(user, 'premium_apps') && <PremiumApplicationsTab />}
+      {tab==='push' && canAccessAdminTab(user, 'push') && <PushTab/>}
+      {tab==='services' && canAccessAdminTab(user, 'services') && <ServiceManager />}
+      {tab==='webhook' && canAccessAdminTab(user, 'webhook') && <WebhookManager />}
+      {tab==='support' && canAccessAdminTab(user, 'support') && <SupportTab />}
     </div>
   );
 }
 
-function OwnerTab() {
+function OwnerTab({ currentUser }: { currentUser: any }) {
   const [dashboard, setDashboard] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const level = getRoleLevel(currentUser);
+  const isOwner = level >= ROLE_LEVEL.owner && isSystemOwner(currentUser);
+  const isSysadmin = level >= ROLE_LEVEL.sysadmin && !isOwner;
+  const isGuardian = level >= ROLE_LEVEL.safety && level < ROLE_LEVEL.sysadmin;
+  const isSupport = level >= ROLE_LEVEL.support && level < ROLE_LEVEL.moderator;
 
   useEffect(() => {
-    loadDashboard();
-    loadSettings();
-  }, []);
+    if (isOwner || isSysadmin) {
+      loadDashboard();
+      loadSettings();
+    } else {
+      setLoading(false);
+    }
+  }, [isOwner, isSysadmin]);
 
   const loadDashboard = async () => {
     try {
@@ -325,13 +176,36 @@ function OwnerTab() {
     }
   };
 
-  if (loading) {
+  if (loading && (isOwner || isSysadmin)) {
     return <div>Загрузка...</div>;
   }
 
+  // Support: только тикеты и базовое инфо
+  if (isSupport) {
+    return (
+      <div>
+        <h3 style={{ marginBottom: '16px' }}>🎫 Поддержка — тикеты и пользователи</h3>
+        <p style={{ color: 'var(--subtle)', marginBottom: '16px' }}>Просмотр тикетов и базовая информация о пользователях.</p>
+        <SupportTab />
+      </div>
+    );
+  }
+
+  // Guardian: мониторинг трафика и бан по IP
+  if (isGuardian) {
+    return (
+      <div>
+        <h3 style={{ marginBottom: '16px' }}>🛡️ Security — мониторинг и бан по IP</h3>
+        <p style={{ color: 'var(--subtle)', marginBottom: '16px' }}>Мониторинг трафика и блокировка подозрительных IP.</p>
+        <SecurityDashboard />
+      </div>
+    );
+  }
+
+  // Owner (Lev) или Sysadmin: полная панель (кнопки остановки сервера / БД только у Lev — бэкенд проверяет)
   return (
     <div>
-      <h3 style={{ marginBottom: '16px' }}>👑 Панель владельца</h3>
+      <h3 style={{ marginBottom: '16px' }}>👑 Sovereign Control Panel</h3>
       
       {/* Статистика */}
       {dashboard && (
@@ -483,11 +357,14 @@ function OwnerTab() {
           </div>
         </div>
       )}
+
+      {/* Live Logs — только для Lev (Intelligence Center) */}
+      {isOwner && <LiveLogs />}
     </div>
   );
 }
 
-function UsersTab() {
+function UsersTab({ currentUser }: { currentUser: any }) {
   const [list, setList] = useState<any[]>([]);
   const [filteredList, setFilteredList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -534,9 +411,14 @@ function UsersTab() {
     
     if (filterRole !== 'all') {
       filtered = filtered.filter(u => {
-        if (filterRole === 'owner') return u.roles?.includes('owner');
-        if (filterRole === 'admin') return u.roles?.includes('admin') && !u.roles?.includes('owner');
-        if (filterRole === 'user') return !u.roles?.includes('admin') && !u.roles?.includes('owner');
+        const raw = u.roles;
+        const roles = Array.isArray(raw) ? raw : (raw ? String(raw).split(',').map((r: string) => r.trim().toLowerCase()) : []);
+        if (filterRole === 'owner') return roles.includes('owner');
+        if (filterRole === 'sysadmin') return (roles.includes('sysadmin') || roles.includes('admin')) && !roles.includes('owner');
+        if (filterRole === 'safety') return (roles.includes('safety') || roles.includes('guardian')) && !roles.includes('owner') && !roles.includes('admin') && !roles.includes('sysadmin');
+        if (filterRole === 'moderator') return roles.includes('moderator') && !roles.includes('safety') && !roles.includes('admin') && !roles.includes('sysadmin') && !roles.includes('owner');
+        if (filterRole === 'support') return roles.includes('support') && !roles.includes('moderator') && !roles.includes('safety') && !roles.includes('admin') && !roles.includes('sysadmin') && !roles.includes('owner');
+        if (filterRole === 'user') return !['owner','admin','sysadmin','safety','guardian','moderator','support'].some(r => roles.includes(r));
         return true;
       });
     }
@@ -665,8 +547,11 @@ function UsersTab() {
           }}
         >
           <option value="all">Все роли</option>
-          <option value="owner">👑 Владельцы</option>
-          <option value="admin">⚡ Администраторы</option>
+          <option value="owner">👑 Владелец</option>
+          <option value="sysadmin">⚙️ Тех. Админ</option>
+          <option value="safety">🛡️ Служба безопасности</option>
+          <option value="moderator">🛡️ Модератор</option>
+          <option value="support">🎫 Техподдержка</option>
           <option value="user">👤 Пользователи</option>
         </select>
         <select
@@ -694,9 +579,18 @@ function UsersTab() {
       ) : (
         <div style={{display: 'grid', gap: '12px'}}>
           {filteredList.map(u => {
-            const isOwner = u.roles?.includes('owner');
-            const isAdmin = u.roles?.includes('admin');
-            const isBanned = u.status === 'banned';
+            const rawRoles = u.roles;
+            const uRoles = Array.isArray(rawRoles) ? rawRoles : (rawRoles ? String(rawRoles).split(',').map((r: string) => r.trim().toLowerCase()) : []);
+            const uIsOwner = uRoles.includes('owner');
+            const uIsSysadmin = uRoles.includes('sysadmin') || uRoles.includes('admin');
+            const uIsSafety = uRoles.includes('safety') || uRoles.includes('guardian');
+            const uIsModerator = uRoles.includes('moderator');
+            const uIsSupport = uRoles.includes('support');
+            const uIsBanned = u.status === 'banned';
+            const systemOwner = isSystemOwner(u);
+            const canBlock = canBlockUser(currentUser, u);
+            const canDemote = canDemoteUser(currentUser, u);
+            const canPromoteAdmin = canPromoteTo(currentUser, 'admin');
             return (
               <div 
                 key={u.id} 
@@ -718,15 +612,19 @@ function UsersTab() {
               >
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px'}}>
                   <div style={{flex: 1}}>
-                    <div style={{fontWeight: '600', fontSize: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                    <div style={{fontWeight: '600', fontSize: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
                       {u.username} 
-                      {isOwner && <span title="Владелец">👑</span>} 
-                      {isAdmin && !isOwner && <span title="Администратор">⚡</span>}
+                      {systemOwner && <span title="Встроенный системный владелец" style={{ background: 'rgba(251,191,36,0.2)', color: '#fbbf24', padding: '2px 8px', borderRadius: '6px', fontSize: '12px' }}>Системный владелец</span>}
+                      {uIsOwner && !systemOwner && <span title="Владелец">👑</span>}
+                      {uIsSysadmin && !uIsOwner && <span title="Тех. Админ">⚙️</span>}
+                      {uIsSafety && !uIsSysadmin && !uIsOwner && <span title="Служба безопасности">🛡️</span>}
+                      {uIsModerator && !uIsSafety && !uIsSysadmin && !uIsOwner && <span title="Модератор">🛡️</span>}
+                      {uIsSupport && !uIsModerator && !uIsSafety && !uIsSysadmin && !uIsOwner && <span title="Техподдержка">🎫</span>}
                     </div>
                     <div className="small" style={{marginBottom: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
-                      <span>Роли: <strong>{u.roles?.join(', ') || 'user'}</strong></span>
+                      <span>Роли: <strong>{Array.isArray(u.roles) ? u.roles.join(', ') : (u.roles || 'user')}</strong></span>
                       <span>|</span>
-                      <span>Статус: <strong>{isBanned ? '🚫 Заблокирован' : u.status || 'online'}</strong></span>
+                      <span>Статус: <strong>{uIsBanned ? '🚫 Заблокирован' : u.status || 'online'}</strong></span>
                       {u.plan && <><span>|</span> <span>Тариф: <strong>{u.plan}</strong></span></>}
                     </div>
                     {u.email && (
@@ -744,58 +642,62 @@ function UsersTab() {
                     )}
                   </div>
                 </div>
-                {!isOwner && (
+                {!systemOwner && (canBlock || canDemote) && (
                   <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border, #374151)'}}>
-                    {isBanned ? (
-                      <button 
-                        onClick={()=>unblockUser(u.id)} 
-                        style={{
-                          padding: '8px 16px', 
-                          fontSize: '14px',
-                          background: '#22c55e',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          fontWeight: '500'
-                        }}
-                      >
-                        ✅ Разблокировать
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={()=>blockUser(u.id, u.username)} 
-                        style={{
-                          padding: '8px 16px', 
-                          fontSize: '14px', 
-                          background: '#dc3545',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          fontWeight: '500'
-                        }}
-                      >
-                        🚫 Заблокировать
-                      </button>
+                    {canBlock && (
+                      uIsBanned ? (
+                        <button 
+                          onClick={()=>unblockUser(u.id)} 
+                          style={{
+                            padding: '8px 16px', 
+                            fontSize: '14px',
+                            background: '#22c55e',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                        >
+                          ✅ Разблокировать
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={()=>blockUser(u.id, u.username)} 
+                          style={{
+                            padding: '8px 16px', 
+                            fontSize: '14px', 
+                            background: '#dc3545',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                        >
+                          🚫 Заблокировать
+                        </button>
+                      )
                     )}
-                    {!isAdmin ? (
-                      <button 
-                        onClick={()=>promoteUser(u.id, u.username)} 
-                        style={{
-                          padding: '8px 16px', 
-                          fontSize: '14px',
-                          background: 'var(--accent, #3b82f6)',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          fontWeight: '500'
-                        }}
-                      >
-                        ⚡ Сделать админом
-                      </button>
-                    ) : (
+                    {!uIsSysadmin && !uIsOwner ? (
+                      canPromoteAdmin && (
+                        <button 
+                          onClick={()=>promoteUser(u.id, u.username)} 
+                          style={{
+                            padding: '8px 16px', 
+                            fontSize: '14px',
+                            background: 'var(--accent, #3b82f6)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                        >
+                          ⚡ Сделать админом
+                        </button>
+                      )
+                    ) : (uIsSysadmin || uIsOwner) && canDemote ? (
                       <button 
                         onClick={()=>demoteUser(u.id, u.username)} 
                         style={{
@@ -811,7 +713,7 @@ function UsersTab() {
                       >
                         ⬇ Снять админа
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -1018,6 +920,71 @@ function ReportsTab() {
               {r.userId && (
                 <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
                   От пользователя: {r.userId}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PremiumApplicationsTab() {
+  const [list, setList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api('/api/admin/feedback')
+      .then((all: any[]) => Array.isArray(all) ? all.filter((f: any) => (f.subject || '').includes('Заявка на тариф')) : [])
+      .catch(() => [])
+      .then(setList)
+      .finally(() => setLoading(false));
+  }, []);
+  if (loading) {
+    return (
+      <div style={{padding: '48px', textAlign: 'center'}}>
+        <div className="empty">Загрузка...</div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div style={{marginBottom: '24px'}}>
+        <h3 style={{fontSize: '20px', fontWeight: '600', marginBottom: '8px'}}>Заявки на Premium / Enterprise</h3>
+        <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
+          Рассмотрите заявки и выдайте тариф во вкладке «Пользователи» (план Premium).
+        </div>
+      </div>
+      {list.length === 0 ? (
+        <div className="empty" style={{padding: '48px'}}>
+          Нет заявок на тариф
+        </div>
+      ) : (
+        <div style={{display: 'grid', gap: '12px'}}>
+          {list.map((f: any) => (
+            <div
+              key={f.id}
+              style={{
+                padding: '16px',
+                background: 'var(--panel, rgba(31, 41, 55, 0.6))',
+                border: '1px solid var(--border, #374151)',
+                borderRadius: '12px'
+              }}
+            >
+              <div style={{fontSize: '18px', fontWeight: '600', marginBottom: '12px', color: 'var(--accent, #3b82f6)'}}>
+                {f.subject || 'Без темы'}
+              </div>
+              <div style={{marginBottom: '12px', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>
+                {f.body || 'Нет содержимого'}
+              </div>
+              {f.userId && (
+                <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
+                  ID пользователя: {f.userId} — выдать Premium во вкладке «Пользователи»
+                </div>
+              )}
+              {f.createdAt && (
+                <div className="small" style={{color: 'var(--subtle, #9ca3af)', marginTop: '4px'}}>
+                  {new Date(f.createdAt).toLocaleString('ru-RU')}
                 </div>
               )}
             </div>

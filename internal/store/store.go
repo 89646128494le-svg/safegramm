@@ -1,14 +1,171 @@
 package store
 
 import (
+	"bufio"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
+// ——— Роли (иерархия SafeGram). Master Key только у Lev. ———
+
+const (
+	RoleOwner     = "owner"     // Lev — полный доступ (только SystemOwnerID)
+	RoleAdmin     = "admin"     // управление сервером и пользователями
+	RoleGuardian  = "guardian"  // безопасность и бан-лист
+	RoleModerator = "moderator" // модерация чатов
+	RoleSupport   = "support"   // помощь пользователям
+	RoleUser      = "user"      // обычный пользователь
+)
+
+// Master Key: единственный владелец (Lev). Проверка по ID или по username.
+const SystemOwnerID = "lev"
+const SystemOwnerUsername = "lev"
+
+// Действия для проверки прав (HasPermission).
+const (
+	ActionRestartServer   = "restart_server"
+	ActionEditDB          = "edit_db"
+	ActionManageServices  = "manage_services"
+	ActionManageUsers     = "manage_users"
+	ActionBlockUser       = "block_user"
+	ActionSetUserPlan     = "set_user_plan"
+	ActionSetUserRole     = "set_user_role"
+	ActionDeleteUser      = "delete_user"
+	ActionViewLogs        = "view_logs"
+	ActionViewTraffic     = "view_traffic"
+	ActionBanIP           = "ban_ip"
+	ActionViewSessions    = "view_sessions"
+	ActionModerateChats   = "moderate_chats"
+	ActionViewReports     = "view_reports"
+	ActionViewTickets     = "view_tickets"
+	ActionReplyTickets    = "reply_tickets"
+	ActionMaintenance     = "maintenance" // вкл/выкл техработы
+)
+
+// level возвращает числовой уровень роли (больше = выше).
+func roleLevel(role string) int {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case RoleOwner:
+		return 5
+	case RoleAdmin:
+		return 4
+	case RoleGuardian:
+		return 3
+	case RoleModerator:
+		return 2
+	case RoleSupport:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// TopRole возвращает высшую роль из строки roles (формат: "owner,admin" или JSON массив).
+func TopRole(roles string) string {
+	if roles == "" {
+		return ""
+	}
+	roles = strings.TrimSpace(roles)
+	if strings.HasPrefix(roles, "[") {
+		// Упрощённый парсинг JSON массива
+		roles = strings.Trim(roles, "[]")
+		roles = strings.ReplaceAll(roles, "\"", "")
+	}
+	parts := strings.Split(roles, ",")
+	top := ""
+	topLvl := 0
+	for _, p := range parts {
+		r := strings.ToLower(strings.TrimSpace(p))
+		if r == "" {
+			continue
+		}
+		if l := roleLevel(r); l > topLvl {
+			topLvl = l
+			top = r
+		}
+	}
+	return top
+}
+
+// IsSystemOwner возвращает true, если userID или username принадлежит Lev (Master Key).
+func IsSystemOwner(userID, username string) bool {
+	id := strings.ToLower(strings.TrimSpace(userID))
+	un := strings.ToLower(strings.TrimSpace(username))
+	return id == SystemOwnerID || id == SystemOwnerUsername || un == SystemOwnerUsername
+}
+
+// HasPermission проверяет, может ли пользователь выполнить действие.
+// ownerID и ownerUsername — для проверки Master Key (Lev). Owner-действия только у Lev.
+func HasPermission(roles string, ownerID, ownerUsername string, action string) bool {
+	top := TopRole(roles)
+	lvl := roleLevel(top)
+	isOwner := IsSystemOwner(ownerID, ownerUsername) && top == RoleOwner
+
+	// Только Lev получает доступ к критическим действиям
+	if action == ActionRestartServer || action == ActionEditDB || action == ActionManageServices || action == ActionDeleteUser {
+		return isOwner
+	}
+
+	switch action {
+	case ActionManageUsers, ActionSetUserPlan, ActionSetUserRole, ActionBlockUser:
+		return lvl >= roleLevel(RoleAdmin) || isOwner
+	case ActionViewLogs, ActionViewTraffic, ActionBanIP, ActionViewSessions:
+		return lvl >= roleLevel(RoleGuardian) || lvl >= roleLevel(RoleAdmin) || isOwner
+	case ActionModerateChats, ActionViewReports:
+		return lvl >= roleLevel(RoleModerator)
+	case ActionViewTickets, ActionReplyTickets:
+		return lvl >= roleLevel(RoleSupport)
+	case ActionMaintenance:
+		return lvl >= roleLevel(RoleAdmin) || isOwner
+	default:
+		return lvl >= roleLevel(RoleSupport)
+	}
+}
+
+// ——— Невозможный лог админки (Append-only). Даже админ не может удалить запись. ———
+
+const (
+	AdminActionBan           = "Ban"
+	AdminActionMute          = "Mute"
+	AdminActionConfigChange  = "ConfigChange"
+	AdminActionServerRestart = "ServerRestart"
+	AdminActionRoleChange    = "RoleChange"
+	AdminActionChannelDelete = "ChannelDelete"
+	AdminActionFailedAdminLogin = "FailedAdminLogin"
+	AdminActionAntiDDoS      = "AntiDDoS"
+	AdminActionRegistration  = "Registration"
+	AdminActionHandshake     = "Handshake"
+)
+
+// Severity для цветовой индикации в Intelligence Center.
+const (
+	SeverityCritical = "critical" // красный
+	SeverityModeration = "moderation" // оранжевый
+	SeverityInfo      = "info"    // синий
+)
+
+// AdminLog — одна запись лога. Неизменяемая после записи.
+type AdminLog struct {
+	Timestamp  time.Time `json:"timestamp"`
+	AdminID    string    `json:"adminId"`
+	AdminName  string    `json:"adminName,omitempty"`
+	ActionType string    `json:"actionType"`
+	TargetID   string    `json:"targetId,omitempty"`
+	TargetName string    `json:"targetName,omitempty"`
+	Reason     string    `json:"reason,omitempty"`
+	Severity   string    `json:"severity"` // critical | moderation | info
+	Extra      string    `json:"extra,omitempty"`
+}
+
 // User — модель пользователя в памяти (по мотивам archive/server-go/models/user.go).
-// Регистрация/логин через API — позже; пока только структура для хранения.
+// Role — каноническая роль для enforcement (owner, admin, guardian, moderator, support, user).
+// Доступ к RoleOwner только у пользователя с ID/username = SystemOwnerID (Lev).
 type User struct {
 	ID                string
 	Username          string
@@ -18,7 +175,8 @@ type User struct {
 	CloudPasswordHash string   // 2FA: bcrypt/argon2
 	IdentityPublicKey []byte   // Ed25519 public 32 bytes — для верификации подписей (wallet-style)
 	Salt              string
-	Roles             string
+	Roles             string   // JSON или "role1,role2" для совместимости
+	Role              string   // одна роль: owner|admin|guardian|moderator|support|user (enforcement)
 	Plan              string
 	AvatarURL         string
 	About             string
@@ -117,6 +275,30 @@ type Store struct {
 	nextUserID     uint64
 	nextRoomID     uint64
 	maxLoginEvents int
+	adminLogPath   string
+	adminLogMu     sync.Mutex
+	liveStats      LiveStats
+	liveStatsMu    sync.RWMutex
+}
+
+// LiveStats — метрики для Sovereign (горутины, память, сессии).
+type LiveStats struct {
+	Goroutines int
+	MemoryMB   float64
+	Sessions   int
+	At         time.Time
+}
+
+func (s *Store) SetLiveStats(goroutines int, memoryMB float64, sessions int) {
+	s.liveStatsMu.Lock()
+	defer s.liveStatsMu.Unlock()
+	s.liveStats = LiveStats{Goroutines: goroutines, MemoryMB: memoryMB, Sessions: sessions, At: time.Now()}
+}
+
+func (s *Store) GetLiveStats() LiveStats {
+	s.liveStatsMu.RLock()
+	defer s.liveStatsMu.RUnlock()
+	return s.liveStats
 }
 
 // NewStore создаёт новое хранилище.
@@ -188,8 +370,28 @@ func (s *Store) GetUserByUsername(username string) *User {
 	return nil
 }
 
-// PutUser сохраняет или обновляет пользователя.
+// NormalizeUserRole выставляет User.Role из Roles (TopRole). Owner только если IsSystemOwner.
+func NormalizeUserRole(u *User) {
+	if u == nil {
+		return
+	}
+	top := TopRole(u.Roles)
+	if top != "" {
+		u.Role = top
+		return
+	}
+	if u.Role == "" {
+		u.Role = RoleUser
+	}
+	// Owner только для Lev: даже если в БД прописан owner, без совпадения ID/username — сбрасываем.
+	if u.Role == RoleOwner && !IsSystemOwner(u.ID, u.Username) {
+		u.Role = RoleUser
+	}
+}
+
+// PutUser сохраняет или обновляет пользователя. Синхронизирует Role из Roles.
 func (s *Store) PutUser(u *User) {
+	NormalizeUserRole(u)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Users[u.ID] = u
@@ -223,12 +425,20 @@ func (s *Store) SetUserBlocked(id string, blocked bool) {
 	}
 }
 
-// SetUserRole sets Roles for user id (e.g. "user", "admin").
+// SetUserRole sets Roles for user id and canonical Role (owner only if IsSystemOwner).
 func (s *Store) SetUserRole(id string, role string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if u, ok := s.Users[id]; ok {
 		u.Roles = role
+		r := strings.ToLower(strings.TrimSpace(role))
+		if r == RoleOwner && !IsSystemOwner(u.ID, u.Username) {
+			u.Role = RoleUser
+		} else if r != "" {
+			u.Role = r
+		} else {
+			u.Role = RoleUser
+		}
 	}
 }
 
@@ -465,4 +675,80 @@ func (s *Store) GetLoginEvents(userID string) []LoginEvent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]LoginEvent(nil), s.LoginEvents[userID]...)
+}
+
+// SetAdminLogPath задаёт путь к append-only файлу логов админки. Вызывать при старте сервера.
+func (s *Store) SetAdminLogPath(path string) {
+	s.adminLogMu.Lock()
+	defer s.adminLogMu.Unlock()
+	s.adminLogPath = path
+}
+
+// AppendLog записывает действие в защищённый append-only файл. Удаление записей невозможно.
+func (s *Store) AppendLog(log AdminLog) {
+	s.adminLogMu.Lock()
+	path := s.adminLogPath
+	s.adminLogMu.Unlock()
+	if path == "" {
+		path = "admin_audit.log"
+	}
+	dir := filepath.Dir(path)
+	if dir != "." {
+		_ = os.MkdirAll(dir, 0750)
+	}
+	raw, err := json.Marshal(log)
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
+	if err != nil {
+		return
+	}
+	_, _ = f.Write(raw)
+	_, _ = f.Write([]byte("\n"))
+	_ = f.Sync()
+	_ = f.Close()
+	WriteAuditRecord(log)
+}
+
+// ReadLogs возвращает последние limit записей (новые сверху). Если limit <= 0, возвращает все.
+func (s *Store) ReadLogs(limit int) ([]AdminLog, error) {
+	s.adminLogMu.Lock()
+	path := s.adminLogPath
+	s.adminLogMu.Unlock()
+	if path == "" {
+		path = "admin_audit.log"
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	var lines []string
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	var out []AdminLog
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		var log AdminLog
+		if json.Unmarshal([]byte(line), &log) != nil {
+			continue
+		}
+		out = append(out, log)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
 }

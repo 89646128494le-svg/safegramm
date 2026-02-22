@@ -129,6 +129,7 @@ export default function Landing() {
           />
         </div>
 
+        <div className="hero-inner">
         <motion.div className="hero-content" variants={fadeInUp}>
           <motion.div 
             className="hero-badge"
@@ -245,6 +246,7 @@ export default function Landing() {
             </div>
           </div>
         </motion.div>
+        </div>
       </motion.section>
 
       {/* Dashboard: ключевые фишки + Live Preview */}

@@ -1,51 +1,58 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X, Clock, Info } from 'lucide-react';
 import { api } from '../services/api';
+import { useStore } from '../store/useStore';
+import type { MaintenanceStatus } from '../store/useStore';
 
-interface MaintenanceData {
-  isActive: boolean;
-  timestamp?: string;
-  message?: string;
-  id?: string;
-}
+const POLL_INTERVAL_MS = 20 * 1000; // 20 секунд — обновление в реальном времени
 
 export default function MaintenanceBanner() {
-  const [maintenanceData, setMaintenanceData] = useState<MaintenanceData | null>(null);
+  const { setMaintenance } = useStore();
+  const [maintenanceData, setMaintenanceData] = useState<MaintenanceStatus | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
-  useEffect(() => {
-    // Проверяем статус технических работ
-    checkMaintenanceStatus();
-
-    // Проверяем каждые 5 минут
-    const interval = setInterval(checkMaintenanceStatus, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const checkMaintenanceStatus = async () => {
+  const checkMaintenanceStatus = useCallback(async () => {
     try {
       const response = await api('/api/maintenance/status', 'GET');
-      
-      if (response.isActive) {
-        setMaintenanceData(response);
-        
-        // Проверяем не был ли баннер уже закрыт для этого ID
+      const data = response?.isActive
+        ? {
+            isActive: true,
+            message: response.message,
+            timestamp: response.timestamp,
+            id: response.id,
+          }
+        : null;
+      setMaintenance(data);
+      if (data) {
+        setMaintenanceData(data);
         const dismissedId = localStorage.getItem('dismissedMaintenanceId');
-        if (dismissedId !== response.id) {
+        if (dismissedId !== data.id) {
           setIsVisible(true);
           setIsDismissed(false);
         }
       } else {
-        setIsVisible(false);
         setMaintenanceData(null);
+        setIsVisible(false);
       }
     } catch (error) {
-      console.error('Failed to check maintenance status:', error);
+      setMaintenance(null);
+      setMaintenanceData(null);
+      setIsVisible(false);
     }
-  };
+  }, [setMaintenance]);
+
+  useEffect(() => {
+    checkMaintenanceStatus();
+    const interval = setInterval(checkMaintenanceStatus, POLL_INTERVAL_MS);
+    const onUpdated = () => checkMaintenanceStatus();
+    window.addEventListener('maintenance-updated', onUpdated);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('maintenance-updated', onUpdated);
+    };
+  }, [checkMaintenanceStatus]);
 
   const handleDismiss = () => {
     setIsDismissed(true);

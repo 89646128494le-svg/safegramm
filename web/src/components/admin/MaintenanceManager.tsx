@@ -42,6 +42,9 @@ export default function MaintenanceManager() {
       setSaving(true);
       await api('/api/admin/maintenance', 'POST', settings);
       showToast('Настройки сохранены', 'success');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('maintenance-updated'));
+      }
     } catch (e: any) {
       showToast('Ошибка сохранения: ' + e.message, 'error');
     } finally {
@@ -57,7 +60,19 @@ export default function MaintenanceManager() {
       newSettings.endTime = Date.now();
     }
     setSettings(newSettings);
-    await saveSettings();
+    try {
+      setSaving(true);
+      await api('/api/admin/maintenance', 'POST', newSettings);
+      setSettings(newSettings);
+      showToast(newSettings.enabled ? 'Техработы включены' : 'Техработы выключены', 'success');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('maintenance-updated'));
+      }
+    } catch (e: any) {
+      showToast('Ошибка: ' + e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {

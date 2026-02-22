@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Lock, Cloud, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 import { api } from '../services/api';
@@ -41,6 +41,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '';
   const { setToken, setUser } = useStore();
 
   const updateField = (field: keyof FormData, value: any) => {
@@ -202,7 +204,7 @@ export default function Register() {
       setShowSuccess(true);
       
       setTimeout(() => {
-        nav('/app/chats');
+        nav(redirectTo || '/app/chats');
       }, 4000);
     } catch (e: any) {
       setErr(e?.message || 'Ошибка регистрации');

@@ -45,6 +45,7 @@ import { showToast } from './Toast';
 import { ConfirmModal, PromptModal } from './Modal';
 import { getChatBackground, getChatColor } from '../services/appearance';
 import AppearanceSettings from './AppearanceSettings';
+import { UsernameWithRole } from './RoleBadge';
 
 interface Message {
   id: string;
@@ -336,7 +337,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   const socketRef = useRef<WebSocket | null>(null);
   const chatInfoRef = useRef<{members: string[], type: string, name?: string} | null>(null);
   const incomingCallTimerRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const { ui } = useStore();
+  const { ui, maintenance } = useStore();
 
   // Загрузка настроек уведомлений
   const loadNotificationSettings = useCallback(async () => {
@@ -2876,6 +2877,28 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         </div>
       )}
 
+      {maintenance?.isActive && (
+        <div
+          style={{
+            flexShrink: 0,
+            padding: '8px 16px',
+            background: 'linear-gradient(135deg, rgba(255,193,7,0.15), rgba(255,152,0,0.15))',
+            borderBottom: '1px solid rgba(255,152,0,0.3)',
+            color: 'var(--text-primary)',
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span>⚠️</span>
+          <span>{maintenance.message || 'Ведутся технические работы.'}</span>
+          {maintenance.timestamp && (
+            <span style={{ opacity: 0.8, fontSize: '12px' }}> • {maintenance.timestamp}</span>
+          )}
+        </div>
+      )}
+
       <div 
         ref={messagesContainerRef}
         className="messages-container chat-messages"
@@ -2953,7 +2976,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               )}
               <div className="message-content">
                 {!isMe && showAvatar && (
-                  <div className="message-sender">{sender.username}</div>
+                  <div className="message-sender">
+                    <UsernameWithRole user={sender} username={sender.username} showBadge showColor />
+                  </div>
                 )}
                 {msg.threadId && (
                   <div className="message-thread-indicator" style={{ 

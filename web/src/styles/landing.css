@@ -420,16 +420,26 @@
   transition: color 0.3s;
 }
 
-/* ===== Hero Section ===== */
+/* ===== Hero Section — контент по центру экрана ===== */
 .hero-section {
   position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 64px;
   padding: 120px 48px 80px;
   overflow: hidden;
+}
+.hero-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 64px;
+  max-width: 1280px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 2;
 }
 
 .hero-background {

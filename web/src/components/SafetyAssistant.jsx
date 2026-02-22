@@ -49,8 +49,12 @@ export default function SafetyAssistant({ onClose }) {
 
       // api() в твоем проекте обычно сразу возвращает JSON
       const reply = data.reply || 'Молчание... (нет ответа от сервера)';
-      
-      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+      const actionPerformed = data.actionPerformed || [];
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: reply },
+        ...actionPerformed.map((a) => ({ role: 'system', action: a.name, result: a.result }))
+      ]);
     } catch (e) {
       console.error(e);
       // api() выбрасывает ошибку с полем message
@@ -115,20 +119,30 @@ export default function SafetyAssistant({ onClose }) {
 
       <div ref={logRef} className="assistant-log">
         {messages.map((m, idx) => (
-          <div key={idx} className={`assistant-msg ${m.role}`}>
-            <div className="assistant-msg-author">
+          m.role === 'system' ? (
+            <div key={idx} className="assistant-msg system-widget">
+              <div className="assistant-msg-author">Система</div>
+              <div className="assistant-msg-body system-widget-body">
+                <span className="system-widget-action">{m.action}</span>
+                <span className="system-widget-result">{m.result}</span>
+              </div>
+            </div>
+          ) : (
+            <div key={idx} className={`assistant-msg ${m.role}`}>
+              <div className="assistant-msg-author">
                 {m.role === 'user' ? 'Вы' : (mode === 'x' ? 'Safety-X' : 'Safety')}
-            </div>
-            <div className="assistant-msg-body" style={{ whiteSpace: 'pre-wrap' }}>
+              </div>
+              <div className="assistant-msg-body" style={{ whiteSpace: 'pre-wrap' }}>
                 {m.content}
+              </div>
             </div>
-          </div>
+          )
         ))}
         
         {busy && (
             <div className="assistant-msg assistant">
                 <div className="assistant-msg-author">{mode === 'x' ? 'Safety-X' : 'Safety'}</div>
-                <div className="assistant-msg-body flashing">Думаю...</div>
+                <div className="assistant-msg-body flashing">Thinking...</div>
             </div>
         )}
 

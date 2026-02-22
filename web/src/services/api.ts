@@ -100,9 +100,15 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
     if (token) headers['Authorization'] = 'Bearer ' + token;
 
     const base = getApiBaseUrl();
-    // LocalTunnel (loca.lt) возвращает 511 без этого заголовка — нужен для обхода страницы «Network Authentication Required»
-    if (base.includes('loca.lt')) {
-      headers['Bypass-Tunnel-Reminder'] = 'true';
+    // Заголовок Bypass-Tunnel-Reminder ломает CORS при запросах с другого origin (например Vercel → loca.lt).
+    // Добавляем только при same-origin (когда фронт и API на одном домене, напр. loca.lt).
+    if (base.includes('loca.lt') && typeof window !== 'undefined') {
+      try {
+        const apiOrigin = new URL(base).origin;
+        if (window.location.origin === apiOrigin) {
+          headers['Bypass-Tunnel-Reminder'] = 'true';
+        }
+      } catch {}
     }
 
     try {

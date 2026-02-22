@@ -6,22 +6,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/89646128494le-svg/safegram-core/internal/alerts"
 	"github.com/89646128494le-svg/safegram-core/internal/email"
 	"github.com/89646128494le-svg/safegram-core/internal/engine"
 	"github.com/89646128494le-svg/safegram-core/internal/store"
 	"github.com/89646128494le-svg/safegram-core/internal/transport"
 )
 
-const httpAddr = ":8081"
 const defaultSessionTTL = 7 * 24 * time.Hour
 const tempAuthTTL = 15 * time.Minute
 const smsCodeTTL = 5 * time.Minute
@@ -30,6 +32,7 @@ const emailCodeTTL = 10 * time.Minute
 // runHTTPAPI запускает HTTP API :8081. Используется только для выдачи токена (SafeGuard MFA: пароль → 6-значный код → облачный пароль),
 // профиля, Safety AI и админки. Трафик сообщений — только бинарный (GET /ws или TCP :8080), шифрование AES-256-GCM, Curve25519.
 func runHTTPAPI(s *store.Store, g *transport.Guard) {
+	alerts.AlertServerStarted()
 	if g == nil {
 		g = transport.NewGuard()
 	}
@@ -57,33 +60,60 @@ func runHTTPAPI(s *store.Store, g *transport.Guard) {
 	mux.HandleFunc("GET /api/security/protection", authRequired(s, handleProtection(s)))
 	mux.HandleFunc("GET /api/security/trust-score", authRequired(s, handleTrustScore(s)))
 	mux.HandleFunc("PUT /api/security/cloud-password", authRequired(s, handleSetCloudPassword(s)))
-	mux.HandleFunc("POST /api/safety/ask", authRequired(s, handleSafetyAsk(s)))
+	mux.HandleFunc("POST /api/safety/ask", authRequired(s, handleSafetyAsk(s, newSafetyAI(s))))
 	mux.HandleFunc("GET /api/maintenance/status", handleMaintenanceStatus(s))
-	mux.HandleFunc("POST /api/admin/maintenance", adminRequired(s, handleMaintenanceOn(s)))
-	mux.HandleFunc("POST /api/admin/maintenance/disable", adminRequired(s, handleMaintenanceOff))
-	mux.HandleFunc("GET /api/admin/users", adminRequired(s, handleAdminListUsers(s)))
-	mux.HandleFunc("POST /api/admin/users/{id}/block", adminRequired(s, handleAdminBlockUser(s)))
-	mux.HandleFunc("PUT /api/admin/users/{id}/plan", adminRequired(s, handleAdminSetPlan(s)))
-	mux.HandleFunc("POST /api/admin/notify", adminRequired(s, handleAdminNotify))
-	mux.HandleFunc("POST /api/admin/send-email", adminRequired(s, handleAdminSendEmail(s)))
-	mux.HandleFunc("POST /api/admin/broadcast-email", adminRequired(s, handleAdminBroadcastEmail(s)))
-	mux.HandleFunc("GET /api/admin/blocked-ips", adminRequired(s, handleAdminBlockedIPs(g)))
+	mux.HandleFunc("POST /api/admin/maintenance", adminRequiredAction(s, store.ActionMaintenance, handleMaintenanceOn(s)))
+	mux.HandleFunc("POST /api/admin/maintenance/disable", adminRequiredAction(s, store.ActionMaintenance, handleMaintenanceOff))
+	mux.HandleFunc("GET /api/admin/users", adminRequiredAction(s, store.ActionManageUsers, handleAdminListUsers(s)))
+	mux.HandleFunc("POST /api/admin/users/{id}/block", adminRequiredAction(s, store.ActionBlockUser, handleAdminBlockUser(s)))
+	mux.HandleFunc("PUT /api/admin/users/{id}/plan", adminRequiredAction(s, store.ActionSetUserPlan, handleAdminSetPlan(s)))
+	mux.HandleFunc("POST /api/admin/notify", adminRequiredAction(s, store.ActionManageUsers, handleAdminNotify))
+	mux.HandleFunc("POST /api/admin/send-email", adminRequiredAction(s, store.ActionManageUsers, handleAdminSendEmail(s)))
+	mux.HandleFunc("POST /api/admin/broadcast-email", adminRequiredAction(s, store.ActionManageUsers, handleAdminBroadcastEmail(s)))
+	mux.HandleFunc("GET /api/admin/blocked-ips", adminRequiredAction(s, store.ActionBanIP, handleAdminBlockedIPs(g)))
 	mux.HandleFunc("GET /api/admin/stats", adminRequired(s, handleAdminStats(s, g)))
-	mux.HandleFunc("GET /api/admin/traffic", adminRequired(s, handleAdminTraffic(g)))
-	mux.HandleFunc("POST /api/admin/ban-ip", adminRequired(s, handleAdminBanIP(g)))
-	mux.HandleFunc("GET /api/admin/ddos-settings", adminRequired(s, handleAdminDDoSSettingsGet(g)))
-	mux.HandleFunc("PUT /api/admin/ddos-settings", adminRequired(s, handleAdminDDoSSettingsPut(g)))
-	mux.HandleFunc("PUT /api/admin/users/{id}/role", adminRequired(s, handleAdminSetRole(s)))
-	mux.HandleFunc("POST /api/admin/users/{id}/reset-password", adminRequired(s, handleAdminResetPassword(s)))
-	mux.HandleFunc("GET /api/admin/metrics", adminRequired(s, handleAdminMetrics(s, g)))
-	mux.HandleFunc("GET /api/admin/sessions", adminRequired(s, handleAdminSessions(s)))
+	mux.HandleFunc("GET /api/admin/traffic", adminRequiredAction(s, store.ActionViewTraffic, handleAdminTraffic(g)))
+	mux.HandleFunc("POST /api/admin/ban-ip", adminRequiredAction(s, store.ActionBanIP, handleAdminBanIP(s, g)))
+	mux.HandleFunc("GET /api/admin/ddos-settings", adminRequiredAction(s, store.ActionViewTraffic, handleAdminDDoSSettingsGet(g)))
+	mux.HandleFunc("PUT /api/admin/ddos-settings", adminRequiredAction(s, store.ActionViewTraffic, handleAdminDDoSSettingsPut(g)))
+	mux.HandleFunc("PUT /api/admin/users/{id}/role", adminRequiredAction(s, store.ActionSetUserRole, handleAdminSetRole(s)))
+	mux.HandleFunc("POST /api/admin/users/{id}/reset-password", adminRequiredAction(s, store.ActionManageUsers, handleAdminResetPassword(s)))
+	mux.HandleFunc("GET /api/admin/metrics", adminRequiredAction(s, store.ActionViewTraffic, handleAdminMetrics(s, g)))
+	mux.HandleFunc("GET /api/admin/sessions", adminRequiredAction(s, store.ActionViewSessions, handleAdminSessions(s)))
+	mux.HandleFunc("GET /api/admin/audit-logs", ownerOnly(s, handleAuditLogs(s)))
+	mux.HandleFunc("GET /api/admin/audit-logs/stream", ownerOnly(s, handleAuditLogsStream(s)))
+	mux.HandleFunc("GET /api/admin/live-stats", ownerOnly(s, handleLiveStats(s)))
+	mux.HandleFunc("GET /api/admin/anomaly-score", ownerOnly(s, handleAnomalyScore(s)))
+	mux.HandleFunc("POST /api/admin/nn/retrain", ownerOnly(s, handleNNRetrain(s)))
+	mux.HandleFunc("POST /api/admin/test-ddos", ownerOnly(s, handleTestDDoS(s)))
+	go runAnomalyGuard(s)
+	go runMonitoringBot(s)
 	mux.HandleFunc("GET /api/notify/status", handleNotifyStatus)
 	mux.HandleFunc("GET /api/rooms", authRequired(s, handleListRooms(s)))
 	mux.HandleFunc("POST /api/rooms", authRequired(s, handleCreateRoom(s)))
 	mux.HandleFunc("GET /api/dev/status", authRequired(s, handleDevStatus))
 	mux.HandleFunc("GET /ws", handleWebSocket(s))
+	httpAddr := ":8081"
+	if p := os.Getenv("HTTP_PORT"); p != "" {
+		httpAddr = ":" + strings.TrimPrefix(p, ":")
+	}
 	server := &http.Server{Addr: httpAddr, Handler: cors(mux)}
+	log.Printf("HTTP API on %s", httpAddr)
 	_ = server.ListenAndServe()
+}
+
+// validUserID допускает только безопасные ID (алфавит, цифры, дефис, подчёркивание; 1–128 символов).
+func validUserID(id string) bool {
+	if len(id) == 0 || len(id) > 128 {
+		return false
+	}
+	for _, c := range id {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func getClientIP(r *http.Request) string {
@@ -101,16 +131,43 @@ func getClientIP(r *http.Request) string {
 }
 
 func cors(h http.Handler) http.Handler {
+	origins := allowedOrigins()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		origin := r.Header.Get("Origin")
+		if origin != "" && origins != nil {
+			if _, ok := origins[origin]; ok {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
+		} else if origins == nil {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Device-ID")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+func allowedOrigins() map[string]struct{} {
+	s := os.Getenv("ALLOWED_ORIGINS")
+	if s == "" {
+		return nil
+	}
+	m := make(map[string]struct{})
+	for _, o := range strings.Split(s, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			m[o] = struct{}{}
+		}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
 
 func handleRegister(s *store.Store) http.HandlerFunc {
@@ -164,6 +221,15 @@ func handleRegister(s *store.Store) http.HandlerFunc {
 			UpdatedAt:         now,
 		}
 		s.PutUser(u)
+		s.AppendLog(store.AdminLog{
+			Timestamp:  now,
+			AdminID:    "system",
+			ActionType: store.AdminActionRegistration,
+			TargetID:   u.ID,
+			TargetName: u.Username,
+			Reason:     "new user",
+			Severity:   store.SeverityInfo,
+		})
 		userResponse(w, u, http.StatusCreated)
 	}
 }
@@ -188,6 +254,10 @@ func handleLogin(s *store.Store) http.HandlerFunc {
 		if u == nil {
 			s.RecordFailedLogin(ip)
 			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
+			return
+		}
+		if u.Blocked {
+			jsonError(w, "Account blocked", http.StatusForbidden)
 			return
 		}
 		if err := engine.VerifyPassword(u.PassHash, req.Password); err != nil {
@@ -268,6 +338,21 @@ func createHTTPSession(s *store.Store, userID, deviceID, ip string) (string, *st
 		CreatedAt:    now,
 	}
 	s.PutHTTPSession(sess)
+	u := s.GetUserByID(userID)
+	name := ""
+	if u != nil {
+		name = u.Username
+	}
+	s.AppendLog(store.AdminLog{
+		Timestamp:  now,
+		AdminID:    "system",
+		ActionType: store.AdminActionHandshake,
+		TargetID:   userID,
+		TargetName: name,
+		Reason:     "session",
+		Severity:   store.SeverityInfo,
+		Extra:      ip,
+	})
 	return token, sess
 }
 
@@ -463,12 +548,13 @@ func handle2FA(s *store.Store) http.HandlerFunc {
 }
 
 func userResponseWithToken(w http.ResponseWriter, u *store.User, token string, sess *store.HTTPSession, status int) {
+	store.NormalizeUserRole(u)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"token": token, "sessionExpiresAt": sess.ExpiresAt, "deviceId": sess.DeviceID,
 		"id": u.ID, "username": u.Username, "email": u.Email,
-		"roles": u.Roles, "plan": u.Plan, "avatarUrl": u.AvatarURL,
+		"roles": u.Roles, "role": u.Role, "plan": u.Plan, "avatarUrl": u.AvatarURL,
 		"status": u.Status, "about": u.About, "blocked": u.Blocked,
 	})
 }
@@ -503,31 +589,46 @@ func authRequired(s *store.Store, next func(http.ResponseWriter, *http.Request, 
 			u = s.GetUserByID(sess.UserID)
 		}
 		if u == nil {
-			u = s.GetUserByID(token)
-		}
-		if u == nil {
 			jsonError(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+		if u.Blocked {
+			jsonError(w, "Account blocked", http.StatusForbidden)
 			return
 		}
 		next(w, r, u)
 	}
 }
 
+func getAdminUser(s *store.Store, r *http.Request) *store.User {
+	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if token == "" {
+		return nil
+	}
+	var u *store.User
+	if sess := s.GetHTTPSessionByToken(token); sess != nil && time.Now().Before(sess.ExpiresAt) {
+		u = s.GetUserByID(sess.UserID)
+	}
+	if u == nil {
+		return nil
+	}
+	if u.Blocked {
+		return nil
+	}
+	return u
+}
+
 func adminRequired(s *store.Store, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if token == "" {
+		u := getAdminUser(s, r)
+		if u == nil {
 			jsonError(w, "Authorization required", http.StatusUnauthorized)
 			return
 		}
-		var u *store.User
-		if sess := s.GetHTTPSessionByToken(token); sess != nil {
-			u = s.GetUserByID(sess.UserID)
-		}
-		if u == nil {
-			u = s.GetUserByID(token)
-		}
-		if u == nil || (!strings.Contains(u.Roles, "admin") && !strings.Contains(u.Roles, "owner")) {
+		top := store.TopRole(u.Roles)
+		allowed := top == store.RoleOwner || top == store.RoleAdmin || top == store.RoleGuardian ||
+			top == store.RoleModerator || top == store.RoleSupport
+		if !allowed {
 			jsonError(w, "Admin access required", http.StatusForbidden)
 			return
 		}
@@ -535,12 +636,236 @@ func adminRequired(s *store.Store, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func adminRequiredAction(s *store.Store, action string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := getAdminUser(s, r)
+		if u == nil {
+			jsonError(w, "Authorization required", http.StatusUnauthorized)
+			return
+		}
+		if !store.HasPermission(u.Roles, u.ID, u.Username, action) {
+			ip := getClientIP(r)
+			s.AppendLog(store.AdminLog{
+				Timestamp:  time.Now(),
+				AdminID:    u.ID,
+				AdminName:  u.Username,
+				ActionType: store.AdminActionFailedAdminLogin,
+				Reason:     "forbidden",
+				Severity:   store.SeverityCritical,
+				Extra:      ip,
+			})
+			jsonError(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func ownerOnly(s *store.Store, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := getAdminUser(s, r)
+		if u == nil {
+			jsonError(w, "Authorization required", http.StatusUnauthorized)
+			return
+		}
+		if !store.IsSystemOwner(u.ID, u.Username) {
+			jsonError(w, "Owner only", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+const maxAuditLogLimit = 1000
+
+func handleAuditLogs(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := 500
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= maxAuditLogLimit {
+				limit = n
+			}
+		}
+		logs, err := s.ReadLogs(limit)
+		if err != nil {
+			jsonError(w, "Failed to read logs", http.StatusInternalServerError)
+			return
+		}
+		if r.URL.Query().Get("export") == "1" {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Content-Disposition", "attachment; filename=safegram-audit-"+time.Now().Format("2006-01-02")+".txt")
+			for _, log := range logs {
+				ts := log.Timestamp.Format("2006-01-02 15:04:05")
+				line := ts + " [" + log.Severity + "] " + log.ActionType + " admin=" + log.AdminID + " target=" + log.TargetID + " " + log.Reason
+				if log.Extra != "" {
+					line += " " + log.Extra
+				}
+				line += "\n"
+				w.Write([]byte(line))
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		out := make([]map[string]interface{}, 0, len(logs))
+		for _, log := range logs {
+			out = append(out, map[string]interface{}{
+				"timestamp":  log.Timestamp.UnixMilli(),
+				"adminId":    log.AdminID,
+				"adminName":  log.AdminName,
+				"actionType": log.ActionType,
+				"targetId":   log.TargetID,
+				"targetName": log.TargetName,
+				"reason":     log.Reason,
+				"severity":   log.Severity,
+				"extra":      log.Extra,
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"logs": out})
+	}
+}
+
+func handleAuditLogsStream(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ch, closeFn := store.SubscribeAudit()
+		defer closeFn()
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		if fl, ok := w.(http.Flusher); ok {
+			fl.Flush()
+		}
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case entries, ok := <-ch:
+				if !ok {
+					return
+				}
+				for _, log := range entries {
+					ev := map[string]interface{}{
+						"timestamp":  log.Timestamp.UnixMilli(),
+						"adminId":    log.AdminID,
+						"adminName":  log.AdminName,
+						"actionType": log.ActionType,
+						"targetId":   log.TargetID,
+						"targetName": log.TargetName,
+						"reason":     log.Reason,
+						"severity":   log.Severity,
+						"extra":      log.Extra,
+					}
+					data, _ := json.Marshal(ev)
+					w.Write([]byte("data: "))
+					w.Write(data)
+					w.Write([]byte("\n\n"))
+					if fl, ok := w.(http.Flusher); ok {
+						fl.Flush()
+					}
+				}
+			}
+		}
+	}
+}
+
+func handleLiveStats(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		st := s.GetLiveStats()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"goroutines": st.Goroutines,
+			"memoryMB":   st.MemoryMB,
+			"sessions":  st.Sessions,
+			"at":        st.At.UnixMilli(),
+		})
+	}
+}
+
+func handleAnomalyScore(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		logs, _ := store.ReadAuditLog(50)
+		ex := engine.DefaultAnomalyScorer().ScoreExplain(logs)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(ex)
+	}
+}
+
+func runAnomalyGuard(s *store.Store) {
+	threshold := 0.75
+	if v := os.Getenv("ANOMALY_ALERT_THRESHOLD"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			threshold = f
+		}
+	}
+	ticker := time.NewTicker(3 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		logs, err := store.ReadAuditLog(100)
+		if err != nil || len(logs) == 0 {
+			continue
+		}
+		engine.DefaultAnomalyScorer().CheckAndAlert(logs, threshold, alerts.SendAdminAlert)
+	}
+}
+
+func runMonitoringBot(s *store.Store) {
+	interval := time.Hour
+	if v := os.Getenv("MONITORING_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d >= time.Minute {
+			interval = d
+		}
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		logs, err := store.ReadAuditLog(50)
+		if err != nil {
+			continue
+		}
+		ex := engine.DefaultAnomalyScorer().ScoreExplain(logs)
+		status := "работает"
+		if ex.Severity == engine.SeverityCritical {
+			status = "внимание: высокая аномальность"
+		} else if ex.Severity == engine.SeverityHigh {
+			status = "повышенная активность"
+		}
+		alerts.SendMonitoringReport(ex.Score, len(logs), status)
+	}
+}
+
+func handleNNRetrain(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		path := os.Getenv("ANOMALY_MODEL_PATH")
+		if path == "" {
+			path = "models/anomaly_mlp.json"
+		}
+		engine.RetrainAndSetDefault(path)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "message": "Модель переобучена и сохранена."})
+	}
+}
+
+func handleTestDDoS(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		logs, _ := store.ReadAuditLog(50)
+		testLogs := engine.AppendTestAnomalyLogs(logs)
+		ex := engine.DefaultAnomalyScorer().ScoreExplain(testLogs)
+		alerts.SendAdminAlert("🛡️ <b>Тест защиты SafeGram</b>\nНейросеть сработала. Score: " + strconv.FormatFloat(ex.Score*100, 'f', 0, 64) + "%. Мониторинг активен.")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": true, "anomalyScore": ex.Score, "severity": ex.Severity,
+			"message": "Тест выполнен. Проверь Telegram.",
+		})
+	}
+}
+
 func handleGetMe(s *store.Store) func(http.ResponseWriter, *http.Request, *store.User) {
 	return func(w http.ResponseWriter, r *http.Request, u *store.User) {
+		store.NormalizeUserRole(u)
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		resp := map[string]interface{}{
 			"id": u.ID, "username": u.Username, "email": u.Email,
-			"roles": u.Roles, "plan": u.Plan, "avatarUrl": u.AvatarURL,
+			"roles": u.Roles, "role": u.Role, "plan": u.Plan, "avatarUrl": u.AvatarURL,
 			"status": u.Status, "about": u.About, "blocked": u.Blocked,
 			"emailVerified": u.EmailVerified, "hasCloudPassword": u.CloudPasswordHash != "",
 		}
@@ -816,11 +1141,12 @@ func handleAdminBroadcastEmail(s *store.Store) http.HandlerFunc {
 }
 
 func userResponse(w http.ResponseWriter, u *store.User, status int) {
+	store.NormalizeUserRole(u)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"id": u.ID, "username": u.Username, "email": u.Email,
-		"roles": u.Roles, "plan": u.Plan, "avatarUrl": u.AvatarURL,
+		"roles": u.Roles, "role": u.Role, "plan": u.Plan, "avatarUrl": u.AvatarURL,
 		"status": u.Status, "about": u.About, "blocked": u.Blocked,
 	})
 }
@@ -849,15 +1175,38 @@ func handleAdminListUsers(s *store.Store) http.HandlerFunc {
 func handleAdminBlockUser(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if id == "" {
-			jsonError(w, "User ID required", http.StatusBadRequest)
+		if id == "" || !validUserID(id) {
+			jsonError(w, "Invalid user ID", http.StatusBadRequest)
+			return
+		}
+		target := s.GetUserByID(id)
+		if target != nil && store.IsSystemOwner(target.ID, target.Username) {
+			jsonError(w, "Cannot block system owner", http.StatusForbidden)
 			return
 		}
 		var req struct {
-			Blocked bool `json:"blocked"`
+			Blocked bool   `json:"blocked"`
+			Reason  string `json:"reason"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		s.SetUserBlocked(id, req.Blocked)
+		caller := getAdminUser(s, r)
+		if caller != nil {
+			reason := "block"
+			if !req.Blocked {
+				reason = "unblock"
+			}
+			s.AppendLog(store.AdminLog{
+				Timestamp:  time.Now(),
+				AdminID:    caller.ID,
+				AdminName:  caller.Username,
+				ActionType: store.AdminActionBan,
+				TargetID:   id,
+				TargetName: func() string { if target != nil { return target.Username }; return "" }(),
+				Reason:     reason,
+				Severity:   store.SeverityModeration,
+			})
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"success": "true", "id": id})
 	}
@@ -903,8 +1252,8 @@ func handleAdminStats(s *store.Store, g *transport.Guard) http.HandlerFunc {
 func handleAdminSetPlan(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if id == "" {
-			jsonError(w, "User ID required", http.StatusBadRequest)
+		if id == "" || !validUserID(id) {
+			jsonError(w, "Invalid user ID", http.StatusBadRequest)
 			return
 		}
 		var req struct {
@@ -926,6 +1275,19 @@ func handleAdminSetPlan(s *store.Store) http.HandlerFunc {
 		u.Plan = plan
 		u.UpdatedAt = time.Now()
 		s.PutUser(u)
+		caller := getAdminUser(s, r)
+		if caller != nil {
+			s.AppendLog(store.AdminLog{
+				Timestamp:  time.Now(),
+				AdminID:    caller.ID,
+				AdminName:  caller.Username,
+				ActionType: store.AdminActionConfigChange,
+				TargetID:   id,
+				TargetName: u.Username,
+				Reason:     "plan=" + plan,
+				Severity:   store.SeverityModeration,
+			})
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"success": "true", "id": id, "plan": plan})
 	}
@@ -939,7 +1301,7 @@ func handleAdminTraffic(g *transport.Guard) http.HandlerFunc {
 	}
 }
 
-func handleAdminBanIP(g *transport.Guard) http.HandlerFunc {
+func handleAdminBanIP(s *store.Store, g *transport.Guard) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			IP string `json:"ip"`
@@ -954,6 +1316,19 @@ func handleAdminBanIP(g *transport.Guard) http.HandlerFunc {
 			return
 		}
 		g.Blacklist.BanIP(ip)
+		caller := getAdminUser(s, r)
+		if caller != nil {
+			s.AppendLog(store.AdminLog{
+				Timestamp:  time.Now(),
+				AdminID:    caller.ID,
+				AdminName:  caller.Username,
+				ActionType: store.AdminActionAntiDDoS,
+				TargetID:   ip,
+				Reason:     "ban IP",
+				Severity:   store.SeverityCritical,
+			})
+			alerts.SendAdminAlert("🛡️ IP <code>" + ip + "</code> заблокирован админом " + caller.Username + ".")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"success": "true", "ip": ip})
 	}
@@ -1003,8 +1378,8 @@ func handleAdminDDoSSettingsPut(g *transport.Guard) http.HandlerFunc {
 func handleAdminSetRole(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if id == "" {
-			jsonError(w, "User ID required", http.StatusBadRequest)
+		if id == "" || !validUserID(id) {
+			jsonError(w, "Invalid user ID", http.StatusBadRequest)
 			return
 		}
 		var req struct {
@@ -1015,7 +1390,7 @@ func handleAdminSetRole(s *store.Store) http.HandlerFunc {
 			return
 		}
 		role := strings.ToLower(strings.TrimSpace(req.Role))
-		if role != "user" && role != "admin" && role != "owner" {
+		if role != "user" && role != "admin" && role != "owner" && role != "guardian" && role != "moderator" && role != "support" {
 			role = "user"
 		}
 		u := s.GetUserByID(id)
@@ -1023,9 +1398,39 @@ func handleAdminSetRole(s *store.Store) http.HandlerFunc {
 			jsonError(w, "User not found", http.StatusNotFound)
 			return
 		}
+		if store.IsSystemOwner(u.ID, u.Username) {
+			jsonError(w, "Cannot change system owner role", http.StatusForbidden)
+			return
+		}
+		caller := getAdminUser(s, r)
+		if role == store.RoleOwner {
+			if caller == nil || !store.IsSystemOwner(caller.ID, caller.Username) {
+				jsonError(w, "Only system owner can assign owner role", http.StatusForbidden)
+				return
+			}
+		}
 		s.SetUserRole(id, role)
 		u.UpdatedAt = time.Now()
 		s.PutUser(u)
+		if caller != nil {
+			sev := store.SeverityModeration
+			reason := "role " + role
+			if role == store.RoleAdmin && !store.IsSystemOwner(caller.ID, caller.Username) {
+				sev = store.SeverityCritical
+				reason = "Лев, " + caller.Username + " выдал роль админа пользователю " + u.Username
+				alerts.AlertPermissionAttempt(caller.Username, u.Username, "выдать роль админа")
+			}
+			s.AppendLog(store.AdminLog{
+				Timestamp:  time.Now(),
+				AdminID:    caller.ID,
+				AdminName:  caller.Username,
+				ActionType: store.AdminActionRoleChange,
+				TargetID:   id,
+				TargetName: u.Username,
+				Reason:     reason,
+				Severity:   sev,
+			})
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"success": "true", "id": id, "role": role})
 	}
@@ -1034,8 +1439,8 @@ func handleAdminSetRole(s *store.Store) http.HandlerFunc {
 func handleAdminResetPassword(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if id == "" {
-			jsonError(w, "User ID required", http.StatusBadRequest)
+		if id == "" || !validUserID(id) {
+			jsonError(w, "Invalid user ID", http.StatusBadRequest)
 			return
 		}
 		var req struct {
@@ -1129,7 +1534,28 @@ func handleSetContext(s *store.Store) func(http.ResponseWriter, *http.Request, *
 	}
 }
 
-func handleSafetyAsk(s *store.Store) func(http.ResponseWriter, *http.Request, *store.User) {
+func newSafetyAI(s *store.Store) *engine.SafetyAI {
+	key := os.Getenv("GEMINI_API_KEY")
+	if key == "" {
+		return nil
+	}
+	baseDir := os.Getenv("SAFEGRAM_ROOT")
+	if baseDir == "" {
+		baseDir, _ = os.Getwd()
+	}
+	return &engine.SafetyAI{
+		APIKey:       key,
+		Store:        s,
+		KnowledgeBase: engine.IndexKnowledge(baseDir),
+		SendAlert:     alerts.SendAdminAlert,
+		GetStats: func() (goroutines int, memoryMB float64, users int) {
+			st := s.GetLiveStats()
+			return st.Goroutines, st.MemoryMB, st.Sessions
+		},
+	}
+}
+
+func handleSafetyAsk(s *store.Store, ai *engine.SafetyAI) func(http.ResponseWriter, *http.Request, *store.User) {
 	return func(w http.ResponseWriter, r *http.Request, u *store.User) {
 		var req struct {
 			Message string `json:"message"`
@@ -1140,10 +1566,25 @@ func handleSafetyAsk(s *store.Store) func(http.ResponseWriter, *http.Request, *s
 			jsonError(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
-		ctx := s.GetUserContext(u.ID)
-		reply := buildSafetyReply(s, u, ctx, req.Message, req.Mode, req.Code)
+		var reply string
+		var actionPerformed []engine.ExecutedCall
+		if ai != nil {
+			var err error
+			reply, actionPerformed, err = ai.Ask(u, req.Message, req.Mode)
+			if err != nil {
+				reply = "Safety временно недоступен. " + err.Error()
+			}
+		}
+		if reply == "" {
+			ctx := s.GetUserContext(u.ID)
+			reply = buildSafetyReply(s, u, ctx, req.Message, req.Mode, req.Code)
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"reply": reply})
+		out := map[string]interface{}{"reply": reply}
+		if len(actionPerformed) > 0 {
+			out["actionPerformed"] = actionPerformed
+		}
+		_ = json.NewEncoder(w).Encode(out)
 	}
 }
 

@@ -1,11 +1,13 @@
 // Пакет engine: связка crypto и transport. Все сообщения проходят через SendMessage (шифрование) перед отправкой.
 // Проверка паролей (bcrypt) и облачного пароля — в движке.
+// Enforcement: перед обработкой любого AdminAction сервер обязан проверить session.User.Role через AllowAdminAction.
 package engine
 
 import (
 	"errors"
 
 	"github.com/89646128494le-svg/safegram-core/internal/crypto"
+	"github.com/89646128494le-svg/safegram-core/internal/store"
 	"github.com/89646128494le-svg/safegram-core/internal/transport"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -108,6 +110,13 @@ func (c *Core) SendMessageSigned(sessionID uint64, msgType uint16, text string, 
 		return nil, err
 	}
 	return transport.PackSigned(msgType, sessionID, step, enc, sig)
+}
+
+// AllowAdminAction проверяет, может ли пользователь с данной ролью и идентификатором выполнить действие.
+// Доступ к RoleOwner только у Lev (Master Access по SystemOwnerID/SystemOwnerUsername).
+// Вызывать перед обработкой пакета типа AdminAction.
+func AllowAdminAction(userRole, userID, username, action string) bool {
+	return store.HasPermission(userRole, userID, username, action)
 }
 
 // ReceiveMessageSigned — V2: проверка подписи и расшифровка ratchet.

@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,7 +30,24 @@ var activeWSConnections int32
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin:     wsCheckOrigin,
+}
+
+func wsCheckOrigin(r *http.Request) bool {
+	allowed := os.Getenv("ALLOWED_ORIGINS")
+	if allowed == "" {
+		return true
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+	for _, o := range strings.Split(allowed, ",") {
+		if strings.TrimSpace(o) == origin {
+			return true
+		}
+	}
+	return false
 }
 
 func handleWebSocket(s *store.Store) http.HandlerFunc {
@@ -45,10 +63,11 @@ func handleWebSocket(s *store.Store) http.HandlerFunc {
 			u = s.GetUserByID(sess.UserID)
 		}
 		if u == nil {
-			u = s.GetUserByID(token)
-		}
-		if u == nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+		if u.Blocked {
+			http.Error(w, "account blocked", http.StatusForbidden)
 			return
 		}
 

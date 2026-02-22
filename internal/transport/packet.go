@@ -31,8 +31,10 @@ const (
 	TypeReadReceipt uint16 = 0x04
 	TypeVoice       uint16 = 0x05 // payload: raw audio bytes (e.g. opus)
 	// Admin / system (проверка прав на сервере перед выполнением)
-	TypeSystemAlert uint16 = 0x10 // server → client: системное уведомление
-	TypeAdminQuery  uint16 = 0x11 // client → server: админ-запрос (подтип в payload)
+	TypeSystemAlert  uint16 = 0x10 // server → client: системное уведомление
+	TypeAdminQuery   uint16 = 0x11 // client → server: админ-запрос (подтип в payload)
+	TypeLoginSuccess uint16 = 0x12 // server → client: успешный логин, payload = JSON { "role": "admin", ... }
+	TypeBindSession  uint16 = 0x13 // client → server: привязать сессию к пользователю (token в payload)
 )
 
 var (

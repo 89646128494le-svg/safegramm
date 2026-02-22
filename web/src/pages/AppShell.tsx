@@ -25,9 +25,9 @@ import { initAppearance } from '../services/appearance';
 import ConnectionStatus from '../components/ConnectionStatus';
 import IncomingCallNotification from '../components/IncomingCallNotification';
 import DMCall from '../components/DMCall';
-import MaintenanceBanner from '../components/MaintenanceBanner';
 import ServerStrip from '../components/ServerStrip';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
+import { isModerator } from '../utils/roles';
 
 export default function AppShell() {
   const location = useLocation();
@@ -202,8 +202,6 @@ export default function AppShell() {
       exit={{ opacity: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <MaintenanceBanner />
-      
       <Header user={user} onLogout={logout} />
       <motion.div 
         className="header" 
@@ -266,14 +264,7 @@ export default function AppShell() {
 
           {(() => {
             if (!user) return null;
-            let roles: string[] = [];
-            const u: any = user as any;
-            if (Array.isArray(u.roles)) {
-              roles = u.roles;
-            } else if (u.roles) {
-              roles = String(u.roles).split(',').map(r => r.trim()).filter(r => r);
-            }
-            const hasAccess = roles.includes('admin') || roles.includes('owner');
+            const hasAccess = isModerator(user as any);
             return hasAccess && (
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <Link to="/app/admin" className="btn btn-secondary" style={{ textDecoration: 'none' }}>Админка</Link>

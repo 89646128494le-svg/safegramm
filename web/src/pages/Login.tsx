@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, User, Eye, EyeOff, ArrowRight, Mail, Key } from 'lucide-react';
 import { api } from '../services/api';
@@ -29,6 +29,8 @@ export default function Login({ onDone }: LoginProps) {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [devEmailCode, setDevEmailCode] = useState<string>('');
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '';
   const { setToken, setUser } = useStore();
 
   useEffect(() => {
@@ -99,7 +101,7 @@ export default function Login({ onDone }: LoginProps) {
         if (onDone) {
           onDone();
         }
-        nav('/app/chats');
+        nav(redirectTo || '/app/chats');
         return;
       } else if (res?.error === 'email_verification_required') {
         // Требуется подтверждение email - автоматически отправляем код
@@ -654,7 +656,13 @@ export default function Login({ onDone }: LoginProps) {
               borderTop: '1px solid rgba(255, 255, 255, 0.1)'
             }} />
             <motion.button
-              onClick={() => nav('/register')}
+              onClick={() => {
+                const q = new URLSearchParams();
+                if (redirectTo) q.set('redirect', redirectTo);
+                const plan = searchParams.get('plan');
+                if (plan) q.set('plan', plan);
+                nav('/register' + (q.toString() ? '?' + q.toString() : ''));
+              }}
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
               style={{

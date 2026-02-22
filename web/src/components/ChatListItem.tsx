@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useSwipeActions } from '../utils/swipeGestures';
+import { UsernameWithRole } from './RoleBadge';
 
 interface ChatListItemProps {
   chat: {
@@ -19,6 +20,7 @@ interface ChatListItemProps {
   onUnstar?: () => void;
   getChatName: (chat: any) => string;
   getChatPreview: (chat: any) => string;
+  getChatUser?: (chat: any) => { id?: string; username?: string; roles?: string[] | string } | null;
 }
 
 export default function ChatListItem({
@@ -31,7 +33,14 @@ export default function ChatListItem({
   onUnstar,
   getChatName,
   getChatPreview,
+  getChatUser,
 }: ChatListItemProps) {
+  const displayUser = getChatUser?.(chat);
+  const nameNode = displayUser ? (
+    <UsernameWithRole user={displayUser} username={getChatName(chat)} showBadge showColor />
+  ) : (
+    getChatName(chat)
+  );
   const itemRef = useRef<HTMLDivElement>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
 
@@ -95,7 +104,7 @@ export default function ChatListItem({
             alignItems: 'center',
             gap: '4px'
           }}>
-            {getChatName(chat)}
+            {nameNode}
             {chat.unreadCount && chat.unreadCount > 0 && (
               <span style={{
                 background: 'var(--accent-primary)',

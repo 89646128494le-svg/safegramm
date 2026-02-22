@@ -18,22 +18,33 @@ interface UIState {
   proxyUrl: string;
 }
 
+export interface MaintenanceStatus {
+  isActive: boolean;
+  message?: string;
+  timestamp?: string;
+  id?: string;
+}
+
 interface AppState {
   user: User | null;
   token: string | null;
   ui: UIState;
+  /** Статус техработ с API — обновляется в реальном времени (поллинг + событие). */
+  maintenance: MaintenanceStatus | null;
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
   setTheme: (theme: UIState['theme']) => void;
   setSidebarOpen: (open: boolean) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
   setProxyUrl: (url: string) => void;
+  setMaintenance: (data: MaintenanceStatus | null) => void;
   logout: () => void;
 }
 
 export const useStore = create<AppState>()((set) => ({
   user: null,
   token: typeof window !== 'undefined' ? localStorage.getItem('token') : null,
+  maintenance: null,
   ui: {
     theme: (typeof window !== 'undefined' ? localStorage.getItem('theme') : null) as UIState['theme'] || 'dark',
     sidebarOpen: true,
@@ -67,6 +78,7 @@ export const useStore = create<AppState>()((set) => ({
     }
     set((state) => ({ ui: { ...state.ui, proxyUrl: url } }));
   },
+  setMaintenance: (data) => set({ maintenance: data }),
   logout: () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
