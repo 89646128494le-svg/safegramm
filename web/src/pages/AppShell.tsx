@@ -11,6 +11,7 @@ import Settings from './Settings';
 import Feedback from './Feedback';
 import Admin from './admin/Admin';
 import JoinChat from './JoinChat';
+import SessionsPage from './SessionsPage';
 import Servers from './servers/Servers';
 import ServerView from './servers/ServerView';
 import JoinServer from './servers/JoinServer';
