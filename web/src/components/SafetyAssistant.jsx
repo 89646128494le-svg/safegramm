@@ -39,12 +39,9 @@ export default function SafetyAssistant({ onClose }) {
     try {
       // ИСПОЛЬЗУЕМ api() ВМЕСТО fetch()
       // Это автоматически направит запрос на порт 8080 и добавит токен авторизации
-      const data = await api('/api/safety/ask', {
-        method: 'POST',
-        body: JSON.stringify({
-          message: text,
-          mode: mode
-        })
+      const data = await api('/api/safety/ask', 'POST', {
+        message: text,
+        mode: mode
       });
 
       // api() в твоем проекте обычно сразу возвращает JSON

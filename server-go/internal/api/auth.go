@@ -86,7 +86,6 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			ID:           uuid.New().String(),
 			Username:     req.Username,
 			PassHash:     string(hashedPassword),
-			Roles:        "[]",
 			Plan:         "free",
 			Status:       "online",
 			ProfileColor: "#3b82f6",
@@ -97,6 +96,14 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		if strings.TrimSpace(req.Email) != "" {
 			email := strings.TrimSpace(req.Email)
 			user.Email = &email
+		}
+
+		// Владелец: первый зарегистрированный или username "lev"
+		user.Roles = "[]"
+		var ownerCount int64
+		db.Model(&models.User{}).Where("roles LIKE ?", "%owner%").Count(&ownerCount)
+		if ownerCount == 0 || strings.EqualFold(strings.TrimSpace(req.Username), "lev") {
+			user.SetRoles([]string{"owner"})
 		}
 
 		if err := db.Create(&user).Error; err != nil {
