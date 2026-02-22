@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import { MessageCircle, ReadOnly } from 'lucide-react';
+import { MessageCircle, Eye } from 'lucide-react';
 
 /** Техподдержка: только чтение тикетов и ответов в чате поддержки. */
 export default function SupportTab() {
@@ -43,7 +43,7 @@ export default function SupportTab() {
         Поддержка (тикеты)
       </h3>
       <p style={{ color: 'var(--subtle, #9ca3af)', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <ReadOnly size={16} />
+        <Eye size={16} />
         Только чтение. Ответы на вопросы по работе SafeGram, передача сложных багов тех-админам.
       </p>
 
