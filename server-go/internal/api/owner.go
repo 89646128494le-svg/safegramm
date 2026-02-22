@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"safegram-server/internal/database"
 	"safegram-server/internal/models"
 )
 
@@ -284,6 +285,17 @@ func UpdateSystemSettings(db *gorm.DB) gin.HandlerFunc {
 		// В будущем сохранять в БД
 		// Пока просто возвращаем успех
 		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// ClearDatabase полностью очищает все таблицы БД (только для владельца)
+func ClearDatabase(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := database.ClearAll(db); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "detail": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "database_cleared"})
 	}
 }
 

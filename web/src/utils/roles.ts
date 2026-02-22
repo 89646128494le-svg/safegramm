@@ -156,6 +156,7 @@ export const ADMIN_TABS = [
   { id: 'premium_apps' as const, label: '⭐ Заявки на Premium', minRole: 'moderator' as const },
   { id: 'push' as const, label: '🔔 Уведомления', minRole: 'sysadmin' as const },
   { id: 'services' as const, label: '⚙️ Сервисы (супер-панель)', minRole: 'owner' as const },
+  { id: 'database' as const, label: '📦 База данных (онлайн)', minRole: 'owner' as const },
   { id: 'webhook' as const, label: '🔗 Webhook', minRole: 'sysadmin' as const },
   { id: 'support' as const, label: '🎫 Поддержка (тикеты)', minRole: 'support' as const },
 ] as const;

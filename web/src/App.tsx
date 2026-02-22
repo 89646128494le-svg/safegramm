@@ -56,13 +56,22 @@ export default function App() {
       return;
     }
     authChecked.current = true;
+    const AUTH_TIMEOUT_MS = 12000;
+    const timeoutId = setTimeout(() => {
+      setAuthCheckDone(true);
+      setToken(null);
+      setUser(null);
+      if (typeof localStorage !== 'undefined') localStorage.removeItem('token');
+    }, AUTH_TIMEOUT_MS);
     api('/api/users/me')
       .then((userData) => {
+        clearTimeout(timeoutId);
         setToken(t);
         setUser(userData);
         setAuthCheckDone(true);
       })
       .catch((err: any) => {
+        clearTimeout(timeoutId);
         const status = err?.status;
         const code = err?.errorCode || '';
         const msg = (err?.message || '').toLowerCase();

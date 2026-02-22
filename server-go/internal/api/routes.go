@@ -235,6 +235,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.DELETE("/owner/users/:id", RequireOwner(db), DeleteUser(db))
 	protected.GET("/owner/settings", RequireOwner(db), GetSystemSettings(db))
 	protected.POST("/owner/settings", RequireOwner(db), UpdateSystemSettings(db))
+	protected.POST("/owner/database/clear", RequireOwner(db), ClearDatabase(db))
 	protected.GET("/owner/premium/stats", RequireOwner(db), GetPremiumStats(db))
 
 	// Премиум подписка и тарифы

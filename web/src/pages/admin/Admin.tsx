@@ -15,7 +15,7 @@ import AdminMessaging from '../../components/admin/AdminMessaging';
 import SecurityDashboard from '../../components/admin/SecurityDashboard';
 import SupportTab from '../../components/admin/SupportTab';
 import LiveLogs from '../../components/admin/LiveLogs';
-import { ADMIN_TABS, canAccessAdminTab, getRoleLabel, getRoleLevel, isSystemOwner, canBlockUser, canDemoteUser, canPromoteTo, ROLE_LEVEL } from '../../utils/roles';
+import { ADMIN_TABS, canAccessAdminTab, getRoleLabel, getRoleLevel, isSystemOwner, canBlockUser, canDemoteUser, canPromoteTo, canDeleteUser, ROLE_LEVEL } from '../../utils/roles';
 
 type AdminTabId = typeof ADMIN_TABS[number]['id'];
 
@@ -42,6 +42,9 @@ export default function Admin() {
 
   return (
     <div style={{padding: '24px', maxWidth: 1400, margin: '0 auto'}}>
+      <p style={{ marginBottom: '16px', fontSize: '13px', color: 'var(--subtle, #9ca3af)' }}>
+        Супер-панель: адрес <strong>/app/admin</strong>. Вход под владельцем (lev или первый пользователь). Вкладки: 👑 Sovereign — дашборд и удаление; 👥 Пользователи — блок/разблок, роли; 📦 База данных — правка в онлайне; ⚙️ Сервисы — управление сервисами.
+      </p>
       <h2 style={{marginBottom: '24px', fontSize: '28px', fontWeight: '700'}}>
         Панель управления
         {roleLabel && (
@@ -99,6 +102,7 @@ export default function Admin() {
       {tab==='premium_apps' && canAccessAdminTab(user, 'premium_apps') && <PremiumApplicationsTab />}
       {tab==='push' && canAccessAdminTab(user, 'push') && <PushTab/>}
       {tab==='services' && canAccessAdminTab(user, 'services') && <ServiceManager />}
+      {tab==='database' && canAccessAdminTab(user, 'database') && <DatabaseTab currentUser={user} />}
       {tab==='webhook' && canAccessAdminTab(user, 'webhook') && <WebhookManager />}
       {tab==='support' && canAccessAdminTab(user, 'support') && <SupportTab />}
     </div>
@@ -364,6 +368,174 @@ function OwnerTab({ currentUser }: { currentUser: any }) {
   );
 }
 
+function DatabaseTab({ currentUser }: { currentUser: any }) {
+  const [list, setList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Record<string, { plan: string; roles: string }>>({});
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; username: string } | null>(null);
+  const [clearDbConfirm, setClearDbConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const data = await api('/api/admin/users');
+      setList(data.users || []);
+    } catch (e: any) {
+      showToast('Ошибка загрузки: ' + e.message, 'error');
+      setList([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const getEdit = (u: any) => editing[u.id] ?? {
+    plan: u.plan || 'free',
+    roles: Array.isArray(u.roles) ? u.roles.join(', ') : (u.roles || '')
+  };
+
+  const setEdit = (id: string, field: 'plan' | 'roles', value: string) => {
+    setEditing(prev => {
+      const cur = prev[id] ?? { plan: (list.find(x => x.id === id)?.plan || 'free'), roles: Array.isArray(list.find(x => x.id === id)?.roles) ? list.find(x => x.id === id)!.roles.join(', ') : (list.find(x => x.id === id)?.roles || '') };
+      return { ...prev, [id]: { ...cur, [field]: value } };
+    });
+  };
+
+  const saveUser = async (u: any) => {
+    const ed = getEdit(u);
+    try {
+      await api(`/api/owner/users/${u.id}/plan`, 'POST', { plan: ed.plan });
+      const roles = ed.roles.split(',').map((r: string) => r.trim()).filter(Boolean);
+      await api(`/api/owner/users/${u.id}/role`, 'POST', { roles: roles.length ? roles : ['user'] });
+      showToast('Сохранено', 'success');
+      setEditing(prev => { const next = { ...prev }; delete next[u.id]; return next; });
+      load();
+    } catch (e: any) {
+      showToast('Ошибка: ' + e.message, 'error');
+    }
+  };
+
+  const deleteUser = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await api(`/api/owner/users/${deleteConfirm.id}`, 'DELETE');
+      showToast('Аккаунт удалён', 'success');
+      setDeleteConfirm(null);
+      load();
+    } catch (e: any) {
+      showToast('Ошибка: ' + e.message, 'error');
+    }
+  };
+
+  const clearDatabase = async () => {
+    setClearing(true);
+    try {
+      await api('/api/owner/database/clear', 'POST');
+      showToast('База данных очищена. Вы будете разлогинены.', 'success');
+      setClearDbConfirm(false);
+      localStorage.removeItem('token');
+      window.location.href = '/';
+    } catch (e: any) {
+      showToast('Ошибка: ' + e.message, 'error');
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  if (loading) return <div>Загрузка...</div>;
+
+  return (
+    <div>
+      <h3 style={{ marginBottom: '16px' }}>📦 Редактирование базы данных в онлайне</h3>
+      <p style={{ color: 'var(--subtle)', marginBottom: '16px' }}>Изменение плана и ролей пользователей. Удаление аккаунтов — только для не-владельцев. Сохранение применяется к серверной БД сразу.</p>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <button onClick={load} style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>🔄 Обновить</button>
+        <button onClick={() => setClearDbConfirm(true)} style={{ padding: '8px 16px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>🗑 Очистить всю БД</button>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-card)', borderRadius: '8px', overflow: 'hidden' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Username</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Email</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>План</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Роли (через запятую)</th>
+              <th style={{ padding: '12px' }}>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map(u => {
+              const isSelf = u.id === currentUser?.id;
+              const rolesArr = u.roles ? (Array.isArray(u.roles) ? u.roles : String(u.roles).split(',').map((r: string) => r.trim())) : [];
+              const isOwnerUser = rolesArr.includes('owner');
+              const ed = getEdit(u);
+              return (
+                <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '12px' }}>{u.username}</td>
+                  <td style={{ padding: '12px' }}>{u.email || '—'}</td>
+                  <td style={{ padding: '12px' }}>
+                    <select
+                      value={ed.plan}
+                      onChange={e => setEdit(u.id, 'plan', e.target.value)}
+                      disabled={isOwnerUser && isSystemOwner(u)}
+                      style={{ padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', minWidth: '100px' }}
+                    >
+                      <option value="free">free</option>
+                      <option value="premium">premium</option>
+                    </select>
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="text"
+                      value={ed.roles}
+                      onChange={e => setEdit(u.id, 'roles', e.target.value)}
+                      disabled={isOwnerUser && isSystemOwner(u)}
+                      placeholder="user, moderator, admin"
+                      style={{ width: '100%', maxWidth: '220px', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)' }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button onClick={() => saveUser(u)} style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Сохранить</button>
+                    {!isSelf && !isOwnerUser && (
+                      <button onClick={() => setDeleteConfirm({ id: u.id, username: u.username })} style={{ padding: '6px 12px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Удалить</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {deleteConfirm && (
+        <ConfirmModal
+          isOpen={true}
+          onClose={() => setDeleteConfirm(null)}
+          onConfirm={deleteUser}
+          title="Удалить аккаунт"
+          message={`Безвозвратно удалить пользователя "${deleteConfirm.username}"?`}
+          confirmText="Удалить"
+          cancelText="Отмена"
+          danger
+        />
+      )}
+      {clearDbConfirm && (
+        <ConfirmModal
+          isOpen={true}
+          onClose={() => setClearDbConfirm(false)}
+          onConfirm={clearDatabase}
+          title="Очистить всю базу данных"
+          message="Удалить все данные (пользователи, чаты, сообщения и т.д.)? После очистки вы будете разлогинены. Действие необратимо."
+          confirmText={clearing ? 'Очистка…' : 'Очистить БД'}
+          cancelText="Отмена"
+          danger
+        />
+      )}
+    </div>
+  );
+}
+
 function UsersTab({ currentUser }: { currentUser: any }) {
   const [list, setList] = useState<any[]>([]);
   const [filteredList, setFilteredList] = useState<any[]>([]);
@@ -456,6 +628,10 @@ function UsersTab({ currentUser }: { currentUser: any }) {
     setConfirmModal({ open: true, action: 'demote', userId: id, username });
   };
 
+  const deleteUserOwner = async (id: string, username: string) => {
+    setConfirmModal({ open: true, action: 'delete', userId: id, username });
+  };
+
   const handleConfirm = async () => {
     const { action, userId } = confirmModal;
     try {
@@ -468,6 +644,9 @@ function UsersTab({ currentUser }: { currentUser: any }) {
       } else if (action === 'demote') {
         await api(`/api/admin/users/${userId}/demote`, 'POST');
         showToast('Права администратора сняты', 'success');
+      } else if (action === 'delete') {
+        await api(`/api/owner/users/${userId}`, 'DELETE');
+        showToast('Аккаунт удалён', 'success');
       }
       await load();
       setConfirmModal({ open: false, action: '', userId: '', username: '' });
@@ -642,8 +821,19 @@ function UsersTab({ currentUser }: { currentUser: any }) {
                     )}
                   </div>
                 </div>
-                {!systemOwner && (canBlock || canDemote) && (
+                {!systemOwner && (canBlock || canDemote || canDeleteUser(currentUser, u)) && (
                   <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border, #374151)'}}>
+                    {canDeleteUser(currentUser, u) && (
+                      <button
+                        onClick={() => deleteUserOwner(u.id, u.username)}
+                        style={{
+                          padding: '8px 16px', fontSize: '14px', background: '#b91c1c', color: '#fff',
+                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500'
+                        }}
+                      >
+                        🗑 Удалить аккаунт
+                      </button>
+                    )}
                     {canBlock && (
                       uIsBanned ? (
                         <button 
@@ -730,17 +920,17 @@ function UsersTab({ currentUser }: { currentUser: any }) {
           confirmModal.action === 'block' ? 'Заблокировать пользователя' :
           confirmModal.action === 'promote' ? 'Назначить администратором' :
           confirmModal.action === 'demote' ? 'Снять права администратора' :
-          'Подтверждение'
+          confirmModal.action === 'delete' ? 'Удалить аккаунт' : 'Подтверждение'
         }
         message={
           confirmModal.action === 'block' ? `Вы уверены, что хотите заблокировать пользователя "${confirmModal.username}"?` :
           confirmModal.action === 'promote' ? `Назначить пользователя "${confirmModal.username}" администратором?` :
           confirmModal.action === 'demote' ? `Снять права администратора у пользователя "${confirmModal.username}"?` :
-          'Подтвердите действие'
+          confirmModal.action === 'delete' ? `Безвозвратно удалить аккаунт "${confirmModal.username}"? Данные пользователя будут удалены.` : 'Подтвердите действие'
         }
         confirmText="Подтвердить"
         cancelText="Отмена"
-        danger={confirmModal.action === 'block'}
+        danger={confirmModal.action === 'block' || confirmModal.action === 'delete'}
       />
     </div>
   );

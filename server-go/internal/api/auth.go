@@ -130,6 +130,7 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				"id":       user.ID,
 				"username": user.Username,
 				"status":   user.Status,
+				"roles":    user.ParseRoles(),
 			},
 		})
 	}
@@ -238,6 +239,7 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				"id":       user.ID,
 				"username": user.Username,
 				"status":   user.Status,
+				"roles":    user.ParseRoles(),
 			},
 		})
 	}

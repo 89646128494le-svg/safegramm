@@ -196,11 +196,15 @@ export default function Register() {
         needsCloudCode: formData.needsCloudCode
       });
       
-      setToken(res.token);
+      const tokenVal = res.token;
+      setToken(tokenVal);
+      if (tokenVal && typeof localStorage !== 'undefined') localStorage.setItem('token', tokenVal);
       setUser(res.user);
-      // Устанавливаем флаг принятия политик при успешной регистрации
+      // Подтягиваем полного пользователя с сервера (роли, в т.ч. owner)
+      if (tokenVal) {
+        api('/api/users/me').then((me) => setUser(me)).catch(() => {});
+      }
       localStorage.setItem('policiesAccepted', '1');
-      
       setShowSuccess(true);
       
       setTimeout(() => {

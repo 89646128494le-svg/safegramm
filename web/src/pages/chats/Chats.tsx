@@ -281,13 +281,22 @@ export default function Chats() {
   };
 
   const loadChats = async () => {
+    setLoading(true);
+    const url = showArchived ? '/api/chats?includeArchived=true' : '/api/chats';
+    const CHATS_TIMEOUT_MS = 15000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), CHATS_TIMEOUT_MS)
+    );
     try {
-      setLoading(true);
-      const url = showArchived ? '/api/chats?includeArchived=true' : '/api/chats';
-      const data = await api(url);
+      const data = await Promise.race([api(url), timeoutPromise]);
       setChats(data.chats || []);
     } catch (e: any) {
-      showToast('Ошибка загрузки чатов: ' + e.message, 'error');
+      if (e?.message === 'timeout') {
+        showToast('Загрузка чатов заняла слишком много времени. Проверьте подключение и обновите страницу.', 'error');
+      } else {
+        showToast('Ошибка загрузки чатов: ' + (e?.message || 'неизвестная ошибка'), 'error');
+      }
+      setChats([]);
     } finally {
       setLoading(false);
     }
