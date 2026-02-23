@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"safegram-server/internal/models"
+	"safegram-server/internal/redis"
 )
 
 // UpdateUser обновляет профиль пользователя
@@ -166,11 +168,17 @@ func ChangePassword(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// GetUserProfile возвращает профиль пользователя
+// GetUserProfile возвращает профиль пользователя (кэш Redis 1 мин)
 func GetUserProfile(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.Param("id")
 		currentUserID, _ := c.Get("userID")
+		currentStr, _ := currentUserID.(string)
+		cacheKey := "profile:" + userID + ":" + currentStr
+		if cached, err := redis.CacheGet(cacheKey); err == nil && cached != "" {
+			c.Data(http.StatusOK, "application/json", []byte(cached))
+			return
+		}
 
 		var user models.User
 		if err := db.First(&user, "id = ?", userID).Error; err != nil {
@@ -178,8 +186,7 @@ func GetUserProfile(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Если это не свой профиль, скрываем приватные данные
-		if userID != currentUserID {
+		if userID != currentStr {
 			if !user.ShowAvatar {
 				user.AvatarURL = ""
 			}
@@ -188,7 +195,11 @@ func GetUserProfile(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(http.StatusOK, gin.H{"user": user})
+		body := gin.H{"user": user}
+		if b, err := json.Marshal(body); err == nil {
+			redis.CacheSet(cacheKey, string(b), time.Minute)
+		}
+		c.JSON(http.StatusOK, body)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"safegram-server/internal/models"
+	"safegram-server/internal/redis"
 )
 
 func stringPtr(s string) *string {
@@ -87,32 +88,48 @@ func GetChats(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Получаем параметр includeArchived для фильтрации
 		includeArchived := c.Query("includeArchived") == "true"
-		
-		query := db.Where("user_id = ?", userIDStr)
-		if !includeArchived {
-			// Исключаем заархивированные чаты
-			query = query.Where("archived_at IS NULL")
+		limit := 50
+		if limitStr := c.Query("limit"); limitStr != "" {
+			if n := parseInt(limitStr); n > 0 && n <= 200 {
+				limit = n
+			}
 		}
-		
-		var members []models.ChatMember
-		if err := query.Find(&members).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		cursor := c.Query("cursor") // ID чата для курсорной пагинации
+
+		cacheKey := "chats:" + userIDStr + ":" + cursor + ":" + strconv.Itoa(limit) + ":" + strconv.FormatBool(includeArchived)
+		if cached, err := redis.CacheGet(cacheKey); err == nil && cached != "" {
+			c.Data(http.StatusOK, "application/json", []byte(cached))
 			return
 		}
 
-		chatIDs := make([]string, len(members))
-		for i, m := range members {
-			chatIDs[i] = m.ChatID
-		}
-
+		// Выбираем чаты по членству пользователя, сортировка по updated_at чата
 		var chats []models.Chat
-		if err := db.Where("id IN ?", chatIDs).
-			Preload("Members").
-			Preload("Members.User").
-			Find(&chats).Error; err != nil {
+		sub := db.Model(&models.ChatMember{}).Select("chat_id").Where("user_id = ?", userIDStr)
+		if !includeArchived {
+			sub = sub.Where("archived_at IS NULL")
+		}
+		q := db.Model(&models.Chat{}).Where("id IN (?)", sub).Order("chats.updated_at DESC").Limit(limit + 1)
+		if cursor != "" {
+			var cur models.Chat
+			if err := db.First(&cur, "id = ?", cursor).Error; err == nil {
+				q = q.Where("chats.updated_at < ?", cur.UpdatedAt)
+			}
+		}
+		if err := q.Preload("Members").Preload("Members.User").Find(&chats).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		hasMore := len(chats) > limit
+		if hasMore {
+			chats = chats[:limit]
+		}
+		nextCursor := ""
+		if hasMore && len(chats) > 0 {
+			nextCursor = chats[len(chats)-1].ID
+		}
+		if len(chats) == 0 {
+			c.JSON(http.StatusOK, gin.H{"chats": []interface{}{}, "nextCursor": "", "hasMore": false})
 			return
 		}
 
@@ -124,15 +141,16 @@ func GetChats(db *gorm.DB) gin.HandlerFunc {
 			UnreadCount int             `json:"unreadCount"`           // Количество непрочитанных сообщений
 		}
 		
-		result := make([]ChatWithLastMessage, len(chats))
-		for i, chat := range chats {
+		result := make([]ChatWithLastMessage, 0, len(chats))
+		for _, chat := range chats {
 			var lastMessage models.Message
-			err := db.Where("chat_id = ? AND deleted_at IS NULL", chat.ID).
+			db.Where("chat_id = ? AND deleted_at IS NULL", chat.ID).
 				Order("created_at DESC").
 				Limit(1).
 				Preload("Sender").
-				First(&lastMessage).Error
-			
+				Find(&lastMessage)
+			hasLast := lastMessage.ID != ""
+
 			// Получаем информацию об архивировании для текущего пользователя
 			var member models.ChatMember
 			var archivedAt *int64
@@ -154,20 +172,24 @@ func GetChats(db *gorm.DB) gin.HandlerFunc {
 					chat.ID, userIDStr, subquery).
 				Count(&unreadCount)
 			
-			result[i] = ChatWithLastMessage{
+			result = append(result, ChatWithLastMessage{
 				Chat:        chat,
 				LastMessage: func() *models.Message {
-					if err == nil && lastMessage.ID != "" {
+					if hasLast {
 						return &lastMessage
 					}
 					return nil
 				}(),
 				ArchivedAt:  archivedAt,
 				UnreadCount: int(unreadCount),
-			}
+			})
 		}
 
-		c.JSON(http.StatusOK, gin.H{"chats": result})
+		body := gin.H{"chats": result, "nextCursor": nextCursor, "hasMore": hasMore}
+		if b, err := json.Marshal(body); err == nil {
+			redis.CacheSet(cacheKey, string(b), 30*time.Second)
+		}
+		c.JSON(http.StatusOK, body)
 	}
 }
 
@@ -192,11 +214,18 @@ func CreateChat(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		chatID := uuid.New().String()
 		chat := models.Chat{
-			ID:        uuid.New().String(),
+			ID:        chatID,
 			Type:      req.Type,
 			Name:      req.Name,
 			CreatedBy: userIDStr,
+		}
+		// Уникальный invite_link (пустая строка нарушает UNIQUE при нескольких ЛС)
+		if req.Type == "dm" {
+			chat.InviteLink = "dm-" + chatID
+		} else {
+			chat.InviteLink = "inv-" + uuid.New().String()
 		}
 
 		if err := db.Create(&chat).Error; err != nil {

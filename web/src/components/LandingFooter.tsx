@@ -10,6 +10,8 @@ export default function LandingFooter() {
           <span className="landing-footer-sep" aria-hidden>·</span>
           <Link to="/terms">Terms of Service</Link>
           <span className="landing-footer-sep" aria-hidden>·</span>
+          <Link to="/join">Присоединиться к команде</Link>
+          <span className="landing-footer-sep" aria-hidden>·</span>
           <Link to="/feedback">Support</Link>
         </nav>
         <p className="landing-footer-copy">

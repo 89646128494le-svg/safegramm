@@ -111,7 +111,7 @@ func (c *Client) ReadPump() {
 			msgType, _ := msg["type"].(string)
 			if msgType == "webrtc:offer" || msgType == "webrtc:answer" || msgType == "webrtc:ice" || msgType == "webrtc:hangup" ||
 				msgType == "call:recording:request" || msgType == "call:recording:response" || msgType == "screen:share" ||
-				msgType == "voice:signal" {
+				msgType == "voice:signal" || msgType == "call:reaction" || msgType == "call:speaking" {
 				c.HandleWebRTCMessage(msg)
 			} else {
 				c.handleMessage(msg)

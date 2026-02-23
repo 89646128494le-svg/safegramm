@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: SafeGram Bots API
+  description: API для управления ботами и получения входящих сообщений через webhook. Лимиты: 60 запросов/мин на токен бота (RPS/квоты).
+  version: 1.0.0
+servers:
+  - url: /api
+    description: Базовый путь API
+paths:
+  /bots:
+    get:
+      summary: Список ботов текущего пользователя
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Список ботов (без токена)
+    post:
+      summary: Создать бота
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, username]
+              properties:
+                name: { type: string }
+                username: { type: string, pattern: '^[a-z0-9_]+$' }
+                description: { type: string }
+      responses:
+        '200':
+          description: Бот создан, в ответе возвращается token (сохраните, повторно не выдаётся)
+  /bots/{id}:
+    get:
+      summary: Получить бота по ID
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Данные бота }
+        '404': { description: Бот не найден }
+    patch:
+      summary: Обновить бота (имя, описание, webhookUrl)
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                webhookUrl: { type: string, format: uri, description: URL для входящих сообщений боту }
+      responses:
+        '200': { description: Обновлено }
+    delete:
+      summary: Удалить бота
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Удалён }
+  /bots/{id}/revoke:
+    post:
+      summary: Отозвать токен и выдать новый
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Новый token в ответе }
+  /bots/{id}/toggle:
+    post:
+      summary: Включить/выключить бота
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isActive]
+              properties:
+                isActive: { type: boolean }
+      responses:
+        '200': { description: OK }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT пользователя (полученный при /auth/login)
+x-bot-webhook:
+  description: |
+    Входящие сообщения боту: при отправке сообщения в чат, где участником является владелец бота,
+    сервер отправляет POST на webhookUrl бота (если задан). Тело запроса:
+    {"event":"message.created","chatId":"...","message":{...}}
+    Заголовки: X-Safegram-Event, X-Safegram-Bot-Id. Лимиты по токену бота: 60 RPS/мин (при использовании API от имени бота).

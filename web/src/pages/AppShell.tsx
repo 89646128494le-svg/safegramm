@@ -24,6 +24,7 @@ import { ToastContainer, useToast } from '../components/Toast';
 import { useStore } from '../store/useStore';
 import { initAppearance } from '../services/appearance';
 import ConnectionStatus from '../components/ConnectionStatus';
+import OnboardingE2EE from '../components/OnboardingE2EE';
 import IncomingCallNotification from '../components/IncomingCallNotification';
 import DMCall from '../components/DMCall';
 import ServerStrip from '../components/ServerStrip';
@@ -275,6 +276,7 @@ export default function AppShell() {
         </nav>
       </motion.div>
 
+      <OnboardingE2EE />
       <div className={showServerStrip ? 'app-with-strip' : 'app-content'}>
         {showServerStrip && <ServerStrip />}
         <div className={showServerStrip ? 'app-content app-content-inner' : 'app-content'} style={showServerStrip ? undefined : { flex: 1 }}>

@@ -1,7 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api, getApiBaseUrl } from '../services/api';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
 import { showToast } from './Toast';
+import CallParticipantTile from './call/CallParticipantTile';
+import CallControlBar from './call/CallControlBar';
+import FloatingCallBar from './call/FloatingCallBar';
+import { useSpeakingDetection } from '../hooks/useSpeakingDetection';
 
 interface DMCallProps {
   chatId: string;
@@ -9,13 +14,15 @@ interface DMCallProps {
   currentUserId: string;
   currentUserName?: string;
   currentUserAvatar?: string;
+  otherUserName?: string;
+  otherUserAvatar?: string;
   isVideo: boolean;
   onClose: () => void;
-  isIncoming?: boolean; // true если это входящий звонок
-  offerData?: any; // данные offer для входящего звонка
+  isIncoming?: boolean;
+  offerData?: any;
 }
 
-export default function DMCall({ chatId, otherUserId, currentUserId, currentUserName, currentUserAvatar, isVideo, onClose, isIncoming = false, offerData }: DMCallProps) {
+export default function DMCall({ chatId, otherUserId, currentUserId, currentUserName, currentUserAvatar, otherUserName, otherUserAvatar, isVideo, onClose, isIncoming = false, offerData }: DMCallProps) {
   const [isCalling, setIsCalling] = useState(false);
   const [isRinging, setIsRinging] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -41,6 +48,19 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   const callStartTimeRef = useRef<number | null>(null);
   const recordingStartTimeRef = useRef<number | null>(null);
   const [remoteScreenSharing, setRemoteScreenSharing] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+  const [remoteSpeaking, setRemoteSpeaking] = useState(false);
+  const [localReaction, setLocalReaction] = useState<string | null>(null);
+  const [remoteReaction, setRemoteReaction] = useState<string | null>(null);
+
+  const { level: localSpeakingLevel, isSpeaking: localSpeaking } = useSpeakingDetection(localStream, !isMuted);
+  useEffect(() => {
+    sendWebSocketMessage('call:speaking', {
+      chatId,
+      to: otherUserId,
+      active: localSpeaking,
+    });
+  }, [localSpeaking, chatId, otherUserId]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -118,6 +138,11 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
           }
         } else if (msgType === 'screen:share') {
           setRemoteScreenSharing(!!data.active);
+        } else if (msgType === 'call:reaction' && data.from === otherUserId) {
+          setRemoteReaction(data.emoji || null);
+          setTimeout(() => setRemoteReaction(null), 2500);
+        } else if (msgType === 'call:speaking' && data.from === otherUserId) {
+          setRemoteSpeaking(!!data.active);
         }
       };
 
@@ -635,6 +660,27 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     }
   };
 
+  const sendReaction = useCallback((emoji: string) => {
+    sendWebSocketMessage('call:reaction', { chatId, to: otherUserId, emoji });
+    setLocalReaction(emoji);
+    setTimeout(() => setLocalReaction(null), 2500);
+  }, [chatId, otherUserId]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'm' || e.key === 'M') {
+        if (!e.repeat) toggleMute();
+        e.preventDefault();
+      }
+      if ((e.key === 'v' || e.key === 'V') && isVideo) {
+        if (!e.repeat) toggleVideo();
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isVideo]);
+
   // Начинаем звонок при монтировании
   useEffect(() => {
     if (isIncoming && offerData) {
@@ -656,253 +702,169 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     }
   }, [remoteStream]);
 
+  const otherDisplayName = (offerData as any)?.fromName || otherUserName || otherUserId;
+  const otherAvatar = (offerData as any)?.fromAvatar || otherUserAvatar;
+
+  if (minimized && (isCalling || isConnected)) {
+    return (
+      <FloatingCallBar
+        title={isConnected ? otherDisplayName : `Звонок ${otherDisplayName}...`}
+        isVideo={isVideo}
+        isMuted={isMuted}
+        isVideoEnabled={isVideoEnabled}
+        onExpand={() => setMinimized(false)}
+        onHangup={handleHangup}
+        avatarUrl={(offerData as any)?.fromAvatar || otherUserAvatar}
+      />
+    );
+  }
+
   return (
-    <div className="dm-call-overlay">
-      <div className="dm-call-container">
-        <div className="dm-call-header">
-          <h3>{isVideo ? 'Видеозвонок' : 'Звонок'}</h3>
-          <button onClick={handleHangup} className="close-call-btn">✕</button>
-        </div>
-
-        <div className="dm-call-video-container">
-          {isVideo && (
-            <>
-              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="remote-video"
-                  style={{ 
-                    width: '100%', 
-                    height: '100%', 
-                    objectFit: 'cover',
-                    background: '#000'
-                  }}
-                />
-                {remoteScreenSharing && (
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '12px',
-                    left: '12px',
-                    background: 'rgba(0,0,0,0.7)',
-                    color: '#fff',
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}>
-                    🖥️ Демонстрация экрана
-                  </div>
-                )}
-              </div>
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="local-video"
-                style={{
-                  position: 'absolute',
-                  bottom: '80px',
-                  right: '20px',
-                  width: '200px',
-                  height: '150px',
-                  objectFit: 'cover',
-                  borderRadius: '8px',
-                  border: '2px solid var(--accent)',
-                  background: '#000'
-                }}
-              />
-            </>
-          )}
-          
-          {!isVideo && (
-            <div className="audio-call-avatar" style={{
-              width: '200px',
-              height: '200px',
-              borderRadius: '50%',
-              background: 'var(--accent-gradient)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '80px',
-              color: 'white',
-              margin: '0 auto',
-              marginTop: '100px'
-            }}>
-              📞
-            </div>
-          )}
-
-          {isRinging && (
-            <div className="call-status" style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
-              color: 'white'
-            }}>
-              <div style={{ fontSize: '24px', marginBottom: '16px' }}>🔔</div>
-              <div>{isCalling ? 'Звонок...' : 'Входящий звонок'}</div>
-            </div>
-          )}
-
-          {isConnected && !isRinging && (
-            <div className="call-status" style={{
-              position: 'absolute',
-              top: '20px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              textAlign: 'center',
-              color: 'white',
-              background: 'rgba(0,0,0,0.5)',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              {isVideo ? 'Видеозвонок активен' : 'Звонок активен'}
-              {isRecording && (
-                <span style={{
-                  display: 'inline-block',
-                  width: '8px',
-                  height: '8px',
-                  background: '#ef4444',
-                  borderRadius: '50%',
-                  animation: 'pulse 1s infinite'
-                }} />
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Меню фильтров и эффектов (только для видео) */}
-        {isVideo && isConnected && (
-          <div style={{
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            background: 'rgba(0,0,0,0.7)',
-            borderRadius: '8px',
-            padding: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            zIndex: 1000
-          }}>
-            <div style={{ fontSize: '12px', color: 'white', marginBottom: '4px' }}>Фильтры:</div>
-            <select
-              value={videoFilter}
-              onChange={(e) => applyVideoFilter(e.target.value)}
-              style={{
-                padding: '6px',
-                borderRadius: '4px',
-                background: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                fontSize: '12px'
-              }}
-            >
-              <option value="none">Нет</option>
-              <option value="blur">Размытие</option>
-              <option value="grayscale">Черно-белый</option>
-              <option value="sepia">Сепия</option>
-              <option value="brightness">Яркость</option>
-              <option value="contrast">Контраст</option>
-              <option value="saturate">Насыщенность</option>
-              <option value="hue-rotate">Оттенок</option>
-              <option value="invert">Инверсия</option>
-            </select>
-            
-            <div style={{ fontSize: '12px', color: 'white', marginTop: '8px', marginBottom: '4px' }}>Виртуальный фон:</div>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  const url = URL.createObjectURL(file);
-                  applyVirtualBackground(url);
-                }
-              }}
-              style={{ fontSize: '11px', color: 'white' }}
-            />
+    <div className="dm-call-overlay" style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 50%, #0f172a 100%)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    }}>
+      <div className="dm-call-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0 }}>
+        <div className="dm-call-header" style={{
+          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 24px', background: 'linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 100%)',
+        }}>
+          <h3 style={{ margin: 0, color: '#fff', fontSize: 18, fontWeight: 600 }}>
+            {isVideo ? 'Видеозвонок' : 'Звонок'} {isConnected && ` · ${otherDisplayName}`}
+          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {isRecording && (
+              <span style={{ fontSize: 12, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1s infinite' }} />
+                Запись
+              </span>
+            )}
             <button
-              onClick={() => applyVirtualBackground(null)}
+              onClick={handleHangup}
+              className="close-call-btn"
               style={{
-                padding: '4px 8px',
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: '4px',
-                color: 'var(--text-primary)',
-                cursor: 'pointer',
-                fontSize: '11px',
-                marginTop: '4px'
+                width: 40, height: 40, borderRadius: 12, border: 'none',
+                background: 'rgba(255,255,255,0.15)', color: '#fff', cursor: 'pointer', fontSize: 18,
               }}
             >
-              Убрать фон
+              ✕
             </button>
           </div>
-        )}
+        </div>
 
-        <div className="dm-call-controls" style={{
-          position: 'absolute',
-          bottom: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          gap: '16px',
-          alignItems: 'center'
+        <div className="dm-call-video-container" style={{
+          flex: 1, position: 'relative', display: 'grid',
+          gridTemplateColumns: isVideo ? '1fr 280px' : '1fr',
+          gridTemplateRows: '1fr',
+          gap: 16, padding: 16, paddingTop: 72, paddingBottom: 100, minHeight: 0,
         }}>
-          <button
-            onClick={toggleMute}
-            className={`call-control-btn ${isMuted ? 'active' : ''}`}
-            title={isMuted ? 'Включить звук' : 'Выключить звук'}
-          >
-            {isMuted ? '🔇' : '🎤'}
-          </button>
-          
-          {isVideo && (
-            <>
-              <button
-                onClick={toggleVideo}
-                className={`call-control-btn ${!isVideoEnabled ? 'active' : ''}`}
-                title={isVideoEnabled ? 'Выключить видео' : 'Включить видео'}
-              >
-                {isVideoEnabled ? '📹' : '📹❌'}
-              </button>
-              
-              <button
-                onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-                className={`call-control-btn ${isScreenSharing ? 'active' : ''}`}
-                title={isScreenSharing ? 'Остановить демонстрацию экрана' : 'Демонстрация экрана'}
-              >
-                {isScreenSharing ? '🖥️⏹️' : '🖥️'}
-              </button>
-            </>
+          {isRinging && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{
+                position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', zIndex: 5,
+              }}
+            >
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🔔</div>
+              <div style={{ color: '#fff', fontSize: 18 }}>{isCalling ? 'Звонок...' : 'Входящий звонок'}</div>
+            </motion.div>
           )}
 
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            className={`call-control-btn ${isRecording ? 'active' : ''}`}
-            title={isRecording ? 'Остановить запись' : 'Начать запись'}
-          >
-            {isRecording ? '🔴⏹️' : '🔴'}
-          </button>
+          {isVideo ? (
+            <>
+              <CallParticipantTile
+                stream={remoteStream}
+                displayName={otherDisplayName}
+                avatarUrl={otherAvatar}
+                isMuted={false}
+                isVideoOff={!remoteStream?.getVideoTracks()?.length}
+                isSpeaking={remoteSpeaking}
+                reaction={remoteReaction}
+                isScreenShare={remoteScreenSharing}
+                videoStyle={{ objectFit: 'cover' }}
+              />
+              <CallParticipantTile
+                stream={localStream}
+                displayName={currentUserName || 'Вы'}
+                avatarUrl={currentUserAvatar}
+                isMuted={isMuted}
+                isVideoOff={!isVideoEnabled}
+                isSpeaking={localSpeaking}
+                speakingLevel={localSpeakingLevel}
+                reaction={localReaction}
+                isLocal
+                isScreenShare={isScreenSharing}
+                videoStyle={{ objectFit: 'cover' }}
+              />
+            </>
+          ) : (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 24, background: 'rgba(15,20,35,0.6)', borderRadius: 20, padding: 48,
+            }}>
+              <div style={{
+                width: 160, height: 160, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 72, boxShadow: '0 0 60px rgba(59, 130, 246, 0.3)',
+              }}>
+                📞
+              </div>
+              <div style={{ color: '#fff', fontSize: 20, fontWeight: 600 }}>{otherDisplayName}</div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Голосовой звонок</div>
+            </div>
+          )}
 
-          <button
-            onClick={handleHangup}
-            className="call-control-btn hangup"
-            title="Завершить звонок"
-            style={{ background: '#ef4444' }}
-          >
-            📞
-          </button>
+          {isVideo && isConnected && (
+            <div style={{
+              position: 'absolute', top: 72, right: 16, zIndex: 10,
+              background: 'rgba(0,0,0,0.6)', borderRadius: 12, padding: 12,
+              display: 'flex', flexDirection: 'column', gap: 8, backdropFilter: 'blur(12px)',
+            }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>Фильтры</div>
+              <select
+                value={videoFilter}
+                onChange={(e) => applyVideoFilter(e.target.value)}
+                style={{
+                  padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.1)',
+                  color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: 12,
+                }}
+              >
+                <option value="none">Нет</option>
+                <option value="blur">Размытие</option>
+                <option value="grayscale">Ч/Б</option>
+                <option value="sepia">Сепия</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', justifyContent: 'center',
+        }}>
+          <CallControlBar
+            isMuted={isMuted}
+            isVideoEnabled={isVideoEnabled}
+            isScreenSharing={isScreenSharing}
+            isRecording={isRecording}
+            onMuteToggle={toggleMute}
+            onVideoToggle={toggleVideo}
+            onScreenShareToggle={isScreenSharing ? stopScreenShare : startScreenShare}
+            onRecordingToggle={isRecording ? stopRecording : startRecording}
+            onReaction={sendReaction}
+            onHangup={handleHangup}
+            onMinimize={() => setMinimized(true)}
+            showVideo={isVideo}
+            showScreenShare={isVideo}
+            showRecording
+            showReactions
+            showMinimize
+          />
         </div>
       </div>
     </div>

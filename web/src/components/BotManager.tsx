@@ -7,9 +7,7 @@ interface Bot {
   name: string;
   username: string;
   description?: string;
-  commands: Array<{ command: string; description: string; handler: string }>;
-  isActive: boolean;
-  chatId?: string;
+  isActive?: boolean;
 }
 
 interface BotManagerProps {
@@ -35,14 +33,15 @@ export default function BotManager({ chatId, onClose }: BotManagerProps) {
   const loadBots = async () => {
     try {
       const data = await api('/api/bots');
-      setBots(data.bots || []);
+      setBots(data?.bots || []);
     } catch (e: any) {
-      // Если API не существует, используем пустой список
       setBots([]);
     } finally {
       setLoading(false);
     }
   };
+
+  const [createdToken, setCreatedToken] = useState<string | null>(null);
 
   const handleCreateBot = async () => {
     if (!newBot.name || !newBot.username) {
@@ -51,29 +50,30 @@ export default function BotManager({ chatId, onClose }: BotManagerProps) {
     }
 
     try {
-      await api('/api/bots', 'POST', {
+      const data = await api('/api/bots', 'POST', {
         name: newBot.name,
         username: newBot.username,
         description: newBot.description,
-        commands: newBot.commands,
-        chatId: chatId
       });
-      showToast('Бот создан', 'success');
+      const token = data?.bot?.token || data?.token;
+      if (token) setCreatedToken(token);
+      showToast(token ? 'Бот создан. Сохраните токен!' : 'Бот создан', 'success');
       setShowCreateBot(false);
       setNewBot({ name: '', username: '', description: '', commands: [] });
       await loadBots();
     } catch (e: any) {
-      showToast('Ошибка создания бота: ' + e.message, 'error');
+      const msg = e?.errorCode === 'username_taken' ? 'Этот username уже занят' : (e?.message || 'Ошибка создания бота');
+      showToast(msg, 'error');
     }
   };
 
   const handleToggleBot = async (botId: string, isActive: boolean) => {
     try {
       await api(`/api/bots/${botId}/toggle`, 'POST', { isActive: !isActive });
-      showToast(isActive ? 'Бот деактивирован' : 'Бот активирован', 'success');
+      showToast(isActive ? 'Бот выключен' : 'Бот включён', 'success');
       await loadBots();
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(e?.message || 'Ошибка', 'error');
     }
   };
 
@@ -141,6 +141,26 @@ export default function BotManager({ chatId, onClose }: BotManagerProps) {
           overflowY: 'auto',
           padding: '24px'
         }}>
+          {createdToken && (
+            <div style={{
+              marginBottom: '16px',
+              padding: '12px',
+              background: 'rgba(251, 191, 36, 0.1)',
+              border: '1px solid rgba(251, 191, 36, 0.3)',
+              borderRadius: '8px',
+            }}>
+              <div style={{ fontSize: '12px', color: '#fde047', marginBottom: '8px' }}>Токен (сохраните, показывается один раз)</div>
+              <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', fontSize: '12px', marginBottom: '8px' }}>{createdToken}</div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(createdToken);
+                  showToast('Скопировано', 'success');
+                  setCreatedToken(null);
+                }}
+                style={{ padding: '6px 12px', background: 'var(--accent-primary)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px' }}
+              >Скопировать и закрыть</button>
+            </div>
+          )}
           {loading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
               Загрузка...
@@ -229,11 +249,6 @@ export default function BotManager({ chatId, onClose }: BotManagerProps) {
                           </button>
                         </div>
                       </div>
-                      {bot.commands.length > 0 && (
-                        <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          Команды: {bot.commands.map(c => `/${c.command}`).join(', ')}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>

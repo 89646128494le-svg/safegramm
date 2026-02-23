@@ -15,6 +15,7 @@ const Terms = lazy(() => import('./pages/Terms'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const PremiumApply = lazy(() => import('./pages/PremiumApply'));
+const JoinRecruit = lazy(() => import('./pages/JoinRecruit'));
 
 const LOAD_TIMEOUT_MS = 12000;
 
@@ -127,6 +128,7 @@ export default function App() {
           isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
         } />
         <Route path="/premium-apply" element={<PremiumApply />} />
+        <Route path="/join" element={<JoinRecruit />} />
         <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

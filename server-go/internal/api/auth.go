@@ -16,11 +16,12 @@ import (
 
 // RegisterRequest структура запроса регистрации
 type RegisterRequest struct {
-	Username     string `json:"username" binding:"required,min=3"`
-	Password     string `json:"password" binding:"required,min=4"`
-	Email        string `json:"email"`
-	EmailCode    string `json:"emailCode"`
-	NeedsCloudCode bool `json:"needsCloudCode"`
+	Username       string `json:"username" binding:"required,min=3"`
+	Password       string `json:"password" binding:"required,min=4"`
+	Email          string `json:"email"`
+	EmailCode      string `json:"emailCode"`
+	NeedsCloudCode bool   `json:"needsCloudCode"`
+	Pin            string `json:"pin"` // опционально: облачный код (PIN) для входа, 4–12 символов
 }
 
 // LoginRequest структура запроса входа
@@ -96,6 +97,14 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		if strings.TrimSpace(req.Email) != "" {
 			email := strings.TrimSpace(req.Email)
 			user.Email = &email
+		}
+
+		// Опционально: PIN (облачный код) для входа
+		if pin := strings.TrimSpace(req.Pin); len(pin) >= 4 && len(pin) <= 12 {
+			pinHash, errPin := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
+			if errPin == nil {
+				user.PinHash = string(pinHash)
+			}
 		}
 
 		// Владелец: первый зарегистрированный или username "lev"

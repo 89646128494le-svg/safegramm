@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { api, getApiBaseUrl } from '../services/api';
+import { api, getApiBaseUrl, getErrorMessage } from '../services/api';
 import { getSocket, sendWebSocketMessage, closeSocket } from '../services/websocket';
 import { notifyNewMessage, notifyCall, hasNotificationPermission } from '../services/notifications';
 import { useStore } from '../store/useStore';
@@ -506,7 +506,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       showToast('Групповой ключ обновлён (forward secrecy)', 'success');
     } catch (e: any) {
       console.error('Failed to update group key:', e);
-      showToast('Ошибка обновления ключа: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось обновить ключ шифрования.'), 'error');
     }
   }, [chatId]);
 
@@ -1411,11 +1411,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       } catch (e: any) {
         // Удаляем временное сообщение при ошибке
         setMessages(prev => prev.filter(m => m.id !== tempId));
-        showToast('Ошибка отправки: ' + e.message, 'error');
+        showToast(getErrorMessage(e, 'Не удалось отправить сообщение.'), 'error');
         throw e;
       }
     } catch (e: any) {
-      showToast('Ошибка отправки: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось отправить сообщение.'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -1433,7 +1433,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       showToast('Сообщение изменено', 'success');
       await loadMessages(undefined, false);
     } catch (e: any) {
-      showToast('Ошибка редактирования: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось изменить сообщение.'), 'error');
     }
   };
 
@@ -1444,7 +1444,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       showToast(deleteForAll ? 'Сообщение удалено для всех' : 'Сообщение удалено', 'success');
       await loadMessages(undefined, false);
     } catch (e: any) {
-      showToast('Ошибка удаления: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось удалить сообщение.'), 'error');
     }
   };
 
@@ -1483,7 +1483,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       console.error('Failed to search messages:', e);
       setSearchResults([]);
       if (e.message && !e.message.includes('bad_request')) {
-        showToast('Ошибка поиска: ' + e.message, 'error');
+        showToast(getErrorMessage(e, 'Поиск не выполнен. Попробуйте снова.'), 'error');
       }
     }
   };
@@ -1505,7 +1505,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       showToast('Геолокация отправлена', 'success');
       await loadMessages(undefined, false);
     } catch (e: any) {
-      showToast('Ошибка отправки геолокации: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось отправить геолокацию.'), 'error');
     }
   };
 
@@ -1523,7 +1523,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       setThreadRootMessageId('');
       showToast('Тред создан', 'success');
     } catch (e: any) {
-      showToast('Ошибка создания треда: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать обсуждение.'), 'error');
     }
   };
 
@@ -1625,7 +1625,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.getItem('token'));
       xhr.send(form);
     } catch (e: any) {
-      showToast('Ошибка загрузки файла: ' + (e.message || 'unknown'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить файл.'), 'error');
     }
   };
 
@@ -1641,7 +1641,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       await loadMessages(undefined, false);
       showToast('Опрос создан', 'success');
     } catch (e: any) {
-      showToast('Ошибка создания опроса: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать опрос.'), 'error');
     }
   };
   
@@ -1660,7 +1660,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       await loadMessages(undefined, false);
       showToast('Событие создано', 'success');
     } catch (e: any) {
-      showToast('Ошибка создания события: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать событие.'), 'error');
     }
   };
   
@@ -1678,7 +1678,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       await loadMessages(undefined, false);
       showToast('Контакт отправлен', 'success');
     } catch (e: any) {
-      showToast('Ошибка отправки контакта: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось отправить контакт.'), 'error');
     }
   };
   
@@ -1715,7 +1715,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       await loadMessages(undefined, false);
       showToast('Документ отправлен', 'success');
     } catch (e: any) {
-      showToast('Ошибка отправки документа: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось отправить документ.'), 'error');
     }
   };
 
@@ -1726,7 +1726,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       showToast('Сообщение закреплено', 'success');
       loadPinnedMessages();
     } catch (e: any) {
-      showToast('Ошибка закрепления: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось закрепить сообщение.'), 'error');
     }
   };
 
@@ -1737,7 +1737,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       showToast('Сообщение откреплено', 'success');
       loadPinnedMessages();
     } catch (e: any) {
-      showToast('Ошибка открепления: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось открепить сообщение.'), 'error');
     }
   };
 
@@ -1777,7 +1777,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             await sendFile(file, true);
             showToast('Голосовое сообщение отправлено', 'success');
           } catch (e: any) {
-            showToast('Ошибка отправки голосового сообщения: ' + (e.message || 'unknown'), 'error');
+            showToast(getErrorMessage(e, 'Не удалось отправить голосовое сообщение.'), 'error');
           }
         }
         
@@ -1839,7 +1839,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       await api(`/api/messages/${messageId}/react`, 'POST', { emoji });
       await loadMessages(undefined, false);
     } catch (e: any) {
-      showToast('Ошибка реакции: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось поставить реакцию.'), 'error');
     }
   };
 
@@ -1854,7 +1854,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         type: c.type || 'dm'
       })));
     } catch (e: any) {
-      showToast('Ошибка загрузки чатов: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить чаты.'), 'error');
     }
   };
 
@@ -1878,7 +1878,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       setForwardMessageId(null);
       setForwardComment('');
     } catch (e: any) {
-      showToast('Ошибка пересылки: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось переслать сообщение.'), 'error');
     }
   };
 
@@ -2420,7 +2420,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       showToast('Чат удален', 'success');
                       window.location.href = '/app/chats';
                     } catch (e: any) {
-                      showToast('Ошибка удаления: ' + e.message, 'error');
+                      showToast(getErrorMessage(e, 'Не удалось удалить сообщение.'), 'error');
                     }
                   }}
                   title="Удалить чат"

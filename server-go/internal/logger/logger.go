@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type LogLevel string
@@ -44,6 +48,7 @@ type Logger struct {
 }
 
 var defaultLogger *Logger
+var fileLogWriter io.WriteCloser
 
 func Init(webhookURL string, enabled bool) {
 	defaultLogger = &Logger{
@@ -55,7 +60,18 @@ func Init(webhookURL string, enabled bool) {
 		buffer:     make([]LogEntry, 0),
 		bufferSize: 50,
 	}
-	
+	if logPath := os.Getenv("LOG_FILE"); logPath != "" {
+		if err := os.MkdirAll(filepath.Dir(logPath), 0755); err == nil {
+			fileLogWriter = &lumberjack.Logger{
+				Filename:   logPath,
+				MaxSize:    100,
+				MaxBackups: 5,
+				MaxAge:     28,
+				Compress:   true,
+			}
+			log.SetOutput(io.MultiWriter(os.Stderr, fileLogWriter))
+		}
+	}
 	if enabled && webhookURL != "" {
 		log.Printf("✅ Logger initialized with webhook: %s", maskURL(webhookURL))
 	} else {

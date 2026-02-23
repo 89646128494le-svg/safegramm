@@ -1,6 +1,6 @@
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { api } from '../../services/api';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { api, getErrorMessage } from '../../services/api';
 import { getSocket } from '../../services/websocket';
 import EnhancedChatWindow from '../../components/EnhancedChatWindow';
 import { showToast } from '../../components/Toast';
@@ -81,6 +81,10 @@ export default function Chats() {
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [starredChats, setStarredChats] = useState<Set<string>>(new Set());
+  const [chatsNextCursor, setChatsNextCursor] = useState('');
+  const [chatsHasMore, setChatsHasMore] = useState(false);
+  const [loadingMoreChats, setLoadingMoreChats] = useState(false);
+  const chatListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
@@ -280,25 +284,48 @@ export default function Chats() {
     }
   };
 
-  const loadChats = async () => {
-    setLoading(true);
-    const url = showArchived ? '/api/chats?includeArchived=true' : '/api/chats';
+  const loadChats = async (append = false) => {
+    if (append) {
+      if (loadingMoreChats || !chatsHasMore || !chatsNextCursor) return;
+      setLoadingMoreChats(true);
+    } else {
+      setLoading(true);
+    }
+    const params = new URLSearchParams();
+    if (showArchived) params.set('includeArchived', 'true');
+    if (append && chatsNextCursor) params.set('cursor', chatsNextCursor);
+    params.set('limit', '50');
+    const url = `/api/chats?${params}`;
     const CHATS_TIMEOUT_MS = 15000;
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('timeout')), CHATS_TIMEOUT_MS)
     );
     try {
       const data = await Promise.race([api(url), timeoutPromise]);
-      setChats(data.chats || []);
-    } catch (e: any) {
-      if (e?.message === 'timeout') {
-        showToast('Загрузка чатов заняла слишком много времени. Проверьте подключение и обновите страницу.', 'error');
+      const list = data.chats || [];
+      if (append) {
+        setChats(prev => {
+          const ids = new Set(prev.map((c: Chat) => c.id));
+          const added = list.filter((c: Chat) => !ids.has(c.id));
+          return [...prev, ...added];
+        });
       } else {
-        showToast('Ошибка загрузки чатов: ' + (e?.message || 'неизвестная ошибка'), 'error');
+        setChats(list);
       }
-      setChats([]);
+      setChatsNextCursor(data.nextCursor || '');
+      setChatsHasMore(!!data.hasMore);
+    } catch (e: any) {
+      if (!append) {
+        if (e?.message === 'timeout') {
+          showToast('Загрузка чатов заняла слишком много времени. Проверьте подключение и обновите страницу.', 'error');
+        } else {
+          showToast(getErrorMessage(e, 'Не удалось загрузить чаты. Попробуйте обновить страницу.'), 'error');
+        }
+        setChats([]);
+      }
     } finally {
       setLoading(false);
+      setLoadingMoreChats(false);
     }
   };
 
@@ -308,7 +335,7 @@ export default function Chats() {
       await loadChats();
       showToast('Чат заархивирован', 'success');
     } catch (e: any) {
-      showToast('Ошибка архивирования: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось заархивировать чат.'), 'error');
     }
   };
 
@@ -318,7 +345,7 @@ export default function Chats() {
       await loadChats();
       showToast('Чат разархивирован', 'success');
     } catch (e: any) {
-      showToast('Ошибка разархивирования: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось разархивировать чат.'), 'error');
     }
   };
 
@@ -334,7 +361,7 @@ export default function Chats() {
       }
       showToast('Чат удален', 'success');
     } catch (e: any) {
-      showToast('Ошибка удаления: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось удалить чат.'), 'error');
     }
   };
 
@@ -354,7 +381,7 @@ export default function Chats() {
       setShowDMModal(false);
       showToast(`Чат с ${user.username} создан`, 'success');
     } catch (e: any) {
-      showToast('Ошибка создания чата: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать чат.'), 'error');
     }
   };
 
@@ -367,7 +394,7 @@ export default function Chats() {
       setShowGroupModal(false);
       showToast(`Группа "${name}" создана`, 'success');
     } catch (e: any) {
-      showToast('Ошибка создания группы: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать группу.'), 'error');
     }
   };
 
@@ -380,7 +407,7 @@ export default function Chats() {
       setShowChannelModal(false);
       showToast(`Канал "${name}" создан`, 'success');
     } catch (e: any) {
-      showToast('Ошибка создания канала: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать канал.'), 'error');
     }
   };
 
@@ -630,7 +657,16 @@ export default function Chats() {
                 <div className="empty-state-description">Попробуйте другой запрос</div>
               </div>
             )}
-            <div className="chat-list">
+            <div
+              className="chat-list"
+              ref={chatListRef}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                if (el.scrollHeight - el.scrollTop - el.clientHeight < 200 && chatsHasMore && !loadingMoreChats) {
+                  loadChats(true);
+                }
+              }}
+            >
               {filteredChats.map(chat => {
                 const isStarred = starredChats.has(chat.id);
                 return (
@@ -662,6 +698,11 @@ export default function Chats() {
                   />
                 );
               })}
+              {loadingMoreChats && (
+                <div className="chat-list-load-more" style={{ padding: '8px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  Загрузка…
+                </div>
+              )}
             </div>
           </>
         )}

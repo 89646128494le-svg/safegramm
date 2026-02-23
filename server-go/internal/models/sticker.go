@@ -5,13 +5,16 @@ import (
 )
 
 type StickerPack struct {
-	ID          string    `gorm:"primaryKey" json:"id"`
-	Name        string    `gorm:"not null" json:"name"`
-	Title       string    `json:"title"`
-	ThumbnailURL string   `json:"thumbnailUrl,omitempty"`
-	IsAnimated  bool      `json:"isAnimated"`
-	CreatedAt   time.Time `gorm:"autoCreateTime" json:"createdAt"`
-	Stickers    []Sticker `gorm:"foreignKey:PackID" json:"stickers,omitempty"`
+	ID            string     `gorm:"primaryKey" json:"id"`
+	Name          string     `gorm:"not null" json:"name"`
+	Title         string     `json:"title"`
+	ThumbnailURL  string     `json:"thumbnailUrl,omitempty"`
+	IsAnimated    bool       `json:"isAnimated"`
+	CreatedByUserID string   `json:"createdByUserId,omitempty" gorm:"index"` // пользовательский пак
+	ApprovedAt    *time.Time `json:"approvedAt,omitempty"`                   // nil = на модерации
+	RejectedAt    *time.Time `json:"rejectedAt,omitempty"`
+	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"createdAt"`
+	Stickers      []Sticker  `gorm:"foreignKey:PackID" json:"stickers,omitempty"`
 }
 
 type Sticker struct {

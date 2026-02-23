@@ -11,27 +11,15 @@ import (
 
 // Hub поддерживает множество активных подключений и рассылает сообщения
 type Hub struct {
-	// Зарегистрированные клиенты
-	clients map[*Client]bool
-
-	// Канал для регистрации клиентов
-	register chan *Client
-
-	// Канал для отмены регистрации клиентов
-	unregister chan *Client
-
-	// Канал для рассылки сообщений всем клиентам
-	broadcast chan []byte
-
-	// Канал для отправки сообщения конкретному чату
-	sendToChat chan *ChatMessage
-
-	// Голосовые комнаты: chatID -> множество userID
-	voiceRooms   map[string]map[string]bool
+	clients     map[*Client]bool
+	register    chan *Client
+	unregister  chan *Client
+	broadcast   chan []byte
+	sendToChat  chan *ChatMessage
+	voiceRooms  map[string]map[string]bool
 	voiceRoomsMu sync.RWMutex
-
-	// Действия в голосовой комнате
 	voiceAction chan *VoiceRoomAction
+	quit        chan struct{} // для graceful shutdown
 }
 
 type ChatMessage struct {
@@ -56,7 +44,19 @@ func NewHub() *Hub {
 		sendToChat:  make(chan *ChatMessage, 256),
 		voiceRooms:  make(map[string]map[string]bool),
 		voiceAction: make(chan *VoiceRoomAction, 64),
+		quit:        make(chan struct{}),
 	}
+}
+
+// Shutdown завершает работу hub: отключает клиентов и останавливает Run
+func (h *Hub) Shutdown() {
+	close(h.quit)
+	h.voiceRoomsMu.Lock()
+	for client := range h.clients {
+		close(client.send)
+	}
+	h.clients = make(map[*Client]bool)
+	h.voiceRoomsMu.Unlock()
 }
 
 // Register регистрирует нового клиента
@@ -68,6 +68,8 @@ func (h *Hub) Register(client *Client) {
 func (h *Hub) Run() {
 	for {
 		select {
+		case <-h.quit:
+			return
 		case client := <-h.register:
 			h.clients[client] = true
 			log.Printf("Client connected: %s", client.userID)

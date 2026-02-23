@@ -67,6 +67,30 @@ func GetUserStatus(userID string) (string, error) {
 	return client.Get(ctx, "status:"+userID).Result()
 }
 
+// CacheGet возвращает значение по ключу (для кэша списков/профилей)
+func CacheGet(key string) (string, error) {
+	if client == nil {
+		return "", nil
+	}
+	return client.Get(ctx, "cache:"+key).Result()
+}
+
+// CacheSet сохраняет значение в кэш с TTL
+func CacheSet(key string, value string, ttl time.Duration) error {
+	if client == nil {
+		return nil
+	}
+	return client.Set(ctx, "cache:"+key, value, ttl).Err()
+}
+
+// CacheDel удаляет ключ кэша (инвалидация)
+func CacheDel(key string) error {
+	if client == nil {
+		return nil
+	}
+	return client.Del(ctx, "cache:"+key).Err()
+}
+
 // Ping проверяет соединение с Redis. Если клиент не инициализирован, возвращает nil.
 func Ping() error {
 	if client == nil {

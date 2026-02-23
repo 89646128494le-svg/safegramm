@@ -13,6 +13,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	api := router.Group("/api")
 
 	// Публичные маршруты (с rate limiting)
+	api.GET("/auth/check-username", AuthRateLimitMiddleware(), CheckUsername(db))
+	api.GET("/auth/check-email", AuthRateLimitMiddleware(), CheckEmail(db))
 	api.POST("/auth/register", AuthRateLimitMiddleware(), Register(db, cfg))
 	api.POST("/auth/login", AuthRateLimitMiddleware(), Login(db, cfg))
 	api.POST("/auth/send-email-code", AuthRateLimitMiddleware(), SendEmailCode(db))
@@ -24,7 +26,16 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 
 	// Safety AI на базе Gemini, gemini-1.5-flash
 	api.POST("/safety/ask", AskGemini)
-	
+
+	// Публичный статус техработ (без авторизации — для баннера на фронте)
+	api.GET("/maintenance/status", GetMaintenanceStatus(db))
+
+	// Набор тестировщиков и хелперов (публичная заявка, с rate limit)
+	api.POST("/recruit", AuthRateLimitMiddleware(), SubmitRecruit(db))
+
+	// Платежи: вебхуки (без авторизации, проверка подписи внутри)
+	api.POST("/webhooks/stripe", StripeWebhook(db))
+	api.POST("/webhooks/yookassa", YooKassaWebhook(db))
 
 	// Защищенные маршруты (требуют аутентификации)
 	protected := api.Group("")
@@ -43,6 +54,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// Пользователи
 	protected.GET("/users", GetUsers(db))
 	protected.GET("/users/me", GetCurrentUser(db))
+	protected.GET("/users/me/export", ExportMyData(db))
+	protected.DELETE("/users/me", DeleteMyAccount(db))
 	protected.GET("/users/search", SearchUsers(db))
 	protected.GET("/users/:id", GetUserProfile(db))
 	protected.PATCH("/users/me", UpdateUser(db))
@@ -68,9 +81,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// Статистика
 	protected.GET("/chats/:id/statistics", GetChatStatistics(db))
 
-	// Боты
+	// Боты (BotFather-style: создание, токен при create/revoke)
 	protected.GET("/bots", GetBots(db))
 	protected.POST("/bots", CreateBot(db))
+	protected.GET("/bots/:id", GetBot(db))
+	protected.PATCH("/bots/:id", UpdateBot(db))
+	protected.POST("/bots/:id/revoke", RevokeBotToken(db))
 	protected.POST("/bots/:id/toggle", ToggleBot(db))
 	protected.DELETE("/bots/:id", DeleteBot(db))
 
@@ -224,9 +240,75 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/admin/maintenance", RequireAdmin(db), GetAdminMaintenance(db))
 	protected.GET("/admin/system/health", RequireAdmin(db), GetSystemHealth(db))
 	protected.GET("/admin/feedback", RequireAdmin(db), GetAdminFeedback(db))
+	protected.GET("/admin/recruit", RequireAdmin(db), GetAdminRecruit(db))
 	protected.GET("/admin/reports", RequireAdmin(db), GetAdminReports(db))
 	protected.GET("/admin/modqueue", RequireAdmin(db), GetAdminModQueue(db))
 	protected.POST("/admin/approve/:id", RequireAdmin(db), ApproveModItem(db))
+
+	// Админ: пользователи (расширенные)
+	protected.POST("/admin/users/bulk", RequireAdmin(db), AdminUsersBulk(db))
+	protected.GET("/admin/users/export", RequireAdmin(db), GetAdminUsersExport(db))
+	protected.GET("/admin/users/:id/history", RequireAdmin(db), GetAdminUserHistory(db))
+	protected.GET("/admin/users/:id/recovery-codes", RequireAdmin(db), GetAdminUserRecoveryCodes(db))
+	protected.POST("/admin/users/:id/recovery-codes/reset", RequireAdmin(db), PostAdminUserRecoveryCodesReset(db))
+	protected.GET("/admin/users/:id/sessions", RequireAdmin(db), GetAdminUserSessions(db))
+	protected.DELETE("/admin/users/:id/sessions/:sid", RequireAdmin(db), DeleteAdminUserSession(db))
+
+	// Админ: модерация контента
+	protected.GET("/admin/messages/search", RequireAdmin(db), GetAdminMessagesSearch(db))
+	protected.GET("/admin/media-queue", RequireAdmin(db), GetAdminMediaQueue(db))
+	protected.POST("/admin/messages/:id/moderation", RequireAdmin(db), PostAdminMessageModeration(db))
+	protected.GET("/admin/sticker-packs", RequireAdmin(db), GetAdminStickerPacks(db))
+	protected.POST("/admin/sticker-packs/:id/approve", RequireAdmin(db), PostAdminStickerPackApprove(db))
+	protected.POST("/admin/sticker-packs/:id/reject", RequireAdmin(db), PostAdminStickerPackReject(db))
+	protected.GET("/admin/banned-words", RequireAdmin(db), GetAdminBannedWords(db))
+	protected.POST("/admin/banned-words", RequireAdmin(db), PostAdminBannedWord(db))
+	protected.PATCH("/admin/banned-words/:id", RequireAdmin(db), PatchAdminBannedWord(db))
+	protected.DELETE("/admin/banned-words/:id", RequireAdmin(db), DeleteAdminBannedWord(db))
+
+	// Админ: безопасность
+	protected.GET("/admin/suspicious-activity", RequireAdmin(db), GetAdminSuspiciousActivity(db))
+	protected.GET("/admin/security-policy", RequireAdmin(db), GetAdminSecurityPolicy(db))
+	protected.PATCH("/admin/security-policy", RequireAdmin(db), PatchAdminSecurityPolicy(db))
+	protected.GET("/admin/safety-alerts", RequireAdmin(db), GetAdminSafetyAlerts(db))
+	protected.POST("/admin/safety-alerts/:id/resolve", RequireAdmin(db), PostAdminSafetyAlertResolve(db))
+
+	// Админ: коммуникация
+	protected.GET("/admin/email-templates", RequireAdmin(db), GetAdminEmailTemplates(db))
+	protected.POST("/admin/email-templates", RequireAdmin(db), PostAdminEmailTemplate(db))
+	protected.PATCH("/admin/email-templates/:id", RequireAdmin(db), PatchAdminEmailTemplate(db))
+	protected.GET("/admin/scheduled-broadcasts", RequireAdmin(db), GetAdminScheduledBroadcasts(db))
+	protected.POST("/admin/scheduled-broadcasts", RequireAdmin(db), PostAdminScheduledBroadcast(db))
+	protected.GET("/admin/domain-list", RequireAdmin(db), GetAdminDomainList(db))
+	protected.POST("/admin/domain-list", RequireAdmin(db), PostAdminDomainList(db))
+	protected.DELETE("/admin/domain-list/:id", RequireAdmin(db), DeleteAdminDomainList(db))
+	protected.GET("/admin/invite-links", RequireAdmin(db), GetAdminInviteLinks(db))
+	protected.POST("/admin/invite-links", RequireAdmin(db), PostAdminInviteLink(db))
+	protected.PATCH("/admin/invite-links/:id", RequireAdmin(db), PatchAdminInviteLink(db))
+	protected.DELETE("/admin/invite-links/:id", RequireAdmin(db), DeleteAdminInviteLink(db))
+
+	// Админ: система и интеграции
+	protected.GET("/admin/bots", RequireAdmin(db), GetAdminBots(db))
+	protected.POST("/admin/bots/:id/disable", RequireAdmin(db), PostAdminBotDisable(db))
+	protected.POST("/admin/bots/:id/enable", RequireAdmin(db), PostAdminBotEnable(db))
+	protected.GET("/admin/limits", RequireAdmin(db), GetAdminLimits(db))
+	protected.PATCH("/admin/limits", RequireAdmin(db), PatchAdminLimits(db))
+	protected.GET("/admin/feature-flags", RequireAdmin(db), GetAdminFeatureFlags(db))
+	protected.POST("/admin/feature-flags", RequireAdmin(db), PostAdminFeatureFlag(db))
+	protected.PATCH("/admin/feature-flags/:id", RequireAdmin(db), PatchAdminFeatureFlag(db))
+
+	// Админ: аналитика и отчёты
+	protected.GET("/admin/analytics/premium-dashboard", RequireAdmin(db), GetAdminPremiumDashboard(db))
+	protected.GET("/admin/analytics/chat-stats", RequireAdmin(db), GetAdminChatStats(db))
+	protected.GET("/admin/analytics/reports-summary", RequireAdmin(db), GetAdminReportsSummary(db))
+	protected.GET("/admin/analytics/reports-export", RequireAdmin(db), GetAdminReportsExport(db))
+	protected.GET("/admin/analytics/audit-export", RequireAdmin(db), GetAdminAuditExport(db))
+
+	// Админ: удобство (аудит, поиск, настройки)
+	protected.GET("/admin/audit-log", RequireAdmin(db), GetAdminAuditLog(db))
+	protected.GET("/admin/search", RequireAdmin(db), GetAdminGlobalSearch(db))
+	protected.GET("/admin/me/preferences", RequireAdmin(db), GetAdminPreferences(db))
+	protected.PATCH("/admin/me/preferences", RequireAdmin(db), PatchAdminPreferences(db))
 
 	// Панель владельца (только для owner)
 	protected.GET("/owner/dashboard", RequireOwner(db), GetOwnerDashboard(db))
@@ -237,6 +319,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/owner/settings", RequireOwner(db), UpdateSystemSettings(db))
 	protected.POST("/owner/database/clear", RequireOwner(db), ClearDatabase(db))
 	protected.GET("/owner/premium/stats", RequireOwner(db), GetPremiumStats(db))
+	protected.GET("/owner/revenue", RequireOwner(db), GetOwnerRevenue(db))
 
 	// Премиум подписка и тарифы
 	protected.GET("/premium", GetPremiumInfo(db))                                    // Информация о премиум подписке текущего пользователя
@@ -255,8 +338,10 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 
 	// Технические работы
 	protected.POST("/admin/maintenance", RequireAdmin(db), SendMaintenanceNotificationToAll(db))
-	protected.GET("/maintenance/status", GetMaintenanceStatus(db)) // Публичный endpoint
 	protected.POST("/admin/maintenance/disable", RequireAdmin(db), DisableMaintenance(db))
+
+	// Обратная связь и заявки на премиум (отправка — авторизованный пользователь)
+	protected.POST("/feedback", SubmitFeedback(db))
 
 	// Webhook настройки (для admin и owner)
 	protected.GET("/admin/webhook", RequireAdmin(db), GetWebhookSettings)

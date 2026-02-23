@@ -167,12 +167,9 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 func GetMaintenanceStatus(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var maintenance models.MaintenanceMode
-		if err := db.Where("is_active = ?", true).Order("created_at DESC").First(&maintenance).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				c.JSON(http.StatusOK, gin.H{"isActive": false, "message": ""})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch maintenance status"})
+		db.Where("is_active = ?", true).Order("created_at DESC").Limit(1).Find(&maintenance)
+		if maintenance.ID == "" {
+			c.JSON(http.StatusOK, gin.H{"isActive": false, "message": ""})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"isActive": maintenance.IsActive, "timestamp": maintenance.Timestamp, "message": maintenance.Message, "id": maintenance.ID})

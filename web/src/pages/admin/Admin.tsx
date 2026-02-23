@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { api } from '../../services/api';
+import { api, getApiBaseUrl, getErrorMessage } from '../../services/api';
 import { showToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/Modal';
 import ServiceManager from '../../components/ServiceManager';
@@ -15,6 +15,12 @@ import AdminMessaging from '../../components/admin/AdminMessaging';
 import SecurityDashboard from '../../components/admin/SecurityDashboard';
 import SupportTab from '../../components/admin/SupportTab';
 import LiveLogs from '../../components/admin/LiveLogs';
+import AuditLogTab from '../../components/admin/AuditLogTab';
+import ContentModerationTab from '../../components/admin/ContentModerationTab';
+import SecurityPolicyTab from '../../components/admin/SecurityPolicyTab';
+import CommunicationTab from '../../components/admin/CommunicationTab';
+import SystemIntegrationsTab from '../../components/admin/SystemIntegrationsTab';
+import AnalyticsReportsTab from '../../components/admin/AnalyticsReportsTab';
 import { ADMIN_TABS, canAccessAdminTab, getRoleLabel, getRoleLevel, isSystemOwner, canBlockUser, canDemoteUser, canPromoteTo, canDeleteUser, ROLE_LEVEL } from '../../utils/roles';
 
 type AdminTabId = typeof ADMIN_TABS[number]['id'];
@@ -27,11 +33,22 @@ export default function Admin() {
     loadUser();
   }, []);
 
+  const visibleTabs = React.useMemo(
+    () => ADMIN_TABS.filter((t) => user && canAccessAdminTab(user, t.id)),
+    [user]
+  );
+
+  useEffect(() => {
+    if (visibleTabs.length && !visibleTabs.some((t) => t.id === tab)) {
+      setTab(visibleTabs[0].id);
+    }
+  }, [visibleTabs, tab]);
+
   const loadUser = async () => {
     try {
       const u = await api('/api/users/me');
       setUser(u);
-      const firstTab = ADMIN_TABS.find(t => canAccessAdminTab(u, t.id));
+      const firstTab = ADMIN_TABS.find((t) => canAccessAdminTab(u, t.id));
       if (firstTab) setTab(firstTab.id);
     } catch (e) {
       console.error('Failed to load user:', e);
@@ -65,26 +82,23 @@ export default function Admin() {
         borderBottom: '1px solid var(--border, #374151)',
         paddingBottom: '16px'
       }}>
-        {ADMIN_TABS.map(({ id, label }) => {
-          if (!canAccessAdminTab(user, id)) return null;
-          return (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              style={{
-                padding: '10px 16px',
-                fontWeight: tab === id ? '600' : '400',
-                background: tab === id ? 'var(--accent, #3b82f6)' : 'transparent',
-                color: tab === id ? '#fff' : 'var(--fg, #e5e7eb)',
-                border: '1px solid var(--border, #374151)',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
+        {visibleTabs.map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            style={{
+              padding: '10px 16px',
+              fontWeight: tab === id ? '600' : '400',
+              background: tab === id ? 'var(--accent, #3b82f6)' : 'transparent',
+              color: tab === id ? '#fff' : 'var(--fg, #e5e7eb)',
+              border: '1px solid var(--border, #374151)',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       {tab==='sovereign' && canAccessAdminTab(user, 'sovereign') && <OwnerTab currentUser={user} />}
       {tab==='users' && canAccessAdminTab(user, 'users') && <UsersTab currentUser={user} />}
@@ -99,12 +113,19 @@ export default function Admin() {
       {tab==='mod' && canAccessAdminTab(user, 'mod') && <ModTab/>}
       {tab==='reports' && canAccessAdminTab(user, 'reports') && <ReportsTab/>}
       {tab==='feedback' && canAccessAdminTab(user, 'feedback') && <FeedbackTab/>}
+      {tab==='recruit' && canAccessAdminTab(user, 'recruit') && <RecruitTab/>}
       {tab==='premium_apps' && canAccessAdminTab(user, 'premium_apps') && <PremiumApplicationsTab />}
       {tab==='push' && canAccessAdminTab(user, 'push') && <PushTab/>}
       {tab==='services' && canAccessAdminTab(user, 'services') && <ServiceManager />}
       {tab==='database' && canAccessAdminTab(user, 'database') && <DatabaseTab currentUser={user} />}
       {tab==='webhook' && canAccessAdminTab(user, 'webhook') && <WebhookManager />}
       {tab==='support' && canAccessAdminTab(user, 'support') && <SupportTab />}
+      {tab==='audit' && canAccessAdminTab(user, 'audit') && <AuditLogTab />}
+      {tab==='content_moderation' && canAccessAdminTab(user, 'content_moderation') && <ContentModerationTab />}
+      {tab==='security_policy' && canAccessAdminTab(user, 'security_policy') && <SecurityPolicyTab />}
+      {tab==='communication' && canAccessAdminTab(user, 'communication') && <CommunicationTab />}
+      {tab==='system_integrations' && canAccessAdminTab(user, 'system_integrations') && <SystemIntegrationsTab />}
+      {tab==='analytics_reports' && canAccessAdminTab(user, 'analytics_reports') && <AnalyticsReportsTab />}
     </div>
   );
 }
@@ -112,6 +133,7 @@ export default function Admin() {
 function OwnerTab({ currentUser }: { currentUser: any }) {
   const [dashboard, setDashboard] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
+  const [revenue, setRevenue] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const level = getRoleLevel(currentUser);
   const isOwner = level >= ROLE_LEVEL.owner && isSystemOwner(currentUser);
@@ -123,6 +145,9 @@ function OwnerTab({ currentUser }: { currentUser: any }) {
     if (isOwner || isSysadmin) {
       loadDashboard();
       loadSettings();
+      if (isOwner) {
+        api('/api/owner/revenue').then(setRevenue).catch(() => {});
+      }
     } else {
       setLoading(false);
     }
@@ -133,7 +158,7 @@ function OwnerTab({ currentUser }: { currentUser: any }) {
       const data = await api('/api/owner/dashboard');
       setDashboard(data);
     } catch (e: any) {
-      showToast('Ошибка загрузки: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить данные.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -155,7 +180,7 @@ function OwnerTab({ currentUser }: { currentUser: any }) {
       setSettings(updated);
       showToast('Настройки сохранены', 'success');
     } catch (e: any) {
-      showToast('Ошибка сохранения: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось сохранить.'), 'error');
     }
   };
 
@@ -165,7 +190,7 @@ function OwnerTab({ currentUser }: { currentUser: any }) {
       showToast(`План пользователя изменен на ${plan}`, 'success');
       loadDashboard();
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
     }
   };
 
@@ -176,7 +201,7 @@ function OwnerTab({ currentUser }: { currentUser: any }) {
       showToast('Пользователь удален', 'success');
       loadDashboard();
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
     }
   };
 
@@ -257,6 +282,37 @@ function OwnerTab({ currentUser }: { currentUser: any }) {
             <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{dashboard.messages?.total || 0}</div>
             <div style={{ color: 'var(--text-secondary)' }}>Сообщений</div>
           </div>
+        </div>
+      )}
+
+      {/* Доходы и конверсия (только owner) */}
+      {isOwner && revenue && (
+        <div style={{ marginBottom: '24px' }}>
+          <h4 style={{ marginBottom: '12px' }}>💰 Доходы и конверсия</h4>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '12px',
+            marginBottom: '12px'
+          }}>
+            <div style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{(revenue.totalRevenue / 100).toFixed(0)} ₽</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Всего доход</div>
+            </div>
+            <div style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{(revenue.last30DaysRevenue / 100).toFixed(0)} ₽</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>За 30 дней</div>
+            </div>
+            <div style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{Number(revenue.conversionRate || 0).toFixed(1)}%</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Free → Premium</div>
+            </div>
+          </div>
+          {revenue.recentPayments?.length > 0 && (
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Последние платежи: {revenue.recentPayments.slice(0, 5).map((p: any) => `${p.provider} ${(p.amount / 100).toFixed(0)} ${p.currency}`).join(', ')}
+            </div>
+          )}
         </div>
       )}
 
@@ -382,7 +438,7 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
       const data = await api('/api/admin/users');
       setList(data.users || []);
     } catch (e: any) {
-      showToast('Ошибка загрузки: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить данные.'), 'error');
       setList([]);
     } finally {
       setLoading(false);
@@ -413,7 +469,7 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
       setEditing(prev => { const next = { ...prev }; delete next[u.id]; return next; });
       load();
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
     }
   };
 
@@ -425,7 +481,7 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
       setDeleteConfirm(null);
       load();
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
     }
   };
 
@@ -438,7 +494,7 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
       localStorage.removeItem('token');
       window.location.href = '/';
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
     } finally {
       setClearing(false);
     }
@@ -543,6 +599,13 @@ function UsersTab({ currentUser }: { currentUser: any }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterPlan, setFilterPlan] = useState<string>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [historyUserId, setHistoryUserId] = useState<string | null>(null);
+  const [historyList, setHistoryList] = useState<any[]>([]);
+  const [recoveryUserId, setRecoveryUserId] = useState<string | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [confirmModal, setConfirmModal] = useState<{open: boolean, action: string, userId: string, username: string}>({
     open: false,
     action: '',
@@ -553,12 +616,15 @@ function UsersTab({ currentUser }: { currentUser: any }) {
   const load = async () => {
     try {
       setLoading(true);
-      const data = await api('/api/admin/users');
+      const params = new URLSearchParams();
+      if (filterPlan !== 'all') params.set('plan', filterPlan);
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      const data = await api('/api/admin/users' + (params.toString() ? '?' + params : ''));
       setList(data.users || []);
       setFilteredList(data.users || []);
     } catch (e: any) {
       console.error('Failed to load users:', e);
-      showToast('Ошибка загрузки: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить данные.'), 'error');
       setList([]);
       setFilteredList([]);
     } finally {
@@ -568,7 +634,58 @@ function UsersTab({ currentUser }: { currentUser: any }) {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [filterPlan]);
+
+  useEffect(() => {
+    if (historyUserId) {
+      api('/api/admin/users/' + historyUserId + '/history').then((d) => setHistoryList(d?.history || [])).catch(() => setHistoryList([]));
+    }
+  }, [historyUserId]);
+
+  useEffect(() => {
+    if (recoveryUserId) {
+      api('/api/admin/users/' + recoveryUserId + '/recovery-codes').then((d) => setRecoveryCodes(d?.codes || [])).catch(() => setRecoveryCodes([]));
+    }
+  }, [recoveryUserId]);
+
+  const bulkAction = async (action: string, value?: string) => {
+    if (selectedIds.size === 0) return;
+    setBulkProcessing(true);
+    try {
+      await api('/api/admin/users/bulk', 'POST', { userIds: Array.from(selectedIds), action, value: value || '' });
+      showToast('Выполнено для ' + selectedIds.size + ' польз.', 'success');
+      setSelectedIds(new Set());
+      load();
+    } catch (e: any) {
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const resetRecoveryCodes = async () => {
+    if (!recoveryUserId) return;
+    try {
+      const d = await api('/api/admin/users/' + recoveryUserId + '/recovery-codes/reset', 'POST', {});
+      setRecoveryCodes(d?.codes || []);
+      showToast('Новые коды сгенерированы', 'success');
+    } catch (e: any) {
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredList.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredList.map((u: any) => u.id)));
+  };
 
   useEffect(() => {
     let filtered = list;
@@ -616,7 +733,7 @@ function UsersTab({ currentUser }: { currentUser: any }) {
       showToast('Пользователь разблокирован', 'success');
       await load();
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
     }
   };
   
@@ -651,7 +768,7 @@ function UsersTab({ currentUser }: { currentUser: any }) {
       await load();
       setConfirmModal({ open: false, action: '', userId: '', username: '' });
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
     }
   };
   
@@ -676,21 +793,23 @@ function UsersTab({ currentUser }: { currentUser: any }) {
         <div style={{fontSize: '18px', fontWeight: '600'}}>
           Всего пользователей: {list.length} {filteredList.length !== list.length && `(отфильтровано: ${filteredList.length})`}
         </div>
-        <button 
-          onClick={load}
-          style={{
-            padding: '10px 16px',
-            background: 'var(--accent, #3b82f6)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: '600'
-          }}
-        >
-          🔄 Обновить
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button onClick={async () => { try { const base = getApiBaseUrl(); const token = localStorage.getItem('token'); const url = base + '/api/admin/users/export' + (filterPlan !== 'all' ? '?plan=' + filterPlan : ''); const r = await fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} }); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'users.csv'; a.click(); URL.revokeObjectURL(a.href); showToast('Файл сохранён', 'success'); } catch (e: any) { showToast(getErrorMessage(e, 'Не удалось экспортировать.'), 'error'); } }} style={{ padding: '10px 16px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--fg)', cursor: 'pointer', fontWeight: '500' }}>Экспорт CSV</button>
+          <button onClick={load} style={{ padding: '10px 16px', background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>🔄 Обновить</button>
+        </div>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontWeight: '600' }}>Выбрано: {selectedIds.size}</span>
+          <button onClick={() => bulkAction('block')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Заблокировать</button>
+          <button onClick={() => bulkAction('unblock')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Разблокировать</button>
+          <button onClick={() => bulkAction('promote')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Сделать админом</button>
+          <button onClick={() => bulkAction('demote')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer' }}>Снять админа</button>
+          <button onClick={() => bulkAction('set_plan', 'premium')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer' }}>План Premium</button>
+          <button onClick={() => setSelectedIds(new Set())} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer' }}>Снять выбор</button>
+        </div>
+      )}
 
       <div style={{
         display: 'flex',
@@ -749,6 +868,22 @@ function UsersTab({ currentUser }: { currentUser: any }) {
           <option value="online">🟢 Онлайн</option>
           <option value="banned">🚫 Заблокированные</option>
         </select>
+        <select
+          value={filterPlan}
+          onChange={e => setFilterPlan(e.target.value)}
+          style={{
+            padding: '10px 12px',
+            background: 'var(--panel-2, #111827)',
+            border: '1px solid var(--border, #374151)',
+            borderRadius: '8px',
+            color: 'var(--fg, #e5e7eb)',
+            cursor: 'pointer'
+          }}
+        >
+          <option value="all">Все планы</option>
+          <option value="free">Free</option>
+          <option value="premium">Premium</option>
+        </select>
       </div>
 
       {filteredList.length === 0 ? (
@@ -756,6 +891,15 @@ function UsersTab({ currentUser }: { currentUser: any }) {
           {list.length === 0 ? 'Нет пользователей' : 'Ничего не найдено'}
         </div>
       ) : (
+        <>
+        {canBlockUser(currentUser, { id: '', roles: [] }) && (
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={selectedIds.size === filteredList.length} onChange={toggleSelectAll} />
+              Выбрать всех (для массовых действий)
+            </label>
+          </div>
+        )}
         <div style={{display: 'grid', gap: '12px'}}>
           {filteredList.map(u => {
             const rawRoles = u.roles;
@@ -790,7 +934,11 @@ function UsersTab({ currentUser }: { currentUser: any }) {
                 }}
               >
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px'}}>
-                  <div style={{flex: 1}}>
+                  <div style={{display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1}}>
+                    {canBlock && (
+                      <input type="checkbox" checked={selectedIds.has(u.id)} onChange={() => toggleSelect(u.id)} style={{ marginTop: '4px' }} />
+                    )}
+                    <div style={{flex: 1}}>
                     <div style={{fontWeight: '600', fontSize: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
                       {u.username} 
                       {systemOwner && <span title="Встроенный системный владелец" style={{ background: 'rgba(251,191,36,0.2)', color: '#fbbf24', padding: '2px 8px', borderRadius: '6px', fontSize: '12px' }}>Системный владелец</span>}
@@ -820,6 +968,11 @@ function UsersTab({ currentUser }: { currentUser: any }) {
                       </div>
                     )}
                   </div>
+                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                  <button type="button" onClick={() => setHistoryUserId(u.id)} style={{ padding: '4px 10px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--fg)' }}>История</button>
+                  <button type="button" onClick={() => setRecoveryUserId(u.id)} style={{ padding: '4px 10px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--fg)' }}>Коды</button>
+                </div>
                 </div>
                 {!systemOwner && (canBlock || canDemote || canDeleteUser(currentUser, u)) && (
                   <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border, #374151)'}}>
@@ -910,6 +1063,42 @@ function UsersTab({ currentUser }: { currentUser: any }) {
             );
           })}
         </div>
+
+      {historyUserId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setHistoryUserId(null)}>
+          <div style={{ background: 'var(--panel)', borderRadius: 12, padding: 24, maxWidth: 520, maxHeight: '80vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 16 }}>История ролей и банов</h3>
+            {historyList.length === 0 ? <div className="empty">Нет записей</div> : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {historyList.map((h: any) => (
+                  <div key={h.id} style={{ padding: 10, background: 'var(--panel-2)', borderRadius: 8, fontSize: 13 }}>
+                    <strong>{h.action}</strong> · {h.oldValue} → {h.newValue} · {new Date(h.createdAt).toLocaleString('ru-RU')}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setHistoryUserId(null)} style={{ marginTop: 16, padding: '8px 16px', background: 'var(--border)', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Закрыть</button>
+          </div>
+        </div>
+      )}
+
+      {recoveryUserId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setRecoveryUserId(null)}>
+          <div style={{ background: 'var(--panel)', borderRadius: 12, padding: 24, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 16 }}>Резервные коды доступа</h3>
+            {recoveryCodes.length === 0 ? <div className="empty">Нет кодов или ошибка загрузки</div> : (
+              <div style={{ marginBottom: 16 }}>
+                {recoveryCodes.map((c, i) => <div key={i} style={{ fontFamily: 'monospace', fontSize: 12, marginBottom: 4 }}>{c}</div>)}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={resetRecoveryCodes} style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Сгенерировать новые</button>
+              <button onClick={() => setRecoveryUserId(null)} style={{ padding: '8px 16px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>Закрыть</button>
+            </div>
+          </div>
+        </div>
+      )}
+        </>
       )}
 
       <ConfirmModal
@@ -946,7 +1135,7 @@ function StatsTab() {
       setStats(data.stats);
     } catch (e: any) {
       console.error('Failed to load stats:', e);
-      showToast('Ошибка загрузки: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить данные.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -1185,6 +1374,52 @@ function PremiumApplicationsTab() {
   );
 }
 
+function RecruitTab() {
+  const [list, setList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api('/api/admin/recruit')
+      .then((r: any) => (Array.isArray(r) ? r : []))
+      .catch(() => [])
+      .then(setList)
+      .finally(() => setLoading(false));
+  }, []);
+  if (loading) {
+    return (
+      <div style={{padding: '48px', textAlign: 'center'}}>
+        <div className="empty">Загрузка...</div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div style={{marginBottom: '24px'}}>
+        <h3 style={{fontSize: '20px', fontWeight: '600', marginBottom: '8px'}}>Набор: тестировщики и хелперы</h3>
+        <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
+          Заявки с публичной страницы <a href="/join" target="_blank" rel="noopener noreferrer" style={{color: 'var(--accent)'}}>/join</a>. Всего: {list.length}
+        </div>
+      </div>
+      {list.length === 0 ? (
+        <div className="empty" style={{padding: '48px'}}>Нет заявок</div>
+      ) : (
+        <div style={{display: 'grid', gap: '12px'}}>
+          {list.map((a: any) => (
+            <div key={a.id} style={{padding: '16px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '12px'}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px'}}>
+                <span style={{fontWeight: '600'}}>{a.name || '—'}</span>
+                <span className="small" style={{color: 'var(--subtle)'}}>{a.email}</span>
+                <span style={{fontSize: '12px', padding: '2px 8px', background: 'var(--accent)', borderRadius: 6}}>{a.role === 'helper' ? 'Хелпер' : 'Тестировщик'}</span>
+              </div>
+              {a.message && <div style={{marginBottom: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{a.message}</div>}
+              <div className="small" style={{color: 'var(--subtle)'}}>{a.createdAt ? new Date(a.createdAt).toLocaleString('ru-RU') : ''}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FeedbackTab() {
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1271,7 +1506,7 @@ function PushTab() {
       setSent(r);
       showToast(`Уведомление отправлено: ${r.sent || 0}`, 'success');
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
     } finally {
       setLoading(false);
     }

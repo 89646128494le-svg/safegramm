@@ -46,6 +46,26 @@ export function getApiBaseUrl(): string {
 
 const API = DEFAULT_API;
 
+/** Превращает технические сообщения об ошибках в понятные пользователю. */
+export function humanFriendlyMessage(raw: string): string {
+  if (!raw || typeof raw !== 'string') return 'Что-то пошло не так. Попробуйте ещё раз.';
+  const s = raw.toLowerCase();
+  if (/failed to fetch|network request failed|load failed|networkerror/i.test(s)) return 'Нет связи с сервером. Проверьте интернет и попробуйте снова.';
+  if (/timeout|timed out/i.test(s)) return 'Сервер не ответил вовремя. Попробуйте позже.';
+  if (/403|forbidden/i.test(s)) return 'Доступ запрещён.';
+  if (/404|not found/i.test(s)) return 'Не найдено.';
+  if (/500|internal server|server_error/i.test(s)) return 'Временная ошибка на сервере. Попробуйте позже.';
+  if (/failed|error|tech|exception/i.test(s) && s.length < 80) return 'Что-то пошло не так. Попробуйте ещё раз.';
+  return raw.length > 120 ? 'Что-то пошло не так. Попробуйте ещё раз.' : raw;
+}
+
+/** Сообщение об ошибке для показа пользователю (из любого throw/catch). */
+export function getErrorMessage(e: unknown, fallback = 'Что-то пошло не так. Попробуйте ещё раз.'): string {
+  const msg = (e && typeof e === 'object' && 'message' in e && typeof (e as any).message === 'string')
+    ? (e as any).message : '';
+  return humanFriendlyMessage(msg) || fallback;
+}
+
 // Кэш для GET запросов
 const cache = new Map<string, { data: any; expires: number }>();
 const CACHE_TTL = 5000; // 5 секунд для часто запрашиваемых данных
@@ -137,38 +157,36 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
       }
 
       if (!rsp.ok) {
-        let msg = 'Ошибка запроса';
+        let msg = 'Что-то пошло не так. Попробуйте ещё раз.';
         let errorCode = '';
         let responseData: any = null;
-        try { 
-          const j = await rsp.json(); 
+        const rawText = await rsp.text();
+        try {
+          const j = rawText ? JSON.parse(rawText) : {};
           responseData = j;
           errorCode = j.error || '';
-          
-          // Специальные ошибки для аутентификации - передаём код как есть для обработки в компоненте
-          if (j.error === 'email_verification_required' || 
-              j.error === 'cloud_code_required' ||
-              j.error === 'invalid_email_code' ||
-              j.error === 'invalid_cloud_code') {
-            msg = j.error; // Передаём код ошибки как message для обработки в Login.tsx
-          }
-          // Переводим коды ошибок на русский
-          else if (j.error === 'bad_request') msg = j.detail || 'Некорректный запрос';
+
+          if (j.error === 'email_verification_required' || j.error === 'cloud_code_required' ||
+              j.error === 'invalid_email_code' || j.error === 'invalid_cloud_code') {
+            msg = j.error;
+          } else if (j.error === 'bad_request') msg = j.detail || 'Некорректный запрос';
           else if (j.error === 'bad_creds') msg = 'Неверный логин или пароль';
-          else if (j.error === 'user_exists') msg = j.detail || 'Пользователь с таким логином уже существует';
+          else if (j.error === 'user_exists') msg = 'Этот логин уже занят. Выберите другой.';
+          else if (j.error === 'email_exists') msg = 'Эта почта уже привязана к другому аккаунту.';
+          else if (j.error === 'email_code_required') msg = 'Введите код из письма.';
+          else if (j.error === 'invalid_code' || j.error === 'invalid_email_code') msg = 'Неверный код. Проверьте и введите снова.';
+          else if (j.error === 'invalid_cloud_code') msg = 'Неверный облачный код.';
           else if (j.error === 'username_short') msg = j.detail || 'Логин должен содержать минимум 3 символа';
           else if (j.error === 'weak_password') msg = j.detail || 'Пароль должен содержать минимум 4 символа';
           else if (j.error === 'too_many_requests' || j.error === 'too_many_attempts') {
             msg = 'Слишком много запросов. Подождите немного.';
-            // Для 429 пробуем еще раз, если есть попытки
             if (attempt < retries) {
               const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000);
               await delay(delayMs);
               return makeRequest(attempt + 1);
             }
-          }
-          else if (j.error === 'unauthorized') msg = 'Требуется авторизация';
-          else if (j.error === 'server_error') msg = 'Ошибка сервера';
+          } else if (j.error === 'unauthorized') msg = 'Требуется авторизация';
+          else if (j.error === 'server_error') msg = 'Временная ошибка на сервере. Попробуйте позже.';
           else if (j.error === 'cannot_add_self') msg = 'Нельзя добавить себя в контакты';
           else if (j.error === 'user_not_found') msg = 'Пользователь не найден';
           else if (j.error === 'not_found') {
@@ -176,12 +194,16 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
             else if (path.includes('/chats/')) msg = 'Чат не найден';
             else if (path.includes('/servers/')) msg = 'Сервер не найден';
             else msg = 'Запрашиваемый объект не найден';
-          }
-          else {
-            // Для остальных ошибок используем detail или error
+          } else {
             msg = j.detail || j.error || msg;
           }
-        } catch {}
+        } catch (_) {
+          if (rsp.status === 0 || /failed|network|load|timeout|refused|fetch/i.test(rawText)) {
+            msg = 'Нет связи с сервером. Проверьте интернет и попробуйте снова.';
+          } else if (rawText && rawText.length < 200) {
+            msg = humanFriendlyMessage(rawText);
+          }
+        }
         const error = new Error(msg) as any;
         error.status = rsp.status;
         error.errorCode = errorCode;
@@ -201,13 +223,17 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
       
       return data;
     } catch (error: any) {
-      // Если это ошибка сети и есть попытки, пробуем еще раз
       if (attempt < retries && !error.status) {
         const delayMs = Math.min(1000 * Math.pow(2, attempt), 10000);
         await delay(delayMs);
         return makeRequest(attempt + 1);
       }
-      throw error;
+      const friendly = humanFriendlyMessage(error?.message || '');
+      const err = new Error(friendly) as any;
+      err.status = error?.status;
+      err.errorCode = error?.errorCode;
+      err.response = error?.response;
+      throw err;
     }
   };
 

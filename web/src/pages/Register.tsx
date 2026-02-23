@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Lock, Cloud, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
-import { api } from '../services/api';
+import { api, humanFriendlyMessage } from '../services/api';
 import { useStore } from '../store/useStore';
 import '../styles/register.css';
 
@@ -14,6 +14,8 @@ interface FormData {
   emailCode: string;
   emailVerified: boolean;
   acceptedTerms: boolean;
+  pin: string;
+  setup2FAAfter: boolean;
 }
 
 const steps = [
@@ -33,13 +35,20 @@ export default function Register() {
     needsCloudCode: false,
     emailCode: '',
     emailVerified: false,
-    acceptedTerms: false
+    acceptedTerms: false,
+    pin: '',
+    setup2FAAfter: false
   });
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [twoFASecret, setTwoFASecret] = useState<{ secret: string; url: string } | null>(null);
+  const [twoFACode, setTwoFACode] = useState('');
+  const [twoFAEnabling, setTwoFAEnabling] = useState(false);
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '';
@@ -63,12 +72,8 @@ export default function Register() {
         }
         break;
       case 2:
-        if (!formData.email.trim()) {
-          setErr('Введите email');
-          return false;
-        }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-          setErr('Введите корректный email');
+        if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+          setErr('Введите корректный email или оставьте пустым');
           return false;
         }
         break;
@@ -85,6 +90,10 @@ export default function Register() {
       case 5:
         if (formData.needsCloudCode && !formData.emailCode.trim()) {
           setErr('Введите код с почты');
+          return false;
+        }
+        if (formData.pin && (formData.pin.length < 4 || formData.pin.length > 12)) {
+          setErr('PIN должен быть от 4 до 12 символов');
           return false;
         }
         if (!formData.acceptedTerms) {
@@ -110,7 +119,7 @@ export default function Register() {
       setEmailCodeSent(true);
       setErr('');
     } catch (e: any) {
-      setErr(e?.message || 'Ошибка отправки кода');
+      setErr(humanFriendlyMessage(e?.message) || 'Не удалось отправить код. Проверьте почту и попробуйте снова.');
     } finally {
       setSendingCode(false);
     }
@@ -141,39 +150,82 @@ export default function Register() {
         return false;
       }
     } catch (e: any) {
-      setErr(e?.message || 'Ошибка проверки кода');
+      setErr(humanFriendlyMessage(e?.message) || 'Не удалось проверить код. Введите код из письма.');
       setLoading(false);
       return false;
     }
   };
 
-  const nextStep = async () => {
-    if (validateStep()) {
-      // При переходе на шаг 2 (email) отправляем код
-      if (step === 1) {
-        setStep(2);
-        // Автоматически отправляем код при переходе на шаг email
-        setTimeout(() => {
-          sendEmailCode();
-        }, 300);
+  const checkUsernameAvailable = async (): Promise<boolean> => {
+    const u = formData.username.trim();
+    if (u.length < 3) return true;
+    setCheckingAvailability(true);
+    setErr('');
+    try {
+      const data = await api(`/api/auth/check-username?username=${encodeURIComponent(u)}`);
+      if (data?.available === false) {
+        setErr('Этот логин уже занят. Выберите другой.');
+        return false;
       }
-      // При переходе на шаг 5 (код) проверяем код
-      else if (step === 4 && formData.needsCloudCode) {
-        const verified = await verifyEmailCode();
-        if (verified) {
-          setStep(5);
-        }
-      }
-      // Если не нужен облачный код, переходим к финальному шагу
-      else if (step === 4 && !formData.needsCloudCode) {
-        setStep(5);
-      }
-      // Обычный переход на следующий шаг
-      else {
-        setStep(prev => Math.min(prev + 1, 5));
-        setErr('');
-      }
+      return true;
+    } catch (e: any) {
+      setErr(humanFriendlyMessage(e?.message) || 'Не удалось проверить логин. Попробуйте снова.');
+      return false;
+    } finally {
+      setCheckingAvailability(false);
     }
+  };
+
+  const checkEmailAvailable = async (): Promise<boolean> => {
+    const e = formData.email.trim();
+    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return true;
+    setCheckingAvailability(true);
+    setErr('');
+    try {
+      const data = await api(`/api/auth/check-email?email=${encodeURIComponent(e)}`);
+      if (data?.available === false) {
+        setErr('Эта почта уже привязана к другому аккаунту.');
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      setErr(humanFriendlyMessage(err?.message) || 'Не удалось проверить почту. Попробуйте снова.');
+      return false;
+    } finally {
+      setCheckingAvailability(false);
+    }
+  };
+
+  const nextStep = async () => {
+    if (!validateStep()) return;
+    if (step === 1) {
+      const ok = await checkUsernameAvailable();
+      if (!ok) return;
+      setStep(2);
+      if (formData.email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        setTimeout(() => sendEmailCode(), 300);
+      }
+      setErr('');
+      return;
+    }
+    if (step === 2) {
+      const ok = await checkEmailAvailable();
+      if (!ok) return;
+      setStep(3);
+      setErr('');
+      return;
+    }
+    if (step === 4 && formData.needsCloudCode) {
+      const verified = await verifyEmailCode();
+      if (verified) setStep(5);
+      return;
+    }
+    if (step === 4 && !formData.needsCloudCode) {
+      setStep(5);
+    } else if (step !== 4) {
+      setStep(prev => Math.min(prev + 1, 5));
+    }
+    setErr('');
   };
 
   const prevStep = () => {
@@ -183,41 +235,172 @@ export default function Register() {
 
   const handleSubmit = async () => {
     if (!validateStep()) return;
-    
+
     setLoading(true);
     setErr('');
-    
+
     try {
-      const res = await api('/api/auth/register', 'POST', { 
+      const hasEmail = formData.email.trim().length > 0;
+      const res = await api('/api/auth/register', 'POST', {
         username: formData.username,
-        email: formData.email,
+        email: hasEmail ? formData.email.trim() : undefined,
         password: formData.password,
-        emailCode: formData.needsCloudCode ? formData.emailCode : undefined,
-        needsCloudCode: formData.needsCloudCode
+        emailCode: hasEmail && formData.needsCloudCode ? formData.emailCode : undefined,
+        needsCloudCode: hasEmail && formData.needsCloudCode,
+        pin: formData.pin.trim().length >= 4 && formData.pin.trim().length <= 12 ? formData.pin.trim() : undefined
       });
-      
+
       const tokenVal = res.token;
       setToken(tokenVal);
       if (tokenVal && typeof localStorage !== 'undefined') localStorage.setItem('token', tokenVal);
       setUser(res.user);
-      // Подтягиваем полного пользователя с сервера (роли, в т.ч. owner)
       if (tokenVal) {
         api('/api/users/me').then((me) => setUser(me)).catch(() => {});
       }
       localStorage.setItem('policiesAccepted', '1');
-      setShowSuccess(true);
-      
-      setTimeout(() => {
-        nav(redirectTo || '/app/chats');
-      }, 4000);
+
+      if (formData.setup2FAAfter && tokenVal) {
+        setShowSuccess(true);
+        setTimeout(() => {
+          setShowSuccess(false);
+          setShow2FAModal(true);
+          api('/api/users/me/2fa/generate', 'POST')
+            .then((data: { secret: string; url: string }) => setTwoFASecret(data))
+            .catch((e: any) => setErr(humanFriendlyMessage(e?.message) || 'Не удалось настроить двухфакторную защиту. Можно сделать это позже в настройках.'));
+        }, 1500);
+      } else {
+        setShowSuccess(true);
+        setTimeout(() => nav(redirectTo || '/app/chats'), 2500);
+      }
     } catch (e: any) {
-      setErr(e?.message || 'Ошибка регистрации');
+      setErr(humanFriendlyMessage(e?.message) || 'Регистрация не удалась. Проверьте данные и попробуйте снова.');
+    } finally {
       setLoading(false);
     }
   };
 
-  if (showSuccess) {
+  const finish2FA = async () => {
+    if (!twoFASecret || !twoFACode.trim()) return;
+    setTwoFAEnabling(true);
+    setErr('');
+    try {
+      await api('/api/users/me/2fa/enable', 'POST', { secret: twoFASecret.secret, code: twoFACode.trim() });
+      setShow2FAModal(false);
+      setTwoFASecret(null);
+      setTwoFACode('');
+      setShowSuccess(true);
+      setTimeout(() => nav(redirectTo || '/app/chats'), 2000);
+    } catch (e: any) {
+      setErr(humanFriendlyMessage(e?.message) || 'Неверный код приложения. Проверьте и введите код снова.');
+    } finally {
+      setTwoFAEnabling(false);
+    }
+  };
+
+  if (showSuccess && !show2FAModal) {
     return <SuccessAnimation />;
+  }
+
+  if (show2FAModal) {
+    const qrUrl = twoFASecret?.url
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(twoFASecret.url)}`
+      : '';
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)'
+        }}
+      >
+        <motion.div
+          initial={{ scale: 0.95 }}
+          animate={{ scale: 1 }}
+          style={{
+            background: 'var(--panel-1, #1a1f35)',
+            borderRadius: '16px',
+            padding: '28px',
+            maxWidth: '400px',
+            width: '100%',
+            border: '1px solid rgba(255,255,255,0.1)',
+            boxShadow: '0 24px 48px rgba(0,0,0,0.4)'
+          }}
+        >
+          <h2 style={{ margin: '0 0 8px', fontSize: '20px', color: '#e9ecf5' }}>Двухфакторная аутентификация</h2>
+          <p style={{ margin: '0 0 20px', fontSize: '14px', color: 'rgba(233,236,245,0.7)' }}>
+            Отсканируйте QR-код в приложении (Google Authenticator, Authy и т.д.) и введите код.
+          </p>
+          {twoFASecret ? (
+            <>
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                <img
+                  src={qrUrl}
+                  alt="QR для 2FA"
+                  width={220}
+                  height={220}
+                  style={{ borderRadius: '12px', background: '#fff', padding: '8px' }}
+                />
+              </div>
+              <p style={{ fontSize: '12px', color: 'rgba(233,236,245,0.6)', marginBottom: '12px' }}>
+                Секрет (если не сканируете): <code style={{ wordBreak: 'break-all' }}>{twoFASecret.secret}</code>
+              </p>
+              <input
+                type="text"
+                placeholder="Код из приложения (6 цифр)"
+                value={twoFACode}
+                onChange={e => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                className="register-input"
+                style={{ marginBottom: '16px' }}
+              />
+              {err && <p style={{ color: '#fca5a5', fontSize: '13px', marginBottom: '8px' }}>{err}</p>}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShow2FAModal(false); setTwoFASecret(null); nav(redirectTo || '/app/chats'); }}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '10px',
+                    color: '#e9ecf5',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  Позже
+                </button>
+                <button
+                  type="button"
+                  onClick={finish2FA}
+                  disabled={twoFAEnabling || twoFACode.length !== 6}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: twoFACode.length === 6 ? 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)' : 'rgba(124,108,255,0.3)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    color: '#0a0e1a',
+                    cursor: twoFACode.length === 6 ? 'pointer' : 'not-allowed',
+                    fontWeight: 700
+                  }}
+                >
+                  {twoFAEnabling ? 'Проверка...' : 'Включить 2FA'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p style={{ color: 'rgba(233,236,245,0.7)' }}>Загрузка QR-кода...</p>
+          )}
+        </motion.div>
+      </motion.div>
+    );
   }
 
   const pageVariants = {
@@ -402,12 +585,12 @@ export default function Register() {
             {step === 2 && (
               <StepContent
                 icon={Mail}
-                title="Укажите email"
-                subtitle="На этот адрес придет код подтверждения"
+                title="Email (необязательно)"
+                subtitle="Для восстановления и кода подтверждения. Можно пропустить."
               >
                 <input
                   type="email"
-                  placeholder="your@email.com"
+                  placeholder="your@email.com или оставьте пустым"
                   value={formData.email}
                   onChange={e => {
                     updateField('email', e.target.value);
@@ -419,7 +602,7 @@ export default function Register() {
                   className="register-input"
                   disabled={sendingCode}
                 />
-                {!emailCodeSent && !sendingCode && (
+                {!emailCodeSent && !sendingCode && formData.email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) && (
                   <motion.button
                     onClick={sendEmailCode}
                     whileHover={{ scale: 1.02 }}
@@ -506,10 +689,13 @@ export default function Register() {
             {step === 4 && (
               <StepContent
                 icon={Cloud}
-                title="Нужен облачный код?"
-                subtitle="Облачный код обеспечивает дополнительную безопасность"
+                title={formData.email.trim() ? 'Подтверждение по email' : 'Дополнительная защита'}
+                subtitle={formData.email.trim()
+                  ? 'Можно подтвердить email кодом для безопасности. PIN и 2FA можно задать на следующем шаге или в настройках.'
+                  : 'PIN и 2FA можно задать на следующем шаге или позже в настройках.'}
               >
                 <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                  {formData.email.trim() && (
                   <motion.button
                     className={`choice-btn ${formData.needsCloudCode ? 'active' : ''}`}
                     onClick={() => updateField('needsCloudCode', true)}
@@ -532,8 +718,9 @@ export default function Register() {
                       transition: 'all 0.2s'
                     }}
                   >
-                    Да, использовать
+                    Да, код на почту
                   </motion.button>
+                  )}
                   <motion.button
                     className={`choice-btn ${!formData.needsCloudCode ? 'active' : ''}`}
                     onClick={() => updateField('needsCloudCode', false)}
@@ -556,7 +743,7 @@ export default function Register() {
                       transition: 'all 0.2s'
                     }}
                   >
-                    Нет, пропустить
+                    {formData.email.trim() ? 'Нет, пропустить' : 'Продолжить'}
                   </motion.button>
                 </div>
               </StepContent>
@@ -565,24 +752,53 @@ export default function Register() {
             {step === 5 && (
               <StepContent
                 icon={CheckCircle}
-                title={formData.needsCloudCode ? "Введите облачный код" : "Примите соглашение"}
-                subtitle={formData.needsCloudCode 
-                  ? `Проверьте почту ${formData.email} и введите код`
-                  : "Для завершения регистрации необходимо принять пользовательское соглашение"
-                }
+                title={formData.needsCloudCode ? 'Введите код с почты' : 'Завершение'}
+                subtitle={formData.needsCloudCode
+                  ? `Проверьте почту ${formData.email} и введите код. Ниже можно задать PIN и 2FA.`
+                  : 'Примите соглашение. По желанию задайте PIN и включите 2FA.'}
               >
                 {formData.needsCloudCode && (
                   <input
                     type="text"
-                    placeholder="Код подтверждения"
+                    placeholder="Код из письма (6 цифр)"
                     value={formData.emailCode}
-                    onChange={e => updateField('emailCode', e.target.value)}
+                    onChange={e => updateField('emailCode', e.target.value.replace(/\D/g, '').slice(0, 6))}
                     autoFocus
                     maxLength={6}
                     className="register-input"
-                    style={{ marginBottom: '20px' }}
+                    style={{ marginBottom: '16px' }}
                   />
                 )}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', color: 'rgba(233,236,245,0.8)', marginBottom: '6px' }}>
+                    PIN для входа (необязательно, 4–12 символов)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Облачный код / PIN"
+                    value={formData.pin}
+                    onChange={e => updateField('pin', e.target.value)}
+                    maxLength={12}
+                    className="register-input"
+                  />
+                </div>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginBottom: '20px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  color: 'rgba(233,236,245,0.9)'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.setup2FAAfter}
+                    onChange={e => updateField('setup2FAAfter', e.target.checked)}
+                    style={{ width: '18px', height: '18px', accentColor: '#7c6cff' }}
+                  />
+                  <span>Включить 2FA (приложение-аутентификатор) после регистрации</span>
+                </label>
                 <div style={{
                   padding: '16px',
                   background: 'rgba(255, 255, 255, 0.05)',
@@ -690,13 +906,13 @@ export default function Register() {
           )}
           <motion.button
             onClick={step === 5 ? handleSubmit : nextStep}
-            disabled={loading || sendingCode}
-            whileHover={{ scale: loading ? 1 : 1.02 }}
-            whileTap={{ scale: loading ? 1 : 0.98 }}
+            disabled={loading || sendingCode || checkingAvailability}
+            whileHover={{ scale: loading || checkingAvailability ? 1 : 1.02 }}
+            whileTap={{ scale: loading || checkingAvailability ? 1 : 0.98 }}
             style={{
               flex: 1,
               padding: '14px',
-              background: loading
+              background: loading || checkingAvailability
                 ? 'rgba(124, 108, 255, 0.3)'
                 : 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
               border: 'none',
@@ -704,19 +920,19 @@ export default function Register() {
               color: '#0a0e1a',
               fontSize: '15px',
               fontWeight: 700,
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: loading || checkingAvailability ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
-              boxShadow: loading ? 'none' : '0 4px 12px rgba(124, 108, 255, 0.4)'
+              boxShadow: loading || checkingAvailability ? 'none' : '0 4px 12px rgba(124, 108, 255, 0.4)'
             }}
           >
-            {loading ? (
-              '⏳ Загрузка...'
+            {loading || checkingAvailability ? (
+              checkingAvailability ? 'Проверка...' : '⏳ Загрузка...'
             ) : (
               <>
-                {step === 4 || step === 5 ? 'Зарегистрироваться' : 'Далее'}
+                {step === 5 ? 'Зарегистрироваться' : 'Далее'}
                 <ArrowRight size={18} />
               </>
             )}

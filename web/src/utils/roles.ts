@@ -153,12 +153,19 @@ export const ADMIN_TABS = [
   { id: 'mod' as const, label: '✅ Модочередь', minRole: 'moderator' as const },
   { id: 'reports' as const, label: '⚠️ Жалобы', minRole: 'moderator' as const },
   { id: 'feedback' as const, label: '💬 Фидбек', minRole: 'support' as const },
+  { id: 'recruit' as const, label: '🧑‍💻 Набор (тестеры/хелперы)', minRole: 'support' as const },
   { id: 'premium_apps' as const, label: '⭐ Заявки на Premium', minRole: 'moderator' as const },
   { id: 'push' as const, label: '🔔 Уведомления', minRole: 'sysadmin' as const },
   { id: 'services' as const, label: '⚙️ Сервисы (супер-панель)', minRole: 'owner' as const },
   { id: 'database' as const, label: '📦 База данных (онлайн)', minRole: 'owner' as const },
   { id: 'webhook' as const, label: '🔗 Webhook', minRole: 'sysadmin' as const },
   { id: 'support' as const, label: '🎫 Поддержка (тикеты)', minRole: 'support' as const },
+  { id: 'audit' as const, label: '📜 Аудит-лог', minRole: 'sysadmin' as const },
+  { id: 'content_moderation' as const, label: '🔍 Контент и модерация', minRole: 'moderator' as const },
+  { id: 'security_policy' as const, label: '🔐 Безопасность и политики', minRole: 'safety' as const },
+  { id: 'communication' as const, label: '📧 Шаблоны и инвайты', minRole: 'sysadmin' as const },
+  { id: 'system_integrations' as const, label: '🤖 Система и интеграции', minRole: 'sysadmin' as const },
+  { id: 'analytics_reports' as const, label: '📈 Аналитика и отчёты', minRole: 'sysadmin' as const },
 ] as const;
 
 export function canAccessAdminTab(

@@ -1,9 +1,15 @@
 package main
 
 import (
+	"compress/gzip"
+	"context"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -11,6 +17,7 @@ import (
 	"safegram-server/internal/config"
 	"safegram-server/internal/database"
 	"safegram-server/internal/logger"
+	"safegram-server/internal/metrics"
 	redis "safegram-server/internal/redis"
 	"safegram-server/internal/websocket"
 )
@@ -69,11 +76,27 @@ func main() {
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
 
-	// Настройка роутера
-	router := gin.Default()
-
-	// CORS middleware
+	// Настройка роутера (release в prod — меньше аллокаций, без дефолтного Logger)
+	if cfg.NodeEnv == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	router := gin.New()
+	router.Use(gin.Recovery())
+	if cfg.NodeEnv != "production" {
+		router.Use(gin.Logger())
+	}
+	router.Use(gzipMiddleware())
 	router.Use(corsMiddleware())
+	if cfg.NodeEnv == "production" {
+		router.Use(hstsMiddleware())
+	}
+	router.Use(metricsMiddleware())
+
+	// Метрики для Prometheus/APM (GET /metrics)
+	router.GET("/metrics", func(c *gin.Context) {
+		c.Header("Content-Type", "text/plain; charset=utf-8")
+		c.String(200, metrics.Handler())
+	})
 
 	// Root path - для localtunnel и проверки работоспособности
 	router.GET("/", func(c *gin.Context) {
@@ -109,9 +132,18 @@ func main() {
 </html>`)
 	})
 
-	// Health check
+	// Health check (с проверкой БД для продакшена)
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok", "timestamp": gin.H{}})
+		sqlDB, err := db.DB()
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": "db_pool"})
+			return
+		}
+		if err := sqlDB.Ping(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": "db_ping"})
+			return
+		}
+		c.JSON(200, gin.H{"status": "ok", "timestamp": time.Now().Unix()})
 	})
 
 	// API routes
@@ -123,19 +155,44 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("🚀 SafeGram Server starting on port %s", port)
-	logger.Info("SafeGram Server starting", map[string]interface{}{
-		"service": "server",
-		"port":    port,
-		"env":     cfg.NodeEnv,
-	})
-	// Используем 0.0.0.0 чтобы слушать на всех интерфейсах (для удаленного доступа)
-	if err := router.Run("0.0.0.0:" + port); err != nil {
-		logger.Error("Failed to start server", err, map[string]interface{}{
-			"service": "server",
-			"port":    port,
-		})
-		log.Fatalf("Failed to start server: %v", err)
+	srv := &http.Server{Addr: "0.0.0.0:" + port, Handler: router, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+	go func() {
+		log.Printf("🚀 SafeGram Server starting on port %s", port)
+		logger.Info("SafeGram Server starting", map[string]interface{}{"service": "server", "port": port, "env": cfg.NodeEnv})
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("ListenAndServe: %v", err)
+		}
+	}()
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
+	wsHub.Shutdown()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+	log.Println("Server exited")
+}
+
+func hstsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		c.Next()
+	}
+}
+
+func metricsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.URL.Path == "/metrics" {
+			c.Next()
+			return
+		}
+		start := time.Now()
+		c.Next()
+		metrics.IncRequests(c.Writer.Status())
+		metrics.ObserveLatency(time.Since(start))
 	}
 }
 
@@ -259,4 +316,27 @@ func corsMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func gzipMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Method == "OPTIONS" || !strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") {
+			c.Next()
+			return
+		}
+		c.Header("Vary", "Accept-Encoding")
+		c.Header("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(c.Writer)
+		defer gz.Close()
+		c.Writer = &gzipResponseWriter{ResponseWriter: c.Writer, gz: gz}
+		c.Next()
+	}
+}
+
+type gzipResponseWriter struct {
+	gin.ResponseWriter
+	gz *gzip.Writer
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) { return w.gz.Write(b) }
+func (w *gzipResponseWriter) Flush()                      { w.gz.Flush(); if f, ok := w.ResponseWriter.(http.Flusher); ok { f.Flush() } }
 

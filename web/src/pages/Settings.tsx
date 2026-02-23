@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { api } from '../services/api';
+import { api, getErrorMessage } from '../services/api';
 import { playNotificationSound } from '../services/notifications';
 import EnhancedThemePicker from '../components/EnhancedThemePicker';
 import AppearanceSettings from '../components/AppearanceSettings';
@@ -106,6 +106,10 @@ export default function Settings() {
     pinEnabled: false,
     activeSessions: []
   });
+  const [show2FASetup, setShow2FASetup] = useState(false);
+  const [twoFASecretData, setTwoFASecretData] = useState<{ secret: string; url: string } | null>(null);
+  const [twoFACodeInput, setTwoFACodeInput] = useState('');
+  const [twoFAEnabling, setTwoFAEnabling] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showAppearanceSettings, setShowAppearanceSettings] = useState(false);
   const [showSessionsManager, setShowSessionsManager] = useState(false);
@@ -228,7 +232,7 @@ export default function Settings() {
           setSaveStatus('success');
           setTimeout(() => setSaveStatus(null), 2000);
         } catch (e: any) {
-          alert('Ошибка: ' + (e.message || 'Неверный код'));
+          alert(getErrorMessage(e, 'Неверный код. Проверьте и попробуйте снова.'));
           setSaveStatus('error');
           setTimeout(() => setSaveStatus(null), 2000);
         } finally {
@@ -238,45 +242,38 @@ export default function Settings() {
     } else {
       try {
         setSaving(true);
-        // Генерируем секрет
         const secretData = await api('/api/users/me/2fa/generate', 'POST');
-        
-        // Показываем QR код и просим ввести код для подтверждения
-        const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(secretData.otpauth)}`;
-        const confirmed = confirm(
-          `Отсканируйте QR код в приложении-аутентификаторе (Google Authenticator, Authy и т.д.):\n\n` +
-          `QR код: ${qrCodeUrl}\n\n` +
-          `Или введите секрет вручную: ${secretData.secret}\n\n` +
-          `После настройки введите код из приложения для активации.`
-        );
-        
-        if (!confirmed) {
-          setSaving(false);
-          return;
-        }
-        
-        const code = prompt('Введите код из приложения-аутентификатора для активации:');
-        if (!code) {
-          setSaving(false);
-          return;
-        }
-        
-        // Включаем 2FA
-        await api('/api/users/me/2fa/enable', 'POST', {
-          secret: secretData.secret,
-          code: code
-        });
-        
-        setSecurity(prev => ({ ...prev, twoFactorEnabled: true }));
-        setSaveStatus('success');
-        setTimeout(() => setSaveStatus(null), 2000);
+        setTwoFASecretData(secretData);
+        setTwoFACodeInput('');
+        setShow2FASetup(true);
       } catch (e: any) {
-        alert('Ошибка: ' + (e.message || 'Неверный код или ошибка активации'));
         setSaveStatus('error');
         setTimeout(() => setSaveStatus(null), 2000);
       } finally {
         setSaving(false);
       }
+    }
+  };
+
+  const confirm2FAEnable = async () => {
+    if (!twoFASecretData || twoFACodeInput.trim().length !== 6) return;
+    setTwoFAEnabling(true);
+    try {
+      await api('/api/users/me/2fa/enable', 'POST', {
+        secret: twoFASecretData.secret,
+        code: twoFACodeInput.trim()
+      });
+      setSecurity(prev => ({ ...prev, twoFactorEnabled: true }));
+      setShow2FASetup(false);
+      setTwoFASecretData(null);
+      setTwoFACodeInput('');
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus(null), 2000);
+    } catch (e: any) {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(null), 2000);
+    } finally {
+      setTwoFAEnabling(false);
     }
   };
 
@@ -290,6 +287,104 @@ export default function Settings() {
 
   return (
     <div className="settings-container">
+      {show2FASetup && twoFASecretData && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20
+          }}
+          onClick={() => { setShow2FASetup(false); setTwoFASecretData(null); }}
+        >
+          <div
+            style={{
+              background: 'var(--panel-1, #1a1f35)',
+              borderRadius: 16,
+              padding: 24,
+              maxWidth: 380,
+              width: '100%',
+              border: '1px solid rgba(255,255,255,0.1)',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.4)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 8px', fontSize: 18, color: '#e9ecf5' }}>Отсканируйте QR-код</h3>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: 'rgba(233,236,245,0.7)' }}>
+              Google Authenticator, Authy или другое приложение.
+            </p>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(twoFASecretData.url)}`}
+                alt="QR 2FA"
+                width={220}
+                height={220}
+                style={{ borderRadius: 12, background: '#fff', padding: 8 }}
+              />
+            </div>
+            <p style={{ fontSize: 11, color: 'rgba(233,236,245,0.6)', marginBottom: 12, wordBreak: 'break-all' }}>
+              Секрет: {twoFASecretData.secret}
+            </p>
+            <input
+              type="text"
+              placeholder="Код из приложения (6 цифр)"
+              value={twoFACodeInput}
+              onChange={e => setTwoFACodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              maxLength={6}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                marginBottom: 12,
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.06)',
+                color: '#e9ecf5',
+                fontSize: 16
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => { setShow2FASetup(false); setTwoFASecretData(null); }}
+                style={{
+                  flex: 1,
+                  padding: 12,
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 10,
+                  color: '#e9ecf5',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={confirm2FAEnable}
+                disabled={twoFAEnabling || twoFACodeInput.length !== 6}
+                style={{
+                  flex: 1,
+                  padding: 12,
+                  background: twoFACodeInput.length === 6 ? 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)' : 'rgba(124,108,255,0.3)',
+                  border: 'none',
+                  borderRadius: 10,
+                  color: '#0a0e1a',
+                  cursor: twoFACodeInput.length === 6 ? 'pointer' : 'not-allowed',
+                  fontWeight: 700
+                }}
+              >
+                {twoFAEnabling ? 'Проверка...' : 'Включить 2FA'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="settings-header">
         <h1>{t('settings.title')}</h1>
         <LanguageSelector />

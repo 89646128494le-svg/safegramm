@@ -1,6 +1,8 @@
 package api
 
 import (
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -10,8 +12,8 @@ import (
 type rateLimiter struct {
 	visitors map[string]*visitor
 	mu       sync.RWMutex
-	rate     int           // количество запросов
-	window   time.Duration // временное окно
+	rate     int
+	window   time.Duration
 }
 
 type visitor struct {
@@ -19,9 +21,18 @@ type visitor struct {
 	count    int
 }
 
+func envRateLimit(defaultRate int) int {
+	if s := os.Getenv("RATE_LIMIT_PER_MIN"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultRate
+}
+
 var limiter = &rateLimiter{
 	visitors: make(map[string]*visitor),
-	rate:     100, // 100 запросов
+	rate:     envRateLimit(100),
 	window:   time.Minute,
 }
 
@@ -68,11 +79,20 @@ func RateLimitMiddleware() gin.HandlerFunc {
 	}
 }
 
-// AuthRateLimit более строгий лимит для аутентификации
+// AuthRateLimit более строгий лимит для аутентификации (AUTH_RATE_LIMIT — макс попыток за окно)
 var authLimiter = &rateLimiter{
 	visitors: make(map[string]*visitor),
-	rate:     30, // 30 попыток (увеличено для разработки и нормального использования)
+	rate:     envAuthRateLimit(30),
 	window:   time.Minute * 5,
+}
+
+func envAuthRateLimit(defaultRate int) int {
+	if s := os.Getenv("AUTH_RATE_LIMIT"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultRate
 }
 
 func AuthRateLimitMiddleware() gin.HandlerFunc {

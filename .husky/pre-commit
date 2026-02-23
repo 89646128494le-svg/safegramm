@@ -1,0 +1,4 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+cd server-go && gofmt -w . && cd ..
+cd web && npm run build --if-present 2>/dev/null; exit 0

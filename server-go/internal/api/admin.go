@@ -1,14 +1,43 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"safegram-server/internal/models"
 	"safegram-server/internal/redis"
 )
+
+func logAdminAudit(db *gorm.DB, adminID, targetID, action, details, ip, ua string) {
+	entry := models.AdminAuditLog{
+		ID:        uuid.New().String(),
+		AdminID:   adminID,
+		TargetID:  targetID,
+		Action:    action,
+		Details:   details,
+		IP:        ip,
+		UserAgent: ua,
+	}
+	db.Create(&entry)
+}
+
+func logRoleBanHistory(db *gorm.DB, userID, adminID, action, oldVal, newVal, reason string) {
+	entry := models.RoleBanHistory{
+		ID:        uuid.New().String(),
+		UserID:    userID,
+		AdminID:   adminID,
+		Action:    action,
+		OldValue:  oldVal,
+		NewValue:  newVal,
+		Reason:    reason,
+	}
+	db.Create(&entry)
+}
 
 // getOnlineCount возвращает количество онлайн пользователей из Redis
 func getOnlineCount() int {
@@ -56,30 +85,46 @@ func RequireAdmin(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// GetAdminUsers возвращает список всех пользователей (для админов)
+// GetAdminUsers возвращает список пользователей с фильтрами: plan, search, createdAfter, lastSeenAfter
 func GetAdminUsers(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		q := db.Model(&models.User{})
+		if plan := c.Query("plan"); plan != "" {
+			q = q.Where("plan = ?", plan)
+		}
+		if search := strings.TrimSpace(c.Query("search")); search != "" {
+			like := "%" + search + "%"
+			q = q.Where("username LIKE ? OR id = ?", like, search)
+		}
+		if createdAfter := c.Query("createdAfter"); createdAfter != "" {
+			if t, err := time.Parse("2006-01-02", createdAfter); err == nil {
+				q = q.Where("created_at >= ?", t)
+			}
+		}
+		if lastSeenAfter := c.Query("lastSeenAfter"); lastSeenAfter != "" {
+			if t, err := time.Parse("2006-01-02", lastSeenAfter); err == nil {
+				q = q.Where("last_seen >= ?", t)
+			}
+		}
 		var users []models.User
-		if err := db.Find(&users).Error; err != nil {
+		if err := q.Order("created_at DESC").Find(&users).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
-
 		result := make([]gin.H, len(users))
 		for i, user := range users {
 			result[i] = gin.H{
 				"id":        user.ID,
-				"username":  user.Username,
-				"email":     func() string { if user.Email != nil { return *user.Email }; return "" }(),
-				"roles":     user.ParseRoles(),
-				"plan":      user.Plan,
-				"status":    user.Status,
+				"username": user.Username,
+				"email":    func() string { if user.Email != nil { return *user.Email }; return "" }(),
+				"roles":    user.ParseRoles(),
+				"plan":     user.Plan,
+				"status":   user.Status,
 				"avatarUrl": user.AvatarURL,
 				"createdAt": user.CreatedAt,
 				"lastSeen":  user.LastSeen,
 			}
 		}
-
 		c.JSON(http.StatusOK, gin.H{"users": result})
 	}
 }
@@ -111,11 +156,14 @@ func BlockUser(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 
-		// Убираем админ права и блокируем
+		oldRoles, _ := json.Marshal(user.ParseRoles())
 		db.Model(&user).Updates(map[string]interface{}{
 			"status": "banned",
 			"roles":  "[]",
 		})
+		adminIDStr, _ := currentUserID.(string)
+		logRoleBanHistory(db, userID, adminIDStr, "ban", string(oldRoles), "[]", "")
+		logAdminAudit(db, adminIDStr, userID, "block_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
 
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
@@ -133,6 +181,11 @@ func UnblockUser(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		db.Model(&user).Update("status", "online")
+		currentUserID, _ := c.Get("userID")
+		if aid, ok := currentUserID.(string); ok {
+			logRoleBanHistory(db, userID, aid, "unban", "banned", "online", "")
+			logAdminAudit(db, aid, userID, "unblock_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
@@ -157,12 +210,17 @@ func PromoteUser(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 
+		oldRoles := user.Roles
 		if !hasAdmin {
 			roles = append(roles, "admin")
 			user.SetRoles(roles)
 			db.Model(&user).Update("roles", user.Roles)
+			currentUserID, _ := c.Get("userID")
+			if aid, ok := currentUserID.(string); ok {
+				logRoleBanHistory(db, userID, aid, "role_add", oldRoles, user.Roles, "")
+				logAdminAudit(db, aid, userID, "promote", "", c.ClientIP(), c.GetHeader("User-Agent"))
+			}
 		}
-
 		c.JSON(http.StatusOK, gin.H{"ok": true, "roles": roles})
 	}
 }
@@ -201,9 +259,14 @@ func DemoteUser(db *gorm.DB) gin.HandlerFunc {
 				newRoles = append(newRoles, role)
 			}
 		}
+		oldRoles := user.Roles
 		user.SetRoles(newRoles)
 		db.Model(&user).Update("roles", user.Roles)
-
+		curUserID, _ := c.Get("userID")
+		if aid, ok := curUserID.(string); ok {
+			logRoleBanHistory(db, userID, aid, "role_remove", oldRoles, user.Roles, "")
+			logAdminAudit(db, aid, userID, "demote", "", c.ClientIP(), c.GetHeader("User-Agent"))
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true, "roles": newRoles})
 	}
 }
@@ -232,20 +295,100 @@ func GetAdminStats(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// GetAdminFeedback возвращает список обратной связи от пользователей
+// GetAdminFeedback возвращает список обратной связи и заявок на премиум
 func GetAdminFeedback(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: В будущем можно добавить модель Feedback
-		// Пока возвращаем пустой массив
-		c.JSON(http.StatusOK, []gin.H{})
+		var list []models.Feedback
+		if err := db.Order("created_at DESC").Limit(500).Find(&list).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		out := make([]gin.H, len(list))
+		for i, f := range list {
+			out[i] = gin.H{"id": f.ID, "userId": f.UserID, "subject": f.Subject, "body": f.Body, "createdAt": f.CreatedAt}
+		}
+		c.JSON(http.StatusOK, out)
+	}
+}
+
+// SubmitFeedback создаёт заявку на премиум / обратную связь (авторизованный пользователь)
+func SubmitFeedback(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, _ := c.Get("userID")
+		userIDStr, ok := userID.(string)
+		if !ok || userIDStr == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		var req struct {
+			Subject string `json:"subject" binding:"required"`
+			Body    string `json:"body" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "subject and body required"})
+			return
+		}
+		fb := models.Feedback{
+			ID:      uuid.New().String(),
+			UserID:  userIDStr,
+			Subject: req.Subject,
+			Body:    req.Body,
+		}
+		if err := db.Create(&fb).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "id": fb.ID})
+	}
+}
+
+// SubmitRecruit — публичная заявка в тестировщики/хелперы (без авторизации, с rate limit)
+func SubmitRecruit(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Email   string `json:"email" binding:"required,email"`
+			Name    string `json:"name"`
+			Role    string `json:"role" binding:"required,oneof=tester helper"`
+			Message string `json:"message"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "email and role (tester|helper) required"})
+			return
+		}
+		app := models.RecruitApplication{
+			ID:      uuid.New().String(),
+			Email:   strings.TrimSpace(req.Email),
+			Name:    strings.TrimSpace(req.Name),
+			Role:    req.Role,
+			Message: strings.TrimSpace(req.Message),
+		}
+		if err := db.Create(&app).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "id": app.ID})
+	}
+}
+
+// GetAdminRecruit возвращает заявки тестировщиков и хелперов (админ)
+func GetAdminRecruit(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var list []models.RecruitApplication
+		if err := db.Order("created_at DESC").Limit(500).Find(&list).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		out := make([]gin.H, len(list))
+		for i, a := range list {
+			out[i] = gin.H{"id": a.ID, "email": a.Email, "name": a.Name, "role": a.Role, "message": a.Message, "createdAt": a.CreatedAt}
+		}
+		c.JSON(http.StatusOK, out)
 	}
 }
 
 // GetAdminReports возвращает список жалоб пользователей
 func GetAdminReports(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: В будущем можно добавить модель Report
-		// Пока возвращаем пустой массив
 		c.JSON(http.StatusOK, []gin.H{})
 	}
 }

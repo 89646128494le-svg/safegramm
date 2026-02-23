@@ -1,3 +1,37 @@
+const CACHE_NAME = 'safegram-v1';
+const OFFLINE_URL = '/offline.html';
+
+self.addEventListener('install', function (event) {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(function (cache) {
+      return cache.addAll(['/', '/offline.html', '/manifest.webmanifest', '/favicon.svg']);
+    }).then(function () {
+      return self.skipWaiting();
+    })
+  );
+});
+
+self.addEventListener('activate', function (event) {
+  event.waitUntil(
+    caches.keys().then(function (keys) {
+      return Promise.all(keys.filter(function (k) { return k !== CACHE_NAME; }).map(function (k) { return caches.delete(k); }));
+    }).then(function () { return self.clients.claim(); })
+  );
+});
+
+self.addEventListener('fetch', function (event) {
+  if (event.request.mode !== 'navigate') return;
+  event.respondWith(
+    fetch(event.request).catch(function () {
+      return caches.match(event.request).then(function (r) {
+        return r || caches.match('/').then(function (index) {
+          return caches.match(OFFLINE_URL).then(function (off) { return off || new Response('<h1>Нет соединения</h1><p>SafeGram офлайн. <a href="/">Обновить</a></p>', { headers: { 'Content-Type': 'text/html' } }); });
+        });
+      });
+    })
+  );
+});
+
 self.addEventListener('push', function (event) {
   if (!event.data) return;
   const data = event.data.json();

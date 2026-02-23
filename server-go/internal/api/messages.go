@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -196,11 +197,17 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			}
 		}
 		
+		// E2EE audit: ключи шифрования не отправляются на сервер; расшифровка только на клиенте.
+		// При наличии ciphertext plaintext не сохраняется в БД и не логируется (ЛС и группы).
+		msgText := req.Text
+		if req.Ciphertext != "" {
+			msgText = ""
+		}
 		message := models.Message{
 			ID:            messageID,
 			ChatID:        req.ChatID,
 			SenderID:      userIDStr,
-			Text:          req.Text,
+			Text:          msgText,
 			Ciphertext:    req.Ciphertext,
 			AttachmentURL: req.AttachmentURL,
 			ReplyTo:       req.ReplyTo,
@@ -424,6 +431,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 				"message": response,
 			})
 			go fireWebhooks(db, "chat", req.ChatID, "message.created", webhookPayload)
+			go notifyBotWebhooks(db, req.ChatID, webhookPayload)
 		}
 
 		// Отправляем push-уведомления всем участникам чата (кроме отправителя)
@@ -984,3 +992,31 @@ func ForwardMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 	}
 }
 
+// notifyBotWebhooks отправляет входящее сообщение на webhook URL ботов, владельцы которых состоят в чате
+func notifyBotWebhooks(db *gorm.DB, chatID string, payload []byte) {
+	var members []models.ChatMember
+	if err := db.Where("chat_id = ?", chatID).Find(&members).Error; err != nil || len(members) == 0 {
+		return
+	}
+	userIDs := make([]string, 0, len(members))
+	for _, m := range members {
+		userIDs = append(userIDs, m.UserID)
+	}
+	var bots []models.UserBot
+	if err := db.Where("user_id IN ? AND webhook_url != '' AND webhook_url IS NOT NULL AND is_active = ?", userIDs, true).Find(&bots).Error; err != nil || len(bots) == 0 {
+		return
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	for _, b := range bots {
+		url := strings.TrimSpace(b.WebhookURL)
+		if url == "" {
+			continue
+		}
+		req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "SafeGram-Bot-Webhook/1.0")
+		req.Header.Set("X-Safegram-Event", "message.created")
+		req.Header.Set("X-Safegram-Bot-Id", b.ID)
+		go client.Do(req)
+	}
+}

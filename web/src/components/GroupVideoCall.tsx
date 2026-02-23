@@ -1,8 +1,10 @@
-
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
 import { api, getApiBaseUrl } from '../services/api';
 import { showToast } from './Toast';
+import CallParticipantTile from './call/CallParticipantTile';
+import CallControlBar from './call/CallControlBar';
+import FloatingCallBar from './call/FloatingCallBar';
 
 interface GroupVideoCallProps {
   chatId: string;
@@ -34,6 +36,8 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
   const [showParticipantsMenu, setShowParticipantsMenu] = useState(false);
   const [chatMembers, setChatMembers] = useState<Map<string, {username: string, avatarUrl?: string, role?: string}>>(new Map());
   const [isAdmin, setIsAdmin] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+  const [reactions, setReactions] = useState<Map<string, string>>(new Map());
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
@@ -133,7 +137,6 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
             return newMap;
           });
         } else if (data.type === 'call:recording:response') {
-          // Ответ на запрос записи
           setRecordingConsents(prev => {
             const newMap = new Map(prev);
             newMap.set(data.from, data.allowed);
@@ -143,6 +146,20 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
             showToast('Участник запретил запись', 'warning');
             stopRecording();
           }
+        } else if (data.type === 'call:reaction' && data.from) {
+          const emoji = data.emoji || '👍';
+          setReactions(prev => {
+            const next = new Map(prev);
+            next.set(data.from, emoji);
+            return next;
+          });
+          setTimeout(() => {
+            setReactions(prev => {
+              const next = new Map(prev);
+              next.delete(data.from);
+              return next;
+            });
+          }, 2500);
         }
       } catch (e) {
         console.error('Failed to parse WebSocket message:', e);
@@ -480,7 +497,7 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      recordingConsents.clear();
+      setRecordingConsents(new Map());
       showToast('Запись остановлена', 'info');
     }
   };
@@ -608,6 +625,22 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
     });
   };
 
+  const sendReaction = useCallback((emoji: string) => {
+    sendWebSocketMessage('call:reaction', { chatId, emoji });
+    setReactions(prev => {
+      const next = new Map(prev);
+      next.set(currentUserId, emoji);
+      return next;
+    });
+    setTimeout(() => {
+      setReactions(prev => {
+        const next = new Map(prev);
+        next.delete(currentUserId);
+        return next;
+      });
+    }, 2500);
+  }, [chatId, currentUserId]);
+
   const leaveCall = () => {
     // Останавливаем запись если активна
     if (isRecording) {
@@ -641,11 +674,36 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
     onClose();
   };
 
+  if (minimized) {
+    return (
+      <FloatingCallBar
+        title={`Групповой звонок · ${participants.size + 1} участников`}
+        isVideo={startWithVideo}
+        isMuted={isMuted}
+        isVideoEnabled={isVideoEnabled}
+        onExpand={() => setMinimized(false)}
+        onHangup={leaveCall}
+      />
+    );
+  }
+
   return (
-    <div className="group-video-call">
-      <div className="video-call-header">
-        <h3>Видеозвонок</h3>
-        <button onClick={leaveCall} className="close-call-btn">✕</button>
+    <div className="group-video-call" style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 100%)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    }}>
+      <div className="video-call-header" style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '16px 24px', background: 'linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 100%)',
+      }}>
+        <h3 style={{ margin: 0, color: '#fff', fontSize: 18, fontWeight: 600 }}>
+          Групповой видеозвонок · {participants.size + 1} участников
+        </h3>
+        <button onClick={leaveCall} className="close-call-btn" style={{
+          width: 40, height: 40, borderRadius: 12, border: 'none',
+          background: 'rgba(255,255,255,0.15)', color: '#fff', cursor: 'pointer', fontSize: 18,
+        }}>✕</button>
       </div>
 
       {/* Меню фильтров и эффектов */}
@@ -715,80 +773,50 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
         </button>
       </div>
       
-      <div className="video-grid">
-        {/* Локальное видео */}
-        <div className="video-item local-video">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="video-element"
-          />
-          <div className="video-overlay">
-            <span>{isMuted ? '🔇' : '🎤'}</span>
-            <span>{isVideoEnabled ? '📹' : '📷'}</span>
-            {isScreenSharing && <span>🖥️</span>}
-          </div>
-        </div>
-
-        {/* Видео участников */}
+      <div className="video-grid" style={{
+        flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+        gap: 16, padding: 16, minHeight: 0, overflow: 'auto',
+      }}>
+        <CallParticipantTile
+          stream={localStream}
+          displayName="Вы"
+          isMuted={isMuted}
+          isVideoOff={!isVideoEnabled}
+          isLocal
+          isScreenShare={isScreenSharing}
+          reaction={reactions.get(currentUserId) || null}
+        />
         {Array.from(participants.values()).map((participant: Participant, idx: number) => {
           const memberInfo = chatMembers.get(participant.userId);
           const username = memberInfo?.username || `Участник ${idx + 1}`;
           return (
-            <div key={participant.userId} className="video-item" style={{ position: 'relative' }}>
-              <video
-                autoPlay
-                playsInline
-                ref={(video) => {
-                  if (video && participant.stream) {
-                    video.srcObject = participant.stream;
-                  }
-                }}
-                className="video-element"
+            <div key={participant.userId} style={{ position: 'relative' }}>
+              <CallParticipantTile
+                stream={participant.stream}
+                displayName={username}
+                avatarUrl={memberInfo?.avatarUrl}
+                isMuted={participant.muted}
+                isVideoOff={!participant.videoEnabled}
+                reaction={reactions.get(participant.userId) || null}
               />
-              <div className="video-overlay">
-                <span>{username}</span>
-                {participant.muted && <span>🔇</span>}
-                {!participant.videoEnabled && <span>📷</span>}
-              </div>
               {isAdmin && (
-                <div className="participant-controls" style={{
-                  position: 'absolute',
-                  top: '8px',
-                  right: '8px',
-                  display: 'flex',
-                  gap: '4px',
-                  background: 'rgba(0, 0, 0, 0.7)',
-                  padding: '4px',
-                  borderRadius: '4px'
+                <div style={{
+                  position: 'absolute', top: 8, right: 8, zIndex: 5,
+                  display: 'flex', gap: 6, background: 'rgba(0,0,0,0.7)', padding: '6px 10px', borderRadius: 10,
                 }}>
                   <button
+                    type="button"
                     onClick={() => participant.muted ? unmuteParticipant(participant.userId) : muteParticipant(participant.userId)}
                     title={participant.muted ? 'Разрешить микрофон' : 'Заглушить'}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      padding: '4px'
-                    }}
+                    style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14 }}
                   >
                     {participant.muted ? '🔊' : '🔇'}
                   </button>
                   <button
+                    type="button"
                     onClick={() => removeParticipant(participant.userId)}
                     title="Удалить из звонка"
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      padding: '4px'
-                    }}
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14 }}
                   >
                     ✕
                   </button>
@@ -799,50 +827,25 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
         })}
       </div>
 
-      <div className="video-controls">
-        <button
-          onClick={toggleMute}
-          className={`control-btn ${isMuted ? 'muted' : ''}`}
-          title={isMuted ? 'Включить микрофон' : 'Выключить микрофон'}
-        >
-          {isMuted ? '🔇' : '🎤'}
-        </button>
-        <button
-          onClick={toggleVideo}
-          className={`control-btn ${!isVideoEnabled ? 'disabled' : ''}`}
-          title={isVideoEnabled ? 'Выключить камеру' : 'Включить камеру'}
-        >
-          {isVideoEnabled ? '📹' : '📷'}
-        </button>
-        <button
-          onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-          className={`control-btn ${isScreenSharing ? 'active' : ''}`}
-          title={isScreenSharing ? 'Остановить демонстрацию экрана' : 'Демонстрация экрана'}
-        >
-          🖥️
-        </button>
-        <button
-          onClick={isRecording ? stopRecording : startRecording}
-          className={`control-btn ${isRecording ? 'active' : ''}`}
-          title={isRecording ? 'Остановить запись' : 'Начать запись'}
-          disabled={isRecording && Array.from(recordingConsents.values()).some(consent => !consent)}
-        >
-          {isRecording ? '🔴⏹️' : '🔴'}
-        </button>
-        <button
-          onClick={() => setShowParticipantsMenu(!showParticipantsMenu)}
-          className={`control-btn ${showParticipantsMenu ? 'active' : ''}`}
-          title="Участники"
-        >
-          👥 {participants.size + 1}
-        </button>
-        <button
-          onClick={leaveCall}
-          className="control-btn leave-btn"
-          title="Покинуть звонок"
-        >
-          📞
-        </button>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 24px 24px' }}>
+        <CallControlBar
+          isMuted={isMuted}
+          isVideoEnabled={isVideoEnabled}
+          isScreenSharing={isScreenSharing}
+          isRecording={isRecording}
+          onMuteToggle={toggleMute}
+          onVideoToggle={toggleVideo}
+          onScreenShareToggle={isScreenSharing ? stopScreenShare : startScreenShare}
+          onRecordingToggle={isRecording ? stopRecording : startRecording}
+          onReaction={sendReaction}
+          onHangup={leaveCall}
+          onMinimize={() => setMinimized(true)}
+          showVideo
+          showScreenShare
+          showRecording
+          showReactions
+          showMinimize
+        />
       </div>
 
       {showParticipantsMenu && (

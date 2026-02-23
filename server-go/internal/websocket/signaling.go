@@ -66,6 +66,20 @@ func (c *Client) HandleWebRTCMessage(msg map[string]interface{}) {
 			c.hub.SendToUser(toUserID, c.marshalMessage(msg))
 		}
 
+	case "call:reaction":
+		if toUserID != "" {
+			c.hub.SendToUser(toUserID, c.marshalMessage(msg))
+		} else if chatID != "" {
+			c.hub.BroadcastToChat(chatID, c.marshalMessage(msg))
+		}
+
+	case "call:speaking":
+		if toUserID != "" {
+			c.hub.SendToUser(toUserID, c.marshalMessage(msg))
+		} else if chatID != "" {
+			c.hub.BroadcastToChat(chatID, c.marshalMessage(msg))
+		}
+
 	default:
 		log.Printf("Unknown WebRTC message type: %s", msgType)
 	}

@@ -7,7 +7,8 @@ export default function LanguageSelector() {
 
   const languages: { code: Locale; name: string; flag: string }[] = [
     { code: 'ru', name: 'Русский', flag: '🇷🇺' },
-    { code: 'en', name: 'English', flag: '🇬🇧' }
+    { code: 'en', name: 'English', flag: '🇬🇧' },
+    { code: 'de', name: 'Deutsch', flag: '🇩🇪' }
   ];
 
   return (

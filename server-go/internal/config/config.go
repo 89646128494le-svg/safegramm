@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strings"
 )
@@ -14,13 +15,20 @@ type Config struct {
 	WebhookURL  string
 }
 
+const defaultJWT = "dev-secret-change-in-production"
+
 func Load() *Config {
+	jwt := getEnv("JWT_SECRET", defaultJWT)
+	nodeEnv := getEnv("NODE_ENV", "development")
+	if nodeEnv == "production" && (jwt == "" || jwt == defaultJWT) {
+		log.Fatal("JWT_SECRET must be set to a secure value in production (do not use default)")
+	}
 	return &Config{
 		Port:        getEnv("PORT", "8080"),
-		JWTSecret:   getEnv("JWT_SECRET", "dev-secret-change-in-production"),
+		JWTSecret:   jwt,
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://safegram:safegram@localhost:5432/safegram?sslmode=disable"),
 		RedisURL:    getEnv("REDIS_URL", "localhost:6379"),
-		NodeEnv:     getEnv("NODE_ENV", "development"),
+		NodeEnv:     nodeEnv,
 		WebhookURL:  getEnv("WEBHOOK_URL", ""),
 	}
 }

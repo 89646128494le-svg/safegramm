@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, User, Eye, EyeOff, ArrowRight, Mail, Key } from 'lucide-react';
-import { api } from '../services/api';
+import { api, humanFriendlyMessage } from '../services/api';
 import { useStore } from '../store/useStore';
 import '../styles/globals.css';
 
@@ -63,7 +63,7 @@ export default function Login({ onDone }: LoginProps) {
       if (res.code) setDevEmailCode(res.code);
       if (step !== 'email') setStep('email');
     } catch (e: any) {
-      setErr(e?.message || 'Ошибка отправки кода');
+      setErr(humanFriendlyMessage(e?.message) || 'Не удалось отправить код. Проверьте логин и попробуйте снова.');
     } finally {
       setSendingCode(false);
     }
@@ -121,7 +121,7 @@ export default function Login({ onDone }: LoginProps) {
         setErr('Неверный облачный код');
       } else {
         console.error('No token in response:', res);
-        setErr(res?.message || 'Ошибка входа');
+        setErr(humanFriendlyMessage(res?.message) || 'Не удалось войти. Проверьте данные.');
       }
     } catch (e: any) {
       const serverError = e?.response?.error || e?.errorCode || '';
@@ -158,7 +158,7 @@ export default function Login({ onDone }: LoginProps) {
       } else if (serverError === 'bad_creds' || errorMsg === 'bad_creds') {
         setErr('Неверный логин или пароль');
       } else {
-        setErr(e?.message || 'Ошибка входа');
+        setErr(humanFriendlyMessage(e?.message) || 'Не удалось войти. Проверьте логин и пароль.');
       }
     } finally {
       setLoading(false);

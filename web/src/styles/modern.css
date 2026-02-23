@@ -86,11 +86,11 @@ body {
   margin: 0;
   padding: 0;
   background: var(--bg-primary);
+  /* Лёгкий градиент без fixed — избегаем артефактов/полос при скролле */
   background-image: 
-    radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 40% 20%, rgba(236, 72, 153, 0.1) 0%, transparent 50%);
-  background-attachment: fixed;
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
+  background-attachment: scroll;
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
   font-size: 14px;
@@ -375,18 +375,19 @@ textarea {
 
 .sidebar {
   grid-area: sidebar;
-  background: rgba(15, 20, 25, 0.85);
+  background: rgba(15, 20, 25, 0.97);
   border-right: 1px solid var(--border-color);
   padding: var(--spacing-md);
   overflow-y: auto;
   overflow-x: hidden;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
   position: relative;
   min-width: 0;
+  contain: layout style paint;
 }
 @supports not (backdrop-filter: blur(1px)) {
   .sidebar { background: rgba(15, 20, 25, 0.98); }
@@ -460,6 +461,7 @@ textarea {
   flex-direction: column;
   min-height: 0;
   background: var(--bg-primary);
+  contain: layout paint;
 }
 .chats-main-toolbar {
   flex-shrink: 0;
@@ -486,6 +488,8 @@ textarea {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: var(--bg-primary);
+  contain: layout paint;
 }
 .chats-empty-state {
   flex: 1;
@@ -494,6 +498,7 @@ textarea {
   align-items: center;
   justify-content: center;
   padding: 2rem;
+  background: var(--bg-primary);
 }
 
 /* Устаревшие классы — оставляем для совместимости */

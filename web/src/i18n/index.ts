@@ -1,7 +1,8 @@
 import { ru } from './locales/ru';
 import { en } from './locales/en';
+import { de } from './locales/de';
 
-export type Locale = 'ru' | 'en';
+export type Locale = 'ru' | 'en' | 'de';
 
 export type TranslationKey = 
   | keyof typeof ru.common
@@ -22,20 +23,20 @@ export type TranslationKey =
 
 const translations = {
   ru,
-  en
+  en,
+  de
 };
 
 // Получаем язык из localStorage или определяем по браузеру
 const getBrowserLocale = (): Locale => {
   const stored = localStorage.getItem('locale') as Locale;
-  if (stored && (stored === 'ru' || stored === 'en')) {
+  if (stored && (stored === 'ru' || stored === 'en' || stored === 'de')) {
     return stored;
   }
-  
+
   const browserLang = navigator.language.toLowerCase();
-  if (browserLang.startsWith('ru')) {
-    return 'ru';
-  }
+  if (browserLang.startsWith('ru')) return 'ru';
+  if (browserLang.startsWith('de')) return 'de';
   return 'en';
 };
 
