@@ -206,32 +206,31 @@ func metricsMiddleware() gin.HandlerFunc {
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		
+
 		// Разрешаем все локальные адреса и IP адреса для разработки
 		allowedOrigins := []string{
 			"http://localhost:8081",
 			"http://localhost:5173",
 			"http://127.0.0.1:5173",
-			"http://26.241.113.242:5173", // IP адрес друга для тестирования
-			"https://safegram.app", // production domain
+			"http://26.241.113.242:5173",
+			"https://safegram.app",
+			"https://safegram-hazel.vercel.app", // Vercel preview
 		}
 
 		// Разрешаем все Vercel домены и туннели
 		isVercelDomain := false
 		isTunnelDomain := false
 		if origin != "" {
-			// Vercel домены
-			if strings.Contains(origin, ".vercel.app") || 
-			   strings.Contains(origin, ".vercel-dns.com") ||
-			   strings.Contains(origin, "vercel.live") ||
-			   (strings.HasPrefix(origin, "https://") && strings.Contains(origin, "safegram")) {
+			if strings.Contains(origin, ".vercel.app") ||
+				strings.Contains(origin, ".vercel-dns.com") ||
+				strings.Contains(origin, "vercel.live") ||
+				(strings.HasPrefix(origin, "https://") && strings.Contains(origin, "safegram")) {
 				isVercelDomain = true
 			}
-			// LocalTunnel и другие туннели
 			if strings.Contains(origin, ".loca.lt") ||
-			   strings.Contains(origin, ".ngrok.io") ||
-			   strings.Contains(origin, ".ngrok-free.app") ||
-			   strings.Contains(origin, ".trycloudflare.com") {
+				strings.Contains(origin, ".ngrok.io") ||
+				strings.Contains(origin, ".ngrok-free.app") ||
+				strings.Contains(origin, ".trycloudflare.com") {
 				isTunnelDomain = true
 			}
 		}
@@ -313,7 +312,9 @@ func corsMiddleware() gin.HandlerFunc {
 
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Accept-Language, X-Requested-With")
+		c.Header("Access-Control-Max-Age", "86400")
+		c.Header("Vary", "Origin")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
