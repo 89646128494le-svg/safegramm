@@ -378,10 +378,15 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 		// Формируем ответ с информацией о replyToMessage и новых типах
 		result := make([]gin.H, len(messages))
 		for i, msg := range messages {
+			senderID := msg.SenderID
+			if msg.Anonymous && msg.SenderID != userIDStr {
+				senderID = "anonymous"
+			}
 			msgData := gin.H{
 				"id":            msg.ID,
 				"chatId":        msg.ChatID,
-				"senderId":      msg.SenderID,
+				"senderId":      senderID,
+				"anonymous":     msg.Anonymous,
 				"text":          msg.Text,
 				"ciphertext":    msg.Ciphertext,
 				"moderationStatus": msg.ModerationStatus,
@@ -465,7 +470,9 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 			if msg.ExpiresAt != nil {
 				msgData["expiresAt"] = msg.ExpiresAt
 			}
-			if msg.Sender.ID != "" {
+			if msg.Anonymous && msg.SenderID != userIDStr {
+				msgData["sender"] = gin.H{"id": "anonymous", "username": "Тень", "avatarUrl": ""}
+			} else if msg.Sender.ID != "" {
 				msgData["sender"] = gin.H{
 					"id":       msg.Sender.ID,
 					"username": msg.Sender.Username,
@@ -473,19 +480,21 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 				}
 			}
 
-			// Загружаем информацию о сообщении, на которое отвечают
+			// Загружаем информацию о сообщении, на которое отвечают (анонимного отправителя не раскрываем)
 			if msg.ReplyTo != "" {
 				var replyMsg models.Message
 				if err := db.Preload("Sender").First(&replyMsg, "id = ?", msg.ReplyTo).Error; err == nil {
+					replySenderID := replyMsg.SenderID
+					replySender := gin.H{"id": replyMsg.Sender.ID, "username": replyMsg.Sender.Username, "avatarUrl": replyMsg.Sender.AvatarURL}
+					if replyMsg.Anonymous && replyMsg.SenderID != userIDStr {
+						replySenderID = "anonymous"
+						replySender = gin.H{"id": "anonymous", "username": "Тень", "avatarUrl": ""}
+					}
 					msgData["replyToMessage"] = gin.H{
 						"id":       replyMsg.ID,
 						"text":     replyMsg.Text,
-						"senderId": replyMsg.SenderID,
-						"sender": gin.H{
-							"id":       replyMsg.Sender.ID,
-							"username": replyMsg.Sender.Username,
-							"avatarUrl": replyMsg.Sender.AvatarURL,
-						},
+						"senderId": replySenderID,
+						"sender":   replySender,
 					}
 				}
 			}

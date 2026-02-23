@@ -51,14 +51,21 @@ func UniversalSearch(db *gorm.DB) gin.HandlerFunc {
 
 			messagesData := make([]gin.H, len(messages))
 			for i, msg := range messages {
+				senderID := msg.SenderID
+				if msg.Anonymous && msg.SenderID != userIDStr {
+					senderID = "anonymous"
+				}
 				messagesData[i] = gin.H{
 					"id":        msg.ID,
 					"chatId":    msg.ChatID,
-					"senderId":  msg.SenderID,
+					"senderId":  senderID,
+					"anonymous": msg.Anonymous,
 					"text":      msg.Text,
 					"createdAt": msg.CreatedAt.Unix() * 1000,
 				}
-				if msg.Sender.ID != "" {
+				if msg.Anonymous && msg.SenderID != userIDStr {
+					messagesData[i]["sender"] = gin.H{"id": "anonymous", "username": "Тень", "avatarUrl": ""}
+				} else if msg.Sender.ID != "" {
 					messagesData[i]["sender"] = gin.H{
 						"id":       msg.Sender.ID,
 						"username": msg.Sender.Username,
@@ -107,20 +114,25 @@ func UniversalSearch(db *gorm.DB) gin.HandlerFunc {
 			result["chats"] = chatsData
 		}
 
-		// Поиск по пользователям
+		// Поиск по пользователям: только те, кто разрешил показ в поиске (AllowFindByUsername).
 		if searchType == "" || searchType == "all" || searchType == "users" {
 			var users []models.User
-			db.Where("LOWER(username) LIKE ?", "%"+queryLower+"%").
+			db.Where("allow_find_by_username = ?", true).
+				Where("LOWER(username) LIKE ?", "%"+queryLower+"%").
 				Where("id != ?", userIDStr).
 				Limit(20).
 				Find(&users)
 
 			usersData := make([]gin.H, len(users))
 			for i, user := range users {
+				avatarURL := user.AvatarURL
+				if !user.ShowAvatar {
+					avatarURL = ""
+				}
 				usersData[i] = gin.H{
 					"id":        user.ID,
 					"username":  user.Username,
-					"avatarUrl": user.AvatarURL,
+					"avatarUrl": avatarURL,
 					"status":    user.Status,
 					"plan":      user.Plan,
 				}
@@ -184,7 +196,29 @@ func SearchMessages(db *gorm.DB) gin.HandlerFunc {
 			Limit(50).
 			Find(&messages)
 
-		c.JSON(http.StatusOK, gin.H{"messages": messages})
+		out := make([]gin.H, len(messages))
+		for i, msg := range messages {
+			senderID := msg.SenderID
+			sender := gin.H{}
+			if msg.Sender.ID != "" {
+				sender = gin.H{"id": msg.Sender.ID, "username": msg.Sender.Username, "avatarUrl": msg.Sender.AvatarURL}
+			}
+			if msg.Anonymous && msg.SenderID != userIDStr {
+				senderID = "anonymous"
+				sender = gin.H{"id": "anonymous", "username": "Тень", "avatarUrl": ""}
+			}
+			out[i] = gin.H{
+				"id": msg.ID, "chatId": msg.ChatID, "senderId": senderID, "anonymous": msg.Anonymous,
+				"text": msg.Text, "createdAt": msg.CreatedAt, "sender": sender,
+				"chat": func() interface{} {
+					if msg.Chat.ID != "" {
+						return gin.H{"id": msg.Chat.ID, "name": msg.Chat.Name, "type": msg.Chat.Type}
+					}
+					return nil
+				}(),
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"messages": out})
 	}
 }
 

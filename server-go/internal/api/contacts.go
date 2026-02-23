@@ -28,11 +28,15 @@ func ListContacts(db *gorm.DB) gin.HandlerFunc {
 			if err := db.First(&u, "id = ?", ct.ContactID).Error; err != nil {
 				continue
 			}
+			avatarURL := u.AvatarURL
+			if !u.ShowAvatar {
+				avatarURL = ""
+			}
 			result = append(result, gin.H{
-				"id":       u.ID,
-				"username": u.Username,
-				"avatarUrl": u.AvatarURL,
-				"status":   u.Status,
+				"id":        u.ID,
+				"username":  u.Username,
+				"avatarUrl": avatarURL,
+				"status":    u.Status,
 			})
 		}
 		c.JSON(http.StatusOK, gin.H{"contacts": result})

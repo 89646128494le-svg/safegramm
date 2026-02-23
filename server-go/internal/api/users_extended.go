@@ -168,7 +168,7 @@ func ChangePassword(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// GetUserProfile возвращает профиль пользователя (кэш Redis 1 мин)
+// GetUserProfile возвращает профиль. Для чужих: никогда не отдаём email; avatar/bio/lastSeen по настройкам приватности.
 func GetUserProfile(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.Param("id")
@@ -186,16 +186,46 @@ func GetUserProfile(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		if userID != currentStr {
-			if !user.ShowAvatar {
-				user.AvatarURL = ""
+		isSelf := userID == currentStr
+		if isSelf {
+			body := gin.H{"user": user}
+			if b, err := json.Marshal(body); err == nil {
+				redis.CacheSet(cacheKey, string(b), time.Minute)
 			}
-			if !user.ShowBio {
-				user.About = ""
-			}
+			c.JSON(http.StatusOK, body)
+			return
 		}
 
-		body := gin.H{"user": user}
+		// Чужой профиль: без email; avatar/bio по настройкам; lastSeen по LastSeenVisibility
+		profile := gin.H{
+			"id":            user.ID,
+			"username":      user.Username,
+			"avatarUrl":     "",
+			"about":         "",
+			"status":        user.Status,
+			"profileColor":  user.ProfileColor,
+			"plan":          user.Plan,
+			"createdAt":     user.CreatedAt,
+			"lastSeen":     nil,
+		}
+		if user.ShowAvatar {
+			profile["avatarUrl"] = user.AvatarURL
+		}
+		if user.ShowBio {
+			profile["about"] = user.About
+		}
+		switch user.LastSeenVisibility {
+		case "everyone":
+			profile["lastSeen"] = user.LastSeen
+		case "contacts":
+			var ct models.Contact
+			if db.Where("user_id = ? AND contact_id = ?", userID, currentStr).First(&ct).Error == nil {
+				profile["lastSeen"] = user.LastSeen
+			}
+		default:
+			// nobody
+		}
+		body := gin.H{"user": profile}
 		if b, err := json.Marshal(body); err == nil {
 			redis.CacheSet(cacheKey, string(b), time.Minute)
 		}
@@ -242,12 +272,17 @@ func GetUserPrivacy(db *gorm.DB) gin.HandlerFunc {
 
 		var user models.User
 		db.First(&user, "id = ?", userIDStr)
+		lastSeen := user.LastSeenVisibility
+		if lastSeen == "" {
+			lastSeen = "nobody"
+		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"privacy": gin.H{
-				"showBio":    user.ShowBio,
-				"showAvatar": user.ShowAvatar,
-				"lastSeen":   "everyone", // можно расширить
+				"showBio":              user.ShowBio,
+				"showAvatar":           user.ShowAvatar,
+				"lastSeenVisibility":   lastSeen,
+				"allowFindByUsername":   user.AllowFindByUsername,
 			},
 		})
 	}
@@ -264,8 +299,10 @@ func UpdateUserPrivacy(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var req struct {
-			ShowBio    *bool `json:"showBio"`
-			ShowAvatar *bool `json:"showAvatar"`
+			ShowBio              *bool   `json:"showBio"`
+			ShowAvatar           *bool   `json:"showAvatar"`
+			LastSeenVisibility   *string `json:"lastSeenVisibility"`
+			AllowFindByUsername  *bool   `json:"allowFindByUsername"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -279,6 +316,15 @@ func UpdateUserPrivacy(db *gorm.DB) gin.HandlerFunc {
 		}
 		if req.ShowAvatar != nil {
 			updates["show_avatar"] = *req.ShowAvatar
+		}
+		if req.LastSeenVisibility != nil {
+			v := *req.LastSeenVisibility
+			if v == "nobody" || v == "contacts" || v == "everyone" {
+				updates["last_seen_visibility"] = v
+			}
+		}
+		if req.AllowFindByUsername != nil {
+			updates["allow_find_by_username"] = *req.AllowFindByUsername
 		}
 
 		if len(updates) > 0 {

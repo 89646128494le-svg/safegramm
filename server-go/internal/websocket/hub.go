@@ -12,6 +12,7 @@ import (
 // Hub поддерживает множество активных подключений и рассылает сообщения
 type Hub struct {
 	clients     map[*Client]bool
+	clientsMu   sync.RWMutex
 	register    chan *Client
 	unregister  chan *Client
 	broadcast   chan []byte
@@ -19,7 +20,7 @@ type Hub struct {
 	voiceRooms  map[string]map[string]bool
 	voiceRoomsMu sync.RWMutex
 	voiceAction chan *VoiceRoomAction
-	quit        chan struct{} // для graceful shutdown
+	quit        chan struct{}
 }
 
 type ChatMessage struct {
@@ -48,14 +49,38 @@ func NewHub() *Hub {
 	}
 }
 
+// ConnInfo — данные подключения для топологии (админы/владельцы).
+type ConnInfo struct {
+	UserID string `json:"userId"`
+	IP     string `json:"ip"`
+}
+
+// GetConnections возвращает список всех подключённых клиентов (userID, IP).
+func (h *Hub) GetConnections() []ConnInfo {
+	h.clientsMu.RLock()
+	defer h.clientsMu.RUnlock()
+	out := make([]ConnInfo, 0, len(h.clients))
+	for c := range h.clients {
+		ip := ""
+		if c.conn != nil {
+			ip = c.conn.RemoteAddr().String()
+		}
+		out = append(out, ConnInfo{UserID: c.userID, IP: ip})
+	}
+	return out
+}
+
 // Shutdown завершает работу hub: отключает клиентов и останавливает Run
 func (h *Hub) Shutdown() {
 	close(h.quit)
-	h.voiceRoomsMu.Lock()
+	h.clientsMu.Lock()
 	for client := range h.clients {
 		close(client.send)
 	}
 	h.clients = make(map[*Client]bool)
+	h.clientsMu.Unlock()
+	h.voiceRoomsMu.Lock()
+	h.voiceRooms = make(map[string]map[string]bool)
 	h.voiceRoomsMu.Unlock()
 }
 
@@ -71,7 +96,9 @@ func (h *Hub) Run() {
 		case <-h.quit:
 			return
 		case client := <-h.register:
+			h.clientsMu.Lock()
 			h.clients[client] = true
+			h.clientsMu.Unlock()
 			log.Printf("Client connected: %s", client.userID)
 			
 			// Устанавливаем пользователя как онлайн в Redis
@@ -90,9 +117,14 @@ func (h *Hub) Run() {
 			h.broadcast <- presenceJSON
 
 		case client := <-h.unregister:
-			if _, ok := h.clients[client]; ok {
+			h.clientsMu.Lock()
+			_, ok := h.clients[client]
+			if ok {
 				delete(h.clients, client)
 				close(client.send)
+			}
+			h.clientsMu.Unlock()
+			if ok {
 				log.Printf("Client disconnected: %s", client.userID)
 
 				// Удаляем из голосовых комнат и уведомляем остальных
@@ -109,6 +141,7 @@ func (h *Hub) Run() {
 								"userId": client.userID,
 							})
 							for uid := range room {
+								h.clientsMu.RLock()
 								for c := range h.clients {
 									if c.userID == uid {
 										select {
@@ -118,6 +151,7 @@ func (h *Hub) Run() {
 										break
 									}
 								}
+								h.clientsMu.RUnlock()
 							}
 						}
 						break
@@ -127,12 +161,14 @@ func (h *Hub) Run() {
 
 				// Проверяем, есть ли еще подключения этого пользователя
 				hasOtherConnections := false
+				h.clientsMu.RLock()
 				for c := range h.clients {
 					if c.userID == client.userID {
 						hasOtherConnections = true
 						break
 					}
 				}
+				h.clientsMu.RUnlock()
 				
 				// Если нет других подключений, устанавливаем офлайн
 				if !hasOtherConnections {
@@ -153,7 +189,7 @@ func (h *Hub) Run() {
 			}
 
 		case message := <-h.broadcast:
-			// Рассылаем всем подключенным клиентам
+			h.clientsMu.RLock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
@@ -162,9 +198,10 @@ func (h *Hub) Run() {
 					delete(h.clients, client)
 				}
 			}
+			h.clientsMu.RUnlock()
 
 		case chatMsg := <-h.sendToChat:
-			// Рассылаем сообщение только клиентам, подписанным на этот чат
+			h.clientsMu.RLock()
 			for client := range h.clients {
 				if client.isSubscribedToChat(chatMsg.ChatID) {
 					select {
@@ -175,6 +212,7 @@ func (h *Hub) Run() {
 					}
 				}
 			}
+			h.clientsMu.RUnlock()
 
 		case act := <-h.voiceAction:
 			h.voiceRoomsMu.Lock()

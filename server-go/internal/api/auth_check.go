@@ -6,39 +6,25 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"safegram-server/internal/models"
 )
 
-// CheckUsername проверяет доступность логина при регистрации (GET ?username=...)
+// CheckUsername не раскрывает, занят ли username (анти-пробив: нельзя перебирать логины).
+// Всегда возвращаем available: true; при регистрации вернём username_taken при конфликте.
 func CheckUsername(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := strings.TrimSpace(c.Query("username"))
 		if len(username) < 3 {
-			c.JSON(http.StatusOK, gin.H{"available": false, "reason": "short"})
-			return
-		}
-		var existing models.User
-		if err := db.Where("LOWER(username) = LOWER(?)", username).First(&existing).Error; err == nil {
-			c.JSON(http.StatusOK, gin.H{"available": false})
+			c.JSON(http.StatusOK, gin.H{"available": true})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"available": true})
 	}
 }
 
-// CheckEmail проверяет доступность email при регистрации (GET ?email=...)
+// CheckEmail не раскрывает, зарегистрирован ли email (анти-пробив: нельзя пробивать по почте).
+// Всегда available: true; при регистрации вернём email_exists при конфликте.
 func CheckEmail(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		email := strings.TrimSpace(c.Query("email"))
-		if email == "" {
-			c.JSON(http.StatusOK, gin.H{"available": true})
-			return
-		}
-		var existing models.User
-		if err := db.Where("LOWER(email) = LOWER(?)", email).First(&existing).Error; err == nil {
-			c.JSON(http.StatusOK, gin.H{"available": false})
-			return
-		}
 		c.JSON(http.StatusOK, gin.H{"available": true})
 	}
 }

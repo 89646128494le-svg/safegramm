@@ -18,9 +18,11 @@ type User struct {
 	About         string    `json:"about,omitempty"`
 	Status        string    `gorm:"default:online" json:"status"`
 	ProfileColor  string    `gorm:"default:#3b82f6" json:"profileColor"`
-	ShowBio       bool      `gorm:"default:true" json:"showBio"`
-	ShowAvatar    bool      `gorm:"default:true" json:"showAvatar"`
-	LastSeen      *time.Time `json:"lastSeen,omitempty"`
+	ShowBio             bool       `gorm:"default:true" json:"showBio"`
+	ShowAvatar          bool       `gorm:"default:true" json:"showAvatar"`
+	AllowFindByUsername bool       `gorm:"default:false" json:"allowFindByUsername"` // иначе поиск по username не покажет пользователя (анти-пробив)
+	LastSeenVisibility  string     `gorm:"default:nobody;size:20" json:"lastSeenVisibility"` // nobody | contacts | everyone
+	LastSeen            *time.Time `json:"lastSeen,omitempty"`
 	TwoFASecret   string    `json:"-"`
 	RecoveryCodes string    `gorm:"type:text" json:"-"` // JSON массив как строка
 	PinHash       string    `json:"-"`
@@ -28,6 +30,7 @@ type User struct {
 	CreatedAt     time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	// Приватный ключ и сид-фраза никогда не записываются в БД (только в RAM из mnemonic при необходимости).
 }
 
 func (User) TableName() string {

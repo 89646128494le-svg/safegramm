@@ -45,63 +45,78 @@ func GetCurrentUser(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// GetUsers возвращает список всех пользователей (для загрузки контактов)
+// GetUsers возвращает только контактов текущего пользователя (никакого глобального каталога — анти-пробив).
 func GetUsers(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var users []models.User
-		if err := db.Limit(1000).Find(&users).Error; err != nil {
+		userID, _ := c.Get("userID")
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		var contacts []models.Contact
+		if err := db.Where("user_id = ?", userIDStr).Find(&contacts).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
-
-		result := make([]gin.H, len(users))
-		for i, user := range users {
-			// Проверяем онлайн статус через Redis
-			isOnline, _ := redis.IsOnline(user.ID)
-			result[i] = gin.H{
-				"id":       user.ID,
-				"username": user.Username,
-				"avatarUrl": user.AvatarURL,
-				"status":   user.Status,
-				"isOnline": isOnline,
+		result := make([]gin.H, 0, len(contacts))
+		for _, ct := range contacts {
+			var u models.User
+			if err := db.First(&u, "id = ?", ct.ContactID).Error; err != nil {
+				continue
 			}
+			isOnline, _ := redis.IsOnline(u.ID)
+			avatarURL := u.AvatarURL
+			if !u.ShowAvatar {
+				avatarURL = ""
+			}
+			result = append(result, gin.H{
+				"id":        u.ID,
+				"username":  u.Username,
+				"avatarUrl": avatarURL,
+				"status":    u.Status,
+				"isOnline":  isOnline,
+			})
 		}
-
 		c.JSON(http.StatusOK, gin.H{"users": result})
 	}
 }
 
-// SearchUsers ищет пользователей
+// SearchUsers показывает только пользователей с AllowFindByUsername=true (приватность по умолчанию).
+// Никогда не отдаём email/phone; статус/онлайн — только если пользователь разрешил.
 func SearchUsers(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		query := c.Query("q")
-		if query == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
+		query := strings.TrimSpace(c.Query("q"))
+		if query == "" || len(query) < 3 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "query_too_short"})
 			return
 		}
 
 		var users []models.User
 		searchTerm := "%" + strings.ToLower(query) + "%"
-		if err := db.Where("LOWER(username) LIKE ?", searchTerm).
+		if err := db.Where("allow_find_by_username = ?", true).
+			Where("LOWER(username) LIKE ?", searchTerm).
 			Limit(20).
 			Find(&users).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
 
-		result := make([]gin.H, len(users))
-		for i, user := range users {
-			// Проверяем онлайн статус через Redis
-			isOnline, _ := redis.IsOnline(user.ID)
-			result[i] = gin.H{
-				"id":       user.ID,
-				"username": user.Username,
-				"avatarUrl": user.AvatarURL,
-				"status":   user.Status,
-				"isOnline": isOnline,
+		result := make([]gin.H, 0, len(users))
+		for _, user := range users {
+			avatarURL := user.AvatarURL
+			if !user.ShowAvatar {
+				avatarURL = ""
 			}
+			isOnline, _ := redis.IsOnline(user.ID)
+			result = append(result, gin.H{
+				"id":        user.ID,
+				"username":  user.Username,
+				"avatarUrl": avatarURL,
+				"status":    user.Status,
+				"isOnline":  isOnline,
+			})
 		}
-
 		c.JSON(http.StatusOK, gin.H{"users": result})
 	}
 }

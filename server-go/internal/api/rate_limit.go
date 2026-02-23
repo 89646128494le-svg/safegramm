@@ -119,9 +119,37 @@ func ResetAllRateLimits() {
 	limiter.mu.Lock()
 	limiter.visitors = make(map[string]*visitor)
 	limiter.mu.Unlock()
-	
+
 	authLimiter.mu.Lock()
 	authLimiter.visitors = make(map[string]*visitor)
 	authLimiter.mu.Unlock()
+
+	searchLimiter.mu.Lock()
+	searchLimiter.visitors = make(map[string]*visitor)
+	searchLimiter.mu.Unlock()
+}
+
+// SearchRateLimit: жёсткий лимит на поиск пользователей (анти-скрапинг), по userID.
+var searchLimiter = &rateLimiter{
+	visitors: make(map[string]*visitor),
+	rate:     20,
+	window:   time.Minute,
+}
+
+// SearchRateLimitMiddleware ограничивает поиск (users/search, /search) — 20 запросов/мин на пользователя.
+func SearchRateLimitMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, _ := c.Get("userID")
+		key, _ := userID.(string)
+		if key == "" {
+			key = "ip:" + c.ClientIP()
+		}
+		if !searchLimiter.allow(key) {
+			c.JSON(429, gin.H{"error": "too_many_requests", "detail": "search_limit"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
 }
 

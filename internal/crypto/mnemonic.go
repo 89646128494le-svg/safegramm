@@ -14,7 +14,9 @@ import (
 
 const (
 	EntropySize256 = 32
+	EntropySize128 = 16
 	MnemonicWords  = 24
+	MnemonicWords12 = 12
 	BIP39WordCount = 2048
 )
 
@@ -167,4 +169,46 @@ func MnemonicToEntropy(words []string) ([]byte, error) {
 		return nil, errors.New("crypto: mnemonic checksum mismatch")
 	}
 	return entropy, nil
+}
+
+// GenerateMnemonic12 создаёт 12 слов (128 бит энтропии). Для регистрации; сид только в ответе, не в БД.
+func GenerateMnemonic12() ([]string, error) {
+	entropy := make([]byte, EntropySize128)
+	if _, err := io.ReadFull(rand.Reader, entropy); err != nil {
+		return nil, err
+	}
+	return EntropyToMnemonic12(entropy)
+}
+
+// EntropyToMnemonic12 превращает 16 байт энтропии в 12 слов (BIP39-style).
+func EntropyToMnemonic12(entropy []byte) ([]string, error) {
+	if len(entropy) != EntropySize128 {
+		return nil, errors.New("crypto: entropy must be 16 bytes for 12 words")
+	}
+	checksum := sha256.Sum256(entropy)
+	full := make([]byte, EntropySize128+1)
+	copy(full, entropy)
+	full[EntropySize128] = checksum[0]
+	var words []string
+	for i := 0; i < MnemonicWords12; i++ {
+		startBit := i * 11
+		byteIdx := startBit / 8
+		var idx uint16
+		idx = uint16(full[byteIdx]) << 3
+		if byteIdx+1 < len(full) {
+			idx |= uint16(full[byteIdx+1]) >> 5
+		}
+		idx &= 0x7FF
+		if int(idx) >= len(bip39Words) {
+			idx = 0
+		}
+		words = append(words, bip39Words[idx])
+	}
+	return words, nil
+}
+
+// Mnemonic12ToSeed возвращает 64-байтный seed из 12 слов (для вывода ключей только в RAM).
+func Mnemonic12ToSeed(words []string, passphrase string) []byte {
+	sentence := strings.Join(words, " ")
+	return pbkdf2.Key([]byte(sentence), []byte("mnemonic"+passphrase), 2048, 64, sha512.New)
 }

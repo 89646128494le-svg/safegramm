@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -10,9 +11,10 @@ import (
 var (
 	requestsTotal   uint64
 	requestsErrors  uint64
-	requestsLatency []uint64 // 0: <100ms, 1: 100ms-500ms, 2: 500ms-1s, 3: >1s
+	requestsLatency []uint64
 	latencyMu       sync.Mutex
 	startTime       = time.Now()
+	activeTCPConns  int64
 )
 
 func init() {
@@ -41,6 +43,11 @@ func ObserveLatency(d time.Duration) {
 	}
 }
 
+// IncTCPConn увеличивает счётчик активных TCP-сессий (вызывать при accept/close).
+func IncTCPConn(delta int64) {
+	atomic.AddInt64(&activeTCPConns, delta)
+}
+
 // Handler returns Prometheus-style text metrics for GET /metrics
 func Handler() string {
 	total := atomic.LoadUint64(&requestsTotal)
@@ -53,6 +60,10 @@ func Handler() string {
 	if uptime > 0 {
 		rps = float64(total) / uptime
 	}
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	goroutines := runtime.NumGoroutine()
+	tcp := atomic.LoadInt64(&activeTCPConns)
 	return fmt.Sprintf(`# HELP safegram_http_requests_total Total HTTP requests
 # TYPE safegram_http_requests_total counter
 safegram_http_requests_total %d
@@ -71,5 +82,17 @@ safegram_uptime_seconds %f
 # HELP safegram_rps Requests per second (derived)
 # TYPE safegram_rps gauge
 safegram_rps %f
-`, total, errors, l0, l0+l1, l0+l1+l2, l0+l1+l2+l3, uptime, rps)
+# HELP safegram_goroutines Number of goroutines
+# TYPE safegram_goroutines gauge
+safegram_goroutines %d
+# HELP safegram_tcp_connections Active TCP connections
+# TYPE safegram_tcp_connections gauge
+safegram_tcp_connections %d
+# HELP safegram_mem_alloc_bytes Alloc (RAM)
+# TYPE safegram_mem_alloc_bytes gauge
+safegram_mem_alloc_bytes %d
+# HELP safegram_mem_sys_bytes Sys (RAM)
+# TYPE safegram_mem_sys_bytes gauge
+safegram_mem_sys_bytes %d
+`, total, errors, l0, l0+l1, l0+l1+l2, l0+l1+l2+l3, uptime, rps, goroutines, tcp, mem.Alloc, mem.Sys)
 }

@@ -15,6 +15,7 @@ type Message struct {
 	AttachmentURL string   `json:"attachmentUrl,omitempty"`
 	ReplyTo     string    `gorm:"index" json:"replyTo,omitempty"`
 	ForwardFrom string    `json:"forwardFrom,omitempty"`
+	Anonymous   bool      `gorm:"default:false" json:"anonymous,omitempty"` // отправитель скрыт — получатель видит «Тень»
 	ThreadID    string    `gorm:"index" json:"threadId,omitempty"`
 	StickerID   string    `json:"stickerId,omitempty"`
 	GifURL      string    `json:"gifUrl,omitempty"`

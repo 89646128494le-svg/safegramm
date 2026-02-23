@@ -20,11 +20,13 @@ type LiveStatsFunc func() (goroutines int, memoryMB float64, sessions int)
 
 // SafetyAI — движок Safety с вызовом инструментов и контекстом проекта.
 type SafetyAI struct {
-	APIKey       string
-	Store        *store.Store
-	GetStats     LiveStatsFunc
-	KnowledgeBase string            // индекс .go/.md/.txt проекта для контекста
-	SendAlert    func(msg string)   // отправка алерта владельцу в Telegram (при аномалиях)
+	APIKey             string
+	Store              *store.Store
+	GetStats           LiveStatsFunc
+	BanIPFunc          func(ip string) error      // бан IP (только для owner)
+	CheckHealthFunc    func() (status string, err error) // проверка здоровья сервера
+	KnowledgeBase      string
+	SendAlert          func(msg string)
 }
 
 // ExecutedCall — один выполненный вызов функции (для ответа клиенту).
@@ -139,6 +141,22 @@ func (a *SafetyAI) toolDeclarations() []map[string]interface{} {
 				},
 				"required": []string{"message"},
 			},
+		},
+		{
+			"name":        "BanIP",
+			"description": "Заблокировать IP-адрес на сервере (анти-абуз). Доступно только владельцу (Lev).",
+			"parameters": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"ip": map[string]interface{}{"type": "string", "description": "IP-адрес для блокировки"},
+				},
+				"required": []string{"ip"},
+			},
+		},
+		{
+			"name":        "CheckServerHealth",
+			"description": "Проверить состояние сервера: доступность, метрики (горутины, память, сессии).",
+			"parameters": map[string]interface{}{"type": "object", "properties": map[string]interface{}{}},
 		},
 	}
 }
@@ -270,6 +288,44 @@ func (a *SafetyAI) executeTool(fc map[string]interface{}, isOwner bool, caller *
 			a.SendAlert("🔔 Safety: " + msg)
 		}
 		result = "Алерт отправлен владельцу в Telegram."
+		allowed = true
+	case "BanIP":
+		ip, _ := args["ip"].(string)
+		ip = strings.TrimSpace(ip)
+		if ip == "" {
+			result = "Не указан IP."
+			allowed = false
+			return
+		}
+		if !isOwner {
+			result = "BanIP доступен только владельцу (Lev)."
+			allowed = false
+			return
+		}
+		if a.BanIPFunc != nil {
+			if err := a.BanIPFunc(ip); err != nil {
+				result = "Ошибка бана IP: " + err.Error()
+			} else {
+				result = "IP " + ip + " заблокирован."
+			}
+		} else {
+			result = "Функция BanIP не настроена на сервере."
+		}
+		allowed = true
+	case "CheckServerHealth":
+		if a.CheckHealthFunc != nil {
+			status, err := a.CheckHealthFunc()
+			if err != nil {
+				result = "Ошибка проверки: " + err.Error()
+			} else {
+				result = status
+			}
+		} else if a.GetStats != nil {
+			g, m, s := a.GetStats()
+			result = fmt.Sprintf("Сервер в работе. Горутины: %d, Память: %.2f MB, Сессий: %d", g, m, s)
+		} else {
+			result = "Метрики недоступны."
+		}
 		allowed = true
 	default:
 		result = "Неизвестная функция: " + name

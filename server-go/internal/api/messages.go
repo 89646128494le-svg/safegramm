@@ -14,6 +14,25 @@ import (
 	"safegram-server/internal/websocket"
 )
 
+// shadowSender — отображаемый отправитель для анонимных сообщений («Тень»).
+var shadowSender = gin.H{
+	"id":        "anonymous",
+	"username":  "Тень",
+	"avatarUrl": "",
+}
+
+// cloneResponseForBroadcast копирует ответ и для анонимных сообщений подменяет отправителя на «Тень».
+func cloneResponseForBroadcast(resp gin.H, anonymous bool) gin.H {
+	data, _ := json.Marshal(resp)
+	var out gin.H
+	_ = json.Unmarshal(data, &out)
+	if anonymous {
+		out["senderId"] = "anonymous"
+		out["sender"] = shadowSender
+	}
+	return out
+}
+
 // CreateMessage создает новое сообщение
 func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -31,6 +50,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			AttachmentURL string  `json:"attachmentUrl"`
 			ReplyTo       string  `json:"replyTo"`
 			ForwardFrom   string  `json:"forwardFrom"` // ID сообщения для пересылки
+			Anonymous     bool    `json:"anonymous"`   // отправитель скрыт — получатель видит «Тень» (только в ЛС)
 			StickerID     string  `json:"stickerId"`
 			GifURL        string  `json:"gifUrl"`
 			LocationLat   *float64 `json:"locationLat"`
@@ -82,8 +102,15 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 
 		// Проверяем доступ к чату (в т.ч. для чатов каналов — по членству в сервере)
-		if _, ok := ensureChatAccess(db, req.ChatID, userIDStr); !ok {
+		member, ok := ensureChatAccess(db, req.ChatID, userIDStr)
+		if !ok || member == nil {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		// Анонимные сообщения («Тень») только в личных чатах (DM)
+		var chat models.Chat
+		if req.Anonymous && (db.First(&chat, "id = ?", req.ChatID).Error != nil || chat.Type != "dm") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "anonymous_only_dm"})
 			return
 		}
 
@@ -165,7 +192,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			}
 			
 			if err := db.Create(&poll).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "detail": err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "POLL_CREATE_FAILED"})
 				return
 			}
 			
@@ -212,6 +239,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			AttachmentURL: req.AttachmentURL,
 			ReplyTo:       req.ReplyTo,
 			ForwardFrom:   req.ForwardFrom,
+			Anonymous:     req.Anonymous,
 			ThreadID:      req.ThreadID,
 			StickerID:     req.StickerID,
 			GifURL:        req.GifURL,
@@ -387,15 +415,17 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			}
 		}
 		if replyToMessage != nil {
+			replySenderID := replyToMessage.SenderID
+			replySender := gin.H{"id": replyToMessage.Sender.ID, "username": replyToMessage.Sender.Username, "avatarUrl": replyToMessage.Sender.AvatarURL}
+			if replyToMessage.Anonymous {
+				replySenderID = "anonymous"
+				replySender = shadowSender
+			}
 			response["replyToMessage"] = gin.H{
 				"id":       replyToMessage.ID,
 				"text":     replyToMessage.Text,
-				"senderId": replyToMessage.SenderID,
-				"sender": gin.H{
-					"id":       replyToMessage.Sender.ID,
-					"username": replyToMessage.Sender.Username,
-					"avatarUrl": replyToMessage.Sender.AvatarURL,
-				},
+				"senderId": replySenderID,
+				"sender":   replySender,
 			}
 		}
 		if message.EditedAt != nil {
@@ -407,7 +437,15 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		if message.ExpiresAt != nil {
 			response["expiresAt"] = message.ExpiresAt
 		}
-		if message.Sender.ID != "" {
+		response["anonymous"] = message.Anonymous
+		if message.Anonymous {
+			// Автору в ответе API показываем, что это его сообщение; получателям — только «Тень»
+			response["sender"] = gin.H{
+				"id":       message.Sender.ID,
+				"username": message.Sender.Username,
+				"avatarUrl": message.Sender.AvatarURL,
+			}
+		} else if message.Sender.ID != "" {
 			response["sender"] = gin.H{
 				"id":       message.Sender.ID,
 				"username": message.Sender.Username,
@@ -415,11 +453,12 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			}
 		}
 
-		// Отправляем через WebSocket только одобренные сообщения
+		// Для WS получателям показываем отправителя как «Тень» для анонимных сообщений
+		wsData := cloneResponseForBroadcast(response, message.Anonymous)
 		if message.ModerationStatus == "approved" {
 			wsMessage := gin.H{
 				"type": "message",
-				"data": response,
+				"data": wsData,
 			}
 			messageJSON, _ := json.Marshal(wsMessage)
 			wsHub.BroadcastToChat(req.ChatID, messageJSON)
@@ -444,8 +483,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 					var chat models.Chat
 					if err := db.First(&chat, "id = ?", req.ChatID).Error; err == nil {
 						chatName := chat.Name
-						if chat.Type == "dm" {
-							// Для DM получаем имя собеседника
+						if chat.Type == "dm" && !message.Anonymous {
 							var otherMember models.ChatMember
 							if err := db.Where("chat_id = ? AND user_id != ?", req.ChatID, member.UserID).First(&otherMember).Error; err == nil {
 								var otherUser models.User
@@ -454,8 +492,10 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 								}
 							}
 						}
-						
 						title := chatName
+						if message.Anonymous {
+							title = "Тень"
+						}
 						if title == "" {
 							title = "SafeGram"
 						}

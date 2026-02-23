@@ -47,7 +47,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 
 	// Контакты
 	protected.GET("/contacts/list", ListContacts(db))
-	protected.GET("/contacts/search", ContactsSearch(db))
+	protected.GET("/contacts/search", SearchRateLimitMiddleware(), ContactsSearch(db))
 	protected.POST("/contacts/add", AddContact(db))
 	protected.POST("/contacts/remove", RemoveContact(db))
 
@@ -56,7 +56,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/users/me", GetCurrentUser(db))
 	protected.GET("/users/me/export", ExportMyData(db))
 	protected.DELETE("/users/me", DeleteMyAccount(db))
-	protected.GET("/users/search", SearchUsers(db))
+	protected.GET("/users/search", SearchRateLimitMiddleware(), SearchUsers(db))
 	protected.GET("/users/:id", GetUserProfile(db))
 	protected.PATCH("/users/me", UpdateUser(db))
 	protected.POST("/users/me", UpdateUser(db))
@@ -134,8 +134,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/polls/:id/vote", VotePoll(db, wsHub))                  // Проголосовать в опросе (по pollId)
 	protected.POST("/messages/:id/poll/vote", VotePollByMessage(db, wsHub)) // Проголосовать в опросе (по messageId)
 	protected.GET("/polls/:id", GetPoll(db))                                // Получить информацию об опросе
-	protected.GET("/search", UniversalSearch(db))                           // Универсальный поиск
-	protected.GET("/messages/search", SearchMessages(db))                   // Поиск сообщений (старый endpoint)
+	protected.GET("/search", SearchRateLimitMiddleware(), UniversalSearch(db))
+	protected.GET("/messages/search", SearchRateLimitMiddleware(), SearchMessages(db))
 
 	// Истории (Stories)
 	protected.POST("/stories", CreateStory(db))        // Создать историю
@@ -320,6 +320,10 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/owner/database/clear", RequireOwner(db), ClearDatabase(db))
 	protected.GET("/owner/premium/stats", RequireOwner(db), GetPremiumStats(db))
 	protected.GET("/owner/revenue", RequireOwner(db), GetOwnerRevenue(db))
+	protected.GET("/owner/network-topology", RequireOwner(db), GetNetworkTopology(db, wsHub))
+	protected.POST("/owner/shutdown", RequireOwner(db), OwnerShutdown())
+	protected.POST("/owner/restart", RequireOwner(db), OwnerRestart())
+	protected.POST("/owner/send-log-report", RequireOwner(db), SendLogReportToTelegram())
 
 	// Премиум подписка и тарифы
 	protected.GET("/premium", GetPremiumInfo(db))                                    // Информация о премиум подписке текущего пользователя

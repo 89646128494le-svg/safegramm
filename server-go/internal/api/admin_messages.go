@@ -54,7 +54,7 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if err := email.SendAdminMessage(*targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send email: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "EMAIL_SEND_FAILED"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Email sent successfully", "to": *targetUser.Email})
@@ -137,14 +137,14 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 			Message:   req.Message,
 		}
 		if err := db.Create(&maintenance).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save maintenance status: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "MAINTENANCE_SAVE_FAILED"})
 			return
 		}
 		response := gin.H{"success": true, "message": "Maintenance mode activated", "data": maintenance}
 		if req.SendEmail {
 			var users []models.User
 			if err := db.Find(&users).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "USERS_FETCH_FAILED"})
 				return
 			}
 			successCount := 0
@@ -189,7 +189,7 @@ func DisableMaintenance(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if err := db.Model(&models.MaintenanceMode{}).Where("is_active = ?", true).Update("is_active", false).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to disable maintenance mode"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "MAINTENANCE_UPDATE_FAILED"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Maintenance mode disabled"})

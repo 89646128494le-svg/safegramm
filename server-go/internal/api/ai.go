@@ -41,7 +41,7 @@ func AskSafety(c *gin.Context) {
 
 	apiKey := os.Getenv("OPENAI_API_KEY") // Ключ берем из переменных окружения сервера!
 	if apiKey == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI service not configured"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "server_error", "errorCode": "AI_NOT_CONFIGURED"})
 		return
 	}
 
@@ -69,7 +69,7 @@ func AskSafety(c *gin.Context) {
 
 	resp, err := client.Do(r)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to call AI provider"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "AI_REQUEST_FAILED"})
 		return
 	}
 	defer resp.Body.Close()

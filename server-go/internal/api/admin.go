@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"safegram-server/internal/audit"
 	"safegram-server/internal/models"
 	"safegram-server/internal/redis"
 )
@@ -24,6 +25,7 @@ func logAdminAudit(db *gorm.DB, adminID, targetID, action, details, ip, ua strin
 		UserAgent: ua,
 	}
 	db.Create(&entry)
+	audit.LogAdminAction(adminID, "", action, targetID, "", details, ip)
 }
 
 func logRoleBanHistory(db *gorm.DB, userID, adminID, action, oldVal, newVal, reason string) {

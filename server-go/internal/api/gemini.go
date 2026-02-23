@@ -32,7 +32,7 @@ func AskGemini(c *gin.Context) {
 	// Vercel автоматически подставит ключ из настроек Environment Variables
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Gemini API key is not configured in Vercel settings"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "server_error", "errorCode": "AI_NOT_CONFIGURED"})
 		return
 	}
 
@@ -59,7 +59,7 @@ func AskGemini(c *gin.Context) {
 
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Gemini"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "AI_REQUEST_FAILED"})
 		return
 	}
 	defer resp.Body.Close()

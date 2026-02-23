@@ -14,11 +14,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"safegram-server/internal/api"
+	"safegram-server/internal/audit"
 	"safegram-server/internal/config"
 	"safegram-server/internal/database"
 	"safegram-server/internal/logger"
 	"safegram-server/internal/metrics"
 	redis "safegram-server/internal/redis"
+	"safegram-server/internal/telegram"
 	"safegram-server/internal/websocket"
 )
 
@@ -165,6 +167,11 @@ func main() {
 	}()
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	api.OnOwnerShutdown = func() { quit <- syscall.SIGTERM }
+	api.OnOwnerRestart = func() { quit <- syscall.SIGTERM }
+	audit.OnOwnerLoginFromNewIP = func(ip, username string) {
+		telegram.Send("⚠️ <b>SafeGram</b>: попытка входа владельца (" + username + ") с нового IP: <code>" + ip + "</code>. Сессия заблокирована.")
+	}
 	<-quit
 	log.Println("Shutting down server...")
 	wsHub.Shutdown()

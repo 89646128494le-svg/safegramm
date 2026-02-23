@@ -151,7 +151,7 @@ func TestPush(db *gorm.DB) gin.HandlerFunc {
 		// Отправляем тестовое уведомление
 		err := SendPushNotification(db, userIDStr, "Тестовое уведомление", "Это тестовое push-уведомление от SafeGram", nil)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "detail": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "PUSH_SEND_FAILED"})
 			return
 		}
 

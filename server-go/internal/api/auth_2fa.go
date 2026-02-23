@@ -37,7 +37,7 @@ func Generate2FA(db *gorm.DB) gin.HandlerFunc {
 			Issuer: "SafeGram", AccountName: accountName, SecretSize: 32,
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "detail": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "TOTP_GENERATE_FAILED"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"secret": key.Secret(), "url": key.URL()})
