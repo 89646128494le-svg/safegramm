@@ -6,6 +6,6 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /app
 COPY main .
-RUN mkdir -p /app/uploads /app/logs
+RUN chmod +x main && mkdir -p /app/uploads /app/logs
 EXPOSE 8080
 CMD ["./main"]
