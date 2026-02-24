@@ -81,11 +81,9 @@ func LoadConfig() *EmailConfig {
 func SendEmail(to, subject, body string) error {
 	config := LoadConfig()
 
-	// Если провайдер не настроен, используем fallback (для разработки)
+	// Если провайдер не настроен — возвращаем ошибку, чтобы API не врал «письмо отправлено»
 	if config.Provider == "" || (config.SMTPUser == "" && config.APIKey == "") {
-		fmt.Printf("[EMAIL DEBUG] To: %s, Subject: %s\n", to, subject)
-		fmt.Printf("[EMAIL DEBUG] Body: %s\n", body)
-		return nil
+		return fmt.Errorf("email not configured: set EMAIL_PROVIDER and credentials (e.g. GMAIL_USER, GMAIL_APP_PASSWORD) in .env")
 	}
 
 	switch config.Provider {
