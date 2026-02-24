@@ -398,9 +398,14 @@ export default function Chats() {
   };
 
   const createDM = async (username: string) => {
-    if (!username.trim()) return;
+    const q = username.trim();
+    if (!q) return;
+    if (q.length < 2 && !/^[0-9a-f-]{32,36}$/i.test(q)) {
+      showToast('Введите минимум 2 символа для поиска.', 'warning');
+      return;
+    }
     try {
-      const users = await api('/api/users/search?q=' + encodeURIComponent(username.trim()));
+      const users = await api('/api/users/search?q=' + encodeURIComponent(q));
       const user = users.users?.[0];
       if (!user) {
         showToast('Пользователь не найден или скрыл себя из поиска. Добавьте его в контакты или попросите включить «Показывать в поиске» в настройках приватности.', 'warning');

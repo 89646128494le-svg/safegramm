@@ -82,23 +82,45 @@ func GetUsers(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// SearchUsers возвращает пользователей: (1) с AllowFindByUsername=true по запросу, (2) контакты текущего пользователя по запросу (даже если скрыты из поиска).
+// SearchUsers возвращает пользователей: (1) по ID если запрос похож на UUID, (2) с AllowFindByUsername=true по имени, (3) контакты по имени (даже если скрыты из поиска).
 func SearchUsers(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		query := strings.TrimSpace(c.Query("q"))
-		if query == "" || len(query) < 3 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "query_too_short"})
+		if query == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "query_empty"})
 			return
 		}
 
 		userID, _ := c.Get("userID")
 		userIDStr, _ := userID.(string)
 		searchTerm := "%" + strings.ToLower(query) + "%"
-
 		seen := make(map[string]bool)
 		var users []models.User
 
-		// Пользователи, разрешившие показ в поиске
+		// Поиск по точному ID (UUID) — один символ не ищем, 2+ ок
+		if len(query) >= 32 && strings.Contains(query, "-") {
+			var byID models.User
+			if err := db.First(&byID, "id = ?", query).Error; err == nil {
+				// Показываем по ID только если: в контактах или разрешил поиск
+				inContacts := false
+				if userIDStr != "" {
+					var c int64
+					db.Model(&models.Contact{}).Where("user_id = ? AND contact_id = ?", userIDStr, byID.ID).Count(&c)
+					inContacts = c > 0
+				}
+				if byID.AllowFindByUsername || inContacts {
+					seen[byID.ID] = true
+					users = append(users, byID)
+				}
+			}
+		}
+
+		if len(query) < 2 && len(users) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "query_too_short"})
+			return
+		}
+
+		// Пользователи, разрешившие показ в поиске (по имени)
 		var public []models.User
 		db.Where("allow_find_by_username = ?", true).
 			Where("LOWER(username) LIKE ?", searchTerm).

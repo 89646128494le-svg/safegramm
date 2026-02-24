@@ -174,7 +174,10 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
           if (j.error === 'email_verification_required' || j.error === 'cloud_code_required' ||
               j.error === 'invalid_email_code' || j.error === 'invalid_cloud_code') {
             msg = j.error;
-          } else if (j.error === 'bad_request') msg = j.detail || 'Некорректный запрос';
+          } else if (j.error === 'bad_request') {
+            if (j.detail === 'query_too_short' || j.detail === 'query_empty') msg = 'Введите минимум 2 символа для поиска.';
+            else msg = j.detail || 'Некорректный запрос';
+          }
           else if (j.error === 'bad_creds') msg = 'Неверный логин или пароль';
           else if (j.error === 'user_exists') msg = 'Этот логин уже занят. Выберите другой.';
           else if (j.error === 'email_exists') msg = 'Эта почта уже привязана к другому аккаунту.';
