@@ -5,12 +5,12 @@
 	email your-email@example.com
 }
 
-# Вариант с доменом (HTTPS):
-api.yourdomain.com {
+# По умолчанию отвечаем на порту 80 (доступ по IP). Для домена с HTTPS раскомментируй блок ниже и закомментируй :80.
+:80 {
 	reverse_proxy api:8080
 }
 
-# Вариант без домена (только HTTP по IP) — раскомментируй и закомментируй блок выше:
-# :80 {
+# Вариант с доменом (HTTPS):
+# api.yourdomain.com {
 # 	reverse_proxy api:8080
 # }
