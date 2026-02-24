@@ -303,6 +303,12 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		var chat models.Chat
+		if err := db.First(&chat, "id = ?", chatID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+
 		// Пагинация
 		limit := 100
 		if limitStr := c.Query("limit"); limitStr != "" {
@@ -381,6 +387,9 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 			senderID := msg.SenderID
 			if msg.Anonymous && msg.SenderID != userIDStr {
 				senderID = "anonymous"
+			}
+			if chat.Type == "anonymous_support" && msg.SenderID == SupportSystemUserID {
+				senderID = "support"
 			}
 			msgData := gin.H{
 				"id":            msg.ID,
@@ -470,7 +479,9 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 			if msg.ExpiresAt != nil {
 				msgData["expiresAt"] = msg.ExpiresAt
 			}
-			if msg.Anonymous && msg.SenderID != userIDStr {
+			if chat.Type == "anonymous_support" && msg.SenderID == SupportSystemUserID {
+				msgData["sender"] = supportSenderDisplay
+			} else if msg.Anonymous && msg.SenderID != userIDStr {
 				msgData["sender"] = gin.H{"id": "anonymous", "username": "Тень", "avatarUrl": ""}
 			} else if msg.Sender.ID != "" {
 				msgData["sender"] = gin.H{

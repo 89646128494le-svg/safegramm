@@ -337,7 +337,9 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/admin/services/:id/restart", RequireAdmin(db), RestartService(db))
 
 	// Персональные сообщения от администрации
-	protected.POST("/admin/send-email", RequireAdmin(db), SendPersonalEmail(db))
+		protected.POST("/admin/send-email", RequireAdmin(db), SendPersonalEmail(db))
+		protected.GET("/admin/anonymous-chat/:targetUserId", RequireAdmin(db), AdminGetAnonymousChat(db))
+		protected.POST("/admin/anonymous-dm", RequireAdmin(db), AdminSendAnonymousDM(db, wsHub))
 	protected.POST("/admin/broadcast-email", RequireAdmin(db), BroadcastPersonalEmail(db))
 
 	// Технические работы

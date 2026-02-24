@@ -175,3 +175,53 @@ button.ghost:hover {
     transform: translateX(0) scale(1);
   }
 }
+
+/* Admin panel */
+.admin-root {
+  min-height: 100vh;
+}
+.admin-nav-item::before {
+  display: none !important;
+}
+.admin-nav-item:hover {
+  transform: translateY(-1px);
+}
+.admin-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+.admin-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.admin-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 3px;
+}
+[data-theme="light"] .admin-sidebar {
+  background: rgba(255,255,255,0.85);
+  border-right-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .admin-content-card {
+  background: rgba(255,255,255,0.7);
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+}
+@media (max-width: 900px) {
+  .admin-root {
+    grid-template-columns: 1fr !important;
+  }
+  .admin-sidebar {
+    position: relative !important;
+    height: auto !important;
+    max-height: 50vh;
+    flex-direction: column !important;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+    padding: 16px !important;
+  }
+  .admin-main {
+    padding: 20px 16px !important;
+  }
+  .admin-content-card {
+    padding: 20px 16px !important;
+  }
+}

@@ -147,6 +147,7 @@ export const ADMIN_TABS = [
   { id: 'maintenance' as const, label: '🔧 Техработы', minRole: 'sysadmin' as const },
   { id: 'broadcast' as const, label: '📢 Рассылка', minRole: 'sysadmin' as const },
   { id: 'messages' as const, label: '✉️ Письма и тех. работы', minRole: 'sysadmin' as const },
+  { id: 'anonymous_dm' as const, label: '👤 Написать пользователю (анонимно)', minRole: 'sysadmin' as const },
   { id: 'logs' as const, label: '📋 Логи сервера', minRole: 'safety' as const },
   { id: 'monitor' as const, label: '📡 Мониторинг и нагрузка', minRole: 'sysadmin' as const },
   { id: 'security' as const, label: '🛡️ Security Dashboard', minRole: 'safety' as const },

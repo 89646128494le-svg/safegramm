@@ -82,8 +82,7 @@ func GetUsers(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// SearchUsers показывает только пользователей с AllowFindByUsername=true (приватность по умолчанию).
-// Никогда не отдаём email/phone; статус/онлайн — только если пользователь разрешил.
+// SearchUsers возвращает пользователей: (1) с AllowFindByUsername=true по запросу, (2) контакты текущего пользователя по запросу (даже если скрыты из поиска).
 func SearchUsers(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		query := strings.TrimSpace(c.Query("q"))
@@ -92,14 +91,43 @@ func SearchUsers(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		var users []models.User
+		userID, _ := c.Get("userID")
+		userIDStr, _ := userID.(string)
 		searchTerm := "%" + strings.ToLower(query) + "%"
-		if err := db.Where("allow_find_by_username = ?", true).
+
+		seen := make(map[string]bool)
+		var users []models.User
+
+		// Пользователи, разрешившие показ в поиске
+		var public []models.User
+		db.Where("allow_find_by_username = ?", true).
 			Where("LOWER(username) LIKE ?", searchTerm).
 			Limit(20).
-			Find(&users).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-			return
+			Find(&public)
+		for _, u := range public {
+			if !seen[u.ID] {
+				seen[u.ID] = true
+				users = append(users, u)
+			}
+		}
+
+		// Контакты текущего пользователя по запросу (можно найти даже если скрыты из поиска)
+		if userIDStr != "" && len(users) < 20 {
+			var contactIDs []string
+			db.Model(&models.Contact{}).Where("user_id = ?", userIDStr).Pluck("contact_id", &contactIDs)
+			if len(contactIDs) > 0 {
+				var contacts []models.User
+				db.Where("id IN ?", contactIDs).Where("LOWER(username) LIKE ?", searchTerm).Find(&contacts)
+				for _, u := range contacts {
+					if !seen[u.ID] {
+						seen[u.ID] = true
+						users = append(users, u)
+						if len(users) >= 20 {
+							break
+						}
+					}
+				}
+			}
 		}
 
 		result := make([]gin.H, 0, len(users))

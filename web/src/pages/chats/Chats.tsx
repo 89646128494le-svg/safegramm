@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, getErrorMessage } from '../../services/api';
 import { getSocket } from '../../services/websocket';
 import EnhancedChatWindow from '../../components/EnhancedChatWindow';
@@ -67,7 +68,8 @@ interface User {
 }
 
 export default function Chats() {
-  const { ui, setSidebarOpen, maintenance } = useStore();
+  const navigate = useNavigate();
+  const { ui, setSidebarOpen, maintenance, setToken, setUser } = useStore();
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -259,7 +261,14 @@ export default function Chats() {
     try {
       const user = await api('/api/users/me');
       setCurrentUser(user);
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.status === 401) {
+        setToken(null);
+        setUser(null);
+        if (typeof localStorage !== 'undefined') localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
       console.error('Failed to load user:', e);
     }
   };
@@ -279,7 +288,14 @@ export default function Chats() {
         });
       });
       setUsers(usersMap);
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.status === 401) {
+        setToken(null);
+        setUser(null);
+        if (typeof localStorage !== 'undefined') localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
       console.error('Failed to load users:', e);
     }
   };
@@ -323,6 +339,13 @@ export default function Chats() {
       setChatsHasMore(!!data.hasMore);
     } catch (e: any) {
       if (!append) {
+        if (e?.status === 401) {
+          setToken(null);
+          setUser(null);
+          if (typeof localStorage !== 'undefined') localStorage.removeItem('token');
+          navigate('/login');
+          return;
+        }
         if (e?.status === 511) {
           showToast(getErrorMessage(e, 'Сеть требует авторизации. Войдите в Wi‑Fi или примите условия и обновите страницу.'), 'error');
         } else if (e?.message === 'timeout') {
@@ -380,7 +403,7 @@ export default function Chats() {
       const users = await api('/api/users/search?q=' + encodeURIComponent(username.trim()));
       const user = users.users?.[0];
       if (!user) {
-        showToast('Пользователь не найден', 'warning');
+        showToast('Пользователь не найден или скрыл себя из поиска. Добавьте его в контакты или попросите включить «Показывать в поиске» в настройках приватности.', 'warning');
         return;
       }
       const chat = await api('/api/chats', 'POST', { type: 'dm', memberIds: [user.id] });

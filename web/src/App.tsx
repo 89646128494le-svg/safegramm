@@ -79,6 +79,7 @@ export default function App() {
         if (status === 401 || status === 403 || code === 'unauthorized' || msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('авторизац') || msg.includes('токен')) {
           setToken(null);
           setUser(null);
+          if (typeof localStorage !== 'undefined') localStorage.removeItem('token');
         }
         setAuthCheckDone(true);
       });

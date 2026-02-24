@@ -12,6 +12,7 @@ import BroadcastManager from '../../components/admin/BroadcastManager';
 import AdminLogs from '../../components/admin/AdminLogs';
 import SystemMonitor from '../../components/admin/SystemMonitor';
 import AdminMessaging from '../../components/admin/AdminMessaging';
+import AnonymousDMTab from '../../components/admin/AnonymousDMTab';
 import SecurityDashboard from '../../components/admin/SecurityDashboard';
 import SupportTab from '../../components/admin/SupportTab';
 import LiveLogs from '../../components/admin/LiveLogs';
@@ -56,50 +57,109 @@ export default function Admin() {
   };
 
   const roleLabel = user ? getRoleLabel(user) : '';
+  const roleBadgeStyle = roleLabel === 'Владелец'
+    ? { background: 'linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.2))', border: '1px solid rgba(251,191,36,0.4)', color: '#fcd34d' }
+    : roleLabel === 'Тех. Админ'
+    ? { background: 'linear-gradient(135deg, rgba(124,108,255,0.2), rgba(61,216,255,0.15))', border: '1px solid rgba(124,108,255,0.35)', color: '#a5b4fc' }
+    : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--subtle, #9ca3af)' };
 
   return (
-    <div style={{padding: '24px', maxWidth: 1400, margin: '0 auto'}}>
-      <p style={{ marginBottom: '16px', fontSize: '13px', color: 'var(--subtle, #9ca3af)' }}>
-        Супер-панель: адрес <strong>/app/admin</strong>. Вход под владельцем (lev или первый пользователь). Вкладки: 👑 Sovereign — дашборд и удаление; 👥 Пользователи — блок/разблок, роли; 📦 База данных — правка в онлайне; ⚙️ Сервисы — управление сервисами.
-      </p>
-      <h2 style={{marginBottom: '24px', fontSize: '28px', fontWeight: '700'}}>
-        Панель управления
-        {roleLabel && (
-          <span style={{ fontSize: '14px', fontWeight: '500', color: 'var(--subtle, #9ca3af)', marginLeft: '12px' }}>
-            {roleLabel === 'Владелец' && '👑 Владелец'}
-            {roleLabel === 'Тех. Админ' && '⚙️ Тех. Админ'}
-            {roleLabel === 'Служба безопасности' && '🛡️ Служба безопасности'}
-            {roleLabel === 'Модератор' && '🛡️ Модератор'}
-            {roleLabel === 'Техподдержка' && '🎫 Техподдержка'}
-          </span>
-        )}
-      </h2>
-      <div style={{
-        display: 'flex', 
-        gap: '8px', 
-        flexWrap: 'wrap', 
-        marginBottom: '24px',
-        borderBottom: '1px solid var(--border, #374151)',
-        paddingBottom: '16px'
+    <div className="admin-root" style={{
+        minHeight: '100vh',
+        display: 'grid',
+        gridTemplateColumns: '280px 1fr',
+        gap: 0,
+        background: 'var(--bg, #05060c)',
       }}>
-        {visibleTabs.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            style={{
-              padding: '10px 16px',
-              fontWeight: tab === id ? '600' : '400',
-              background: tab === id ? 'var(--accent, #3b82f6)' : 'transparent',
-              color: tab === id ? '#fff' : 'var(--fg, #e5e7eb)',
-              border: '1px solid var(--border, #374151)',
-              borderRadius: '8px',
-              cursor: 'pointer'
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <aside className="admin-sidebar" style={{
+        position: 'sticky',
+        top: 0,
+        height: '100vh',
+        overflowY: 'auto',
+        background: 'rgba(11, 16, 32, 0.75)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderRight: '1px solid rgba(255,255,255,0.08)',
+        padding: '24px 0',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+      }}>
+        <div style={{ padding: '0 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '8px' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 6px', color: 'var(--fg)', letterSpacing: '-0.02em' }}>
+            Панель управления
+          </h1>
+          {roleLabel && (
+            <span style={{ fontSize: '12px', fontWeight: '500', padding: '4px 10px', borderRadius: '20px', ...roleBadgeStyle }}>
+              {roleLabel === 'Владелец' && '👑 Владелец'}
+              {roleLabel === 'Тех. Админ' && '⚙️ Тех. Админ'}
+              {roleLabel === 'Служба безопасности' && '🛡️ Безопасность'}
+              {roleLabel === 'Модератор' && '🛡️ Модератор'}
+              {roleLabel === 'Техподдержка' && '🎫 Поддержка'}
+            </span>
+          )}
+        </div>
+        <nav style={{ flex: 1, padding: '0 12px' }}>
+          {visibleTabs.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className="admin-nav-item"
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                marginBottom: '4px',
+                fontWeight: tab === id ? '600' : '500',
+                fontSize: '14px',
+                textAlign: 'left',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                background: tab === id
+                  ? 'linear-gradient(135deg, var(--accent, #7c6cff), var(--accent-2, #3dd8ff))'
+                  : 'transparent',
+                color: tab === id ? '#fff' : 'var(--fg, #e9ecf5)',
+                boxShadow: tab === id ? '0 4px 14px rgba(124, 108, 255, 0.35)' : 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (tab !== id) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                  e.currentTarget.style.color = 'var(--fg)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (tab !== id) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--fg)';
+                }
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <p style={{ padding: '12px 20px 0', margin: 0, fontSize: '11px', color: 'var(--subtle)', opacity: 0.8 }}>
+          /app/admin
+        </p>
+      </aside>
+      <main className="admin-main" style={{
+        padding: '32px',
+        maxWidth: 1200,
+        margin: '0 auto',
+        width: '100%',
+      }}>
+        <div className="admin-content-card" style={{
+          background: 'rgba(11, 16, 32, 0.5)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '20px',
+          padding: '28px 32px',
+          minHeight: '60vh',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.24)',
+        }}>
       {tab==='sovereign' && canAccessAdminTab(user, 'sovereign') && <OwnerTab currentUser={user} />}
       {tab==='users' && canAccessAdminTab(user, 'users') && <UsersTab currentUser={user} />}
       {tab==='analytics' && canAccessAdminTab(user, 'analytics') && <AnalyticsDashboard />}
@@ -107,6 +167,7 @@ export default function Admin() {
       {tab==='maintenance' && canAccessAdminTab(user, 'maintenance') && <MaintenanceManager />}
       {tab==='broadcast' && canAccessAdminTab(user, 'broadcast') && <BroadcastManager />}
       {tab==='messages' && canAccessAdminTab(user, 'messages') && <AdminMessaging />}
+      {tab==='anonymous_dm' && canAccessAdminTab(user, 'anonymous_dm') && <AnonymousDMTab />}
       {tab==='logs' && canAccessAdminTab(user, 'logs') && <AdminLogs />}
       {tab==='monitor' && canAccessAdminTab(user, 'monitor') && <SystemMonitor />}
       {tab==='security' && canAccessAdminTab(user, 'security') && <SecurityDashboard />}
@@ -126,6 +187,8 @@ export default function Admin() {
       {tab==='communication' && canAccessAdminTab(user, 'communication') && <CommunicationTab />}
       {tab==='system_integrations' && canAccessAdminTab(user, 'system_integrations') && <SystemIntegrationsTab />}
       {tab==='analytics_reports' && canAccessAdminTab(user, 'analytics_reports') && <AnalyticsReportsTab />}
+        </div>
+      </main>
     </div>
   );
 }

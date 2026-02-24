@@ -71,7 +71,7 @@ func RequireAdmin(db *gorm.DB) gin.HandlerFunc {
 		roles := user.ParseRoles()
 		isAdmin := false
 		for _, role := range roles {
-			if role == "admin" || role == "owner" {
+			if role == "admin" || role == "owner" || role == "sysadmin" {
 				isAdmin = true
 				break
 			}
@@ -96,7 +96,7 @@ func GetAdminUsers(db *gorm.DB) gin.HandlerFunc {
 		}
 		if search := strings.TrimSpace(c.Query("search")); search != "" {
 			like := "%" + search + "%"
-			q = q.Where("username LIKE ? OR id = ?", like, search)
+			q = q.Where("username LIKE ? OR id = ? OR (email IS NOT NULL AND email LIKE ?)", like, search, like)
 		}
 		if createdAfter := c.Query("createdAfter"); createdAfter != "" {
 			if t, err := time.Parse("2006-01-02", createdAfter); err == nil {
