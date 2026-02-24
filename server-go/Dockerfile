@@ -3,8 +3,8 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Копируем go mod файлы
-COPY go.mod go.sum ./
+# Копируем go.mod (go.sum может быть в .gitignore — не обязателен для сборки)
+COPY go.mod ./
 RUN go mod download
 
 # Копируем исходный код
