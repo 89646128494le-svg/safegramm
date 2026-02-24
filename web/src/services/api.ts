@@ -51,7 +51,9 @@ export function humanFriendlyMessage(raw: string): string {
   if (!raw || typeof raw !== 'string') return 'Что-то пошло не так. Попробуйте ещё раз.';
   const s = raw.toLowerCase();
   if (/failed to fetch|network request failed|load failed|networkerror/i.test(s)) return 'Нет связи с сервером. Проверьте интернет и попробуйте снова.';
+  if (/511|network authentication required/i.test(s)) return 'Сеть требует авторизации (каптив-портал). Откройте в браузере новую вкладку, войдите в Wi‑Fi или примите условия сети, затем обновите страницу.';
   if (/timeout|timed out/i.test(s)) return 'Сервер не ответил вовремя. Попробуйте позже.';
+  if (/511|network authentication required/i.test(s)) return 'Туннель (loca.lt) требует подтверждения: откройте ссылку API в новой вкладке, нажмите «Продолжить», затем обновите страницу.';
   if (/403|forbidden/i.test(s)) return 'Доступ запрещён.';
   if (/404|not found/i.test(s)) return 'Не найдено.';
   if (/500|internal server|server_error/i.test(s)) return 'Временная ошибка на сервере. Попробуйте позже.';
@@ -158,6 +160,9 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
 
       if (!rsp.ok) {
         let msg = 'Что-то пошло не так. Попробуйте ещё раз.';
+        if (rsp.status === 511) {
+          msg = 'Сеть требует авторизации (каптив-портал). Откройте в браузере новую вкладку, войдите в Wi‑Fi или примите условия сети, затем обновите страницу.';
+        }
         let errorCode = '';
         let responseData: any = null;
         const rawText = await rsp.text();
@@ -185,6 +190,8 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
               await delay(delayMs);
               return makeRequest(attempt + 1);
             }
+          } else if (rsp.status === 511) {
+            msg = 'Туннель (loca.lt) требует подтверждения: откройте ссылку API в новой вкладке, нажмите «Продолжить», затем обновите страницу.';
           } else if (j.error === 'unauthorized') msg = 'Требуется авторизация';
           else if (j.error === 'server_error') msg = 'Временная ошибка на сервере. Попробуйте позже.';
           else if (j.error === 'cannot_add_self') msg = 'Нельзя добавить себя в контакты';
@@ -198,7 +205,9 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
             msg = j.detail || j.error || msg;
           }
         } catch (_) {
-          if (rsp.status === 0 || /failed|network|load|timeout|refused|fetch/i.test(rawText)) {
+          if (rsp.status === 511) {
+            msg = 'Сеть требует авторизации (каптив-портал). Откройте в браузере новую вкладку, войдите в Wi‑Fi или примите условия сети, затем обновите страницу.';
+          } else if (rsp.status === 0 || /failed|network|load|timeout|refused|fetch/i.test(rawText)) {
             msg = 'Нет связи с сервером. Проверьте интернет и попробуйте снова.';
           } else if (rawText && rawText.length < 200) {
             msg = humanFriendlyMessage(rawText);

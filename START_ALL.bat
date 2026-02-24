@@ -14,9 +14,10 @@ echo.
 echo  [3/5] Ожидание 6 сек, пока API поднимется...
 timeout /t 6 /nobreak >nul
 echo.
-echo  [4/5] Запуск LocalTunnel (скопируй URL из окна "SafeGram Tunnel")...
+echo  [4/5] Запуск туннеля (LocalTunnel). Гостям один раз открыть ссылку в браузере и нажать «Продолжить».
+echo       Альтернативы: TUNNEL_NGROK.bat (ngrok) или TUNNEL_CLOUDFLARE.bat (cloudflared).
 start "SafeGram Tunnel" cmd /k "cd /d "%~dp0" && title SafeGram Tunnel && npx -y localtunnel --port 8082"
-echo       Окно "SafeGram Tunnel" открыто — скопируй https://...loca.lt в настройки приложения (API на 8082).
+echo       Окно "SafeGram Tunnel" — скопируй https://...loca.lt в настройки приложения (API на 8082).
 echo.
 echo  [5/5] Запуск фронта (Vite)...
 start "SafeGram Web" cmd /k "cd /d "%~dp0web" && title SafeGram Web && npm run dev"

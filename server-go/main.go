@@ -87,8 +87,8 @@ func main() {
 	if cfg.NodeEnv != "production" {
 		router.Use(gin.Logger())
 	}
+	router.Use(corsMiddleware()) // первым, чтобы preflight OPTIONS всегда получал CORS-заголовки
 	router.Use(gzipMiddleware())
-	router.Use(corsMiddleware())
 	if cfg.NodeEnv == "production" {
 		router.Use(hstsMiddleware())
 	}

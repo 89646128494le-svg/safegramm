@@ -296,12 +296,19 @@ export default function Chats() {
     if (append && chatsNextCursor) params.set('cursor', chatsNextCursor);
     params.set('limit', '50');
     const url = `/api/chats?${params}`;
-    const CHATS_TIMEOUT_MS = 15000;
+    const CHATS_TIMEOUT_MS = 35000;
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('timeout')), CHATS_TIMEOUT_MS)
     );
+    const attemptLoad = (isRetry = false): Promise<any> =>
+      Promise.race([api(url), timeoutPromise]).catch((e: any) => {
+        if (!append && !isRetry && (e?.message === 'timeout' || e?.status === 511)) {
+          return attemptLoad(true);
+        }
+        throw e;
+      });
     try {
-      const data = await Promise.race([api(url), timeoutPromise]);
+      const data = await attemptLoad();
       const list = data.chats || [];
       if (append) {
         setChats(prev => {
@@ -316,10 +323,12 @@ export default function Chats() {
       setChatsHasMore(!!data.hasMore);
     } catch (e: any) {
       if (!append) {
-        if (e?.message === 'timeout') {
-          showToast('Загрузка чатов заняла слишком много времени. Проверьте подключение и обновите страницу.', 'error');
+        if (e?.status === 511) {
+          showToast(getErrorMessage(e, 'Сеть требует авторизации. Войдите в Wi‑Fi или примите условия и обновите страницу.'), 'error');
+        } else if (e?.message === 'timeout') {
+          showToast('Загрузка чатов заняла много времени. Проверьте интернет и обновите страницу.', 'error');
         } else {
-          showToast(getErrorMessage(e, 'Не удалось загрузить чаты. Попробуйте обновить страницу.'), 'error');
+          showToast(getErrorMessage(e, 'Не удалось загрузить чаты. Обновите страницу.'), 'error');
         }
         setChats([]);
       }

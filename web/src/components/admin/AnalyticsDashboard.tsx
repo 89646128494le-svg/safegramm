@@ -91,6 +91,14 @@ export default function AnalyticsDashboard() {
     );
   }
 
+  const users = data.users ?? { total: 0, active: 0, new: 0, premium: 0, growth: 0 };
+  const messages = data.messages ?? { total: 0, today: 0, average: 0, peak: 0 };
+  const activity = data.activity ?? { hourly: [], daily: [], weekly: [] };
+  const hourly = activity.hourly ?? [];
+  const daily = activity.daily ?? [];
+  const topUsers = data.topUsers ?? [];
+  const topChats = data.topChats ?? [];
+
   return (
     <div>
       {/* Заголовок и фильтры */}
@@ -133,50 +141,50 @@ export default function AnalyticsDashboard() {
       }}>
         <MetricCard
           title="Всего пользователей"
-          value={data.users.total}
-          change={data.users.growth}
+          value={users.total}
+          change={users.growth}
           icon="👥"
           color="#3b82f6"
         />
         <MetricCard
           title="Активных пользователей"
-          value={data.users.active}
+          value={users.active}
           icon="🟢"
           color="#22c55e"
         />
         <MetricCard
           title="Новых пользователей"
-          value={data.users.new}
+          value={users.new}
           icon="✨"
           color="#8b5cf6"
         />
         <MetricCard
           title="Premium пользователей"
-          value={data.users.premium}
+          value={users.premium}
           icon="⭐"
           color="#f59e0b"
         />
         <MetricCard
           title="Всего сообщений"
-          value={data.messages.total}
+          value={messages.total}
           icon="💬"
           color="#06b6d4"
         />
         <MetricCard
           title="Сообщений сегодня"
-          value={data.messages.today}
+          value={messages.today}
           icon="📨"
           color="#10b981"
         />
         <MetricCard
           title="Среднее в день"
-          value={Math.round(data.messages.average)}
+          value={Math.round(messages.average)}
           icon="📊"
           color="#6366f1"
         />
         <MetricCard
           title="Пик активности"
-          value={data.messages.peak}
+          value={messages.peak}
           icon="🔥"
           color="#ef4444"
         />
@@ -191,12 +199,12 @@ export default function AnalyticsDashboard() {
       }}>
         <ActivityChart
           title="Активность по часам"
-          data={data.activity.hourly}
+          data={hourly}
           type="hourly"
         />
         <ActivityChart
           title="Активность по дням"
-          data={data.activity.daily}
+          data={daily}
           type="daily"
         />
       </div>
@@ -207,8 +215,8 @@ export default function AnalyticsDashboard() {
         gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
         gap: '24px'
       }}>
-        <TopUsersList users={data.topUsers} />
-        <TopChatsList chats={data.topChats} />
+        <TopUsersList users={topUsers} />
+        <TopChatsList chats={topChats} />
       </div>
     </div>
   );
