@@ -37,7 +37,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: https: https://*.loca.lt wss://*.loca.lt https://*.ngrok.io wss://*.ngrok.io https://*.ngrok-free.app wss://*.ngrok-free.app;"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: https: http: ws: https://*.loca.lt wss://*.loca.lt https://*.trycloudflare.com wss://*.trycloudflare.com https://*.ngrok.io wss://*.ngrok.io https://*.ngrok-free.app wss://*.ngrok-free.app;"
         }
       ]
     },
