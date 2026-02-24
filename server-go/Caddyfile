@@ -5,12 +5,12 @@
 	email your-email@example.com
 }
 
-# По умолчанию отвечаем на порту 80 (доступ по IP). Для домена с HTTPS раскомментируй блок ниже и закомментируй :80.
+# HTTP по IP (для проверок)
 :80 {
 	reverse_proxy api:8080
 }
 
-# Вариант с доменом (HTTPS):
-# api.yourdomain.com {
-# 	reverse_proxy api:8080
-# }
+# HTTPS через nip.io (браузер не блокирует mixed content). Замени email на свой для Let's Encrypt.
+141.8.198.152.nip.io {
+	reverse_proxy api:8080
+}
