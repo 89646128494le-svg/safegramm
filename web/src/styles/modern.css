@@ -484,7 +484,7 @@ textarea {
 }
 .chats-main-content {
   flex: 1;
-  min-height: 0;
+  min-height: 480px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -493,6 +493,7 @@ textarea {
 }
 .chats-empty-state {
   flex: 1;
+  min-height: 400px;
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -52,7 +52,8 @@ export default function AnonymousDMTab() {
       setMessages(Array.isArray(data.messages) ? data.messages : []);
       setChatId(data.chat?.id ?? null);
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'Не удалось загрузить переписку'), 'error');
+      const msg = e?.status === 404 ? 'Обновите сервер до последней версии для анонимных сообщений.' : getErrorMessage(e, 'Не удалось загрузить переписку');
+      showToast(msg, 'error');
     } finally {
       setLoadMessagesLoading(false);
     }
@@ -73,7 +74,8 @@ export default function AnonymousDMTab() {
       setMessages((prev) => [...prev, msg]);
       setSendText('');
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'Ошибка отправки'), 'error');
+      const msg = e?.status === 404 ? 'Обновите сервер до последней версии для анонимных сообщений.' : getErrorMessage(e, 'Ошибка отправки');
+      showToast(msg, 'error');
     } finally {
       setSending(false);
     }

@@ -19,10 +19,13 @@ export default function SecurityDashboard() {
         api('/api/admin/security/alerts').then((r: any) => r.alerts ?? r ?? []),
         api('/api/admin/security/blocked-ips').then((r: any) => r.ips ?? r ?? []),
       ]);
-      setSessions(Array.isArray((sessRes as any).value) ? (sessRes as any).value : []);
-      setAlerts(Array.isArray((alertsRes as any).value) ? (alertsRes as any).value : []);
-      setBlockedIps(Array.isArray((ipsRes as any).value) ? (ipsRes as any).value : []);
-    } catch (e: any) {
+      const sessVal = (sessRes as { status: string; value?: any }).status === 'fulfilled' ? (sessRes as { value: any }).value : undefined;
+      const alertsVal = (alertsRes as { status: string; value?: any }).status === 'fulfilled' ? (alertsRes as { value: any }).value : undefined;
+      const ipsVal = (ipsRes as { status: string; value?: any }).status === 'fulfilled' ? (ipsRes as { value: any }).value : undefined;
+      setSessions(Array.isArray(sessVal) ? sessVal : []);
+      setAlerts(Array.isArray(alertsVal) ? alertsVal : []);
+      setBlockedIps(Array.isArray(ipsVal) ? ipsVal : []);
+    } catch {
       setSessions([]);
       setAlerts([]);
       setBlockedIps([]);
@@ -46,20 +49,21 @@ export default function SecurityDashboard() {
       setBlockIpInput('');
       load();
     } catch (e: any) {
-      showToast('Ошибка: ' + (e?.message || 'не удалось заблокировать'), 'error');
+      const msg = e?.status === 501 || e?.message?.includes('not_implemented') ? 'Блокировка IP пока не настроена на сервере' : (e?.message || 'Не удалось заблокировать');
+      showToast(msg, 'error');
     }
   };
 
   if (loading) {
     return (
-      <div style={{ padding: '48px', textAlign: 'center' }}>
+      <div style={{ padding: '48px', textAlign: 'center', minHeight: '420px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="empty">Загрузка Security Dashboard…</div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div style={{ minHeight: '400px' }}>
       <h3 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
         <Shield size={28} />
         Security Dashboard — Служба безопасности
@@ -82,7 +86,7 @@ export default function SecurityDashboard() {
           minHeight: '80px',
         }}>
           {alerts.length === 0 ? (
-            <p className="small" style={{ color: 'var(--subtle)' }}>Нет активных алертов. Эндпоинт: GET /api/admin/security/alerts</p>
+            <p className="small" style={{ color: 'var(--subtle)' }}>Нет активных алертов</p>
           ) : (
             <ul style={{ margin: 0, paddingLeft: '20px' }}>
               {alerts.map((a: any, i: number) => (
@@ -111,7 +115,7 @@ export default function SecurityDashboard() {
           overflowY: 'auto',
         }}>
           {sessions.length === 0 ? (
-            <p className="small" style={{ color: 'var(--subtle)' }}>Нет данных о сессиях. Эндпоинт: GET /api/admin/security/sessions</p>
+            <p className="small" style={{ color: 'var(--subtle)' }}>Нет активных сессий</p>
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
               {sessions.map((s: any, i: number) => (

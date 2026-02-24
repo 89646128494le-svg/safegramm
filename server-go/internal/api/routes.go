@@ -340,6 +340,10 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 		protected.POST("/admin/send-email", RequireAdmin(db), SendPersonalEmail(db))
 		protected.GET("/admin/anonymous-chat/:targetUserId", RequireAdmin(db), AdminGetAnonymousChat(db))
 		protected.POST("/admin/anonymous-dm", RequireAdmin(db), AdminSendAnonymousDM(db, wsHub))
+		protected.GET("/admin/security/sessions", RequireAdmin(db), GetAdminSecuritySessions(db))
+		protected.GET("/admin/security/alerts", RequireAdmin(db), GetAdminSecurityAlerts(db))
+		protected.GET("/admin/security/blocked-ips", RequireAdmin(db), GetAdminSecurityBlockedIPs(db))
+		protected.POST("/admin/security/block-ip", RequireAdmin(db), PostAdminSecurityBlockIP(db))
 	protected.POST("/admin/broadcast-email", RequireAdmin(db), BroadcastPersonalEmail(db))
 
 	// Технические работы

@@ -190,3 +190,52 @@ func PostAdminSafetyAlertResolve(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
+
+// GetAdminSecuritySessions — все активные сессии (для Security Dashboard).
+func GetAdminSecuritySessions(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var list []models.Session
+		if err := db.Preload("User").Where("is_active = ?", true).Order("last_used DESC").Limit(500).Find(&list).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		out := make([]gin.H, len(list))
+		for i, s := range list {
+			username := ""
+			if s.User.ID != "" {
+				username = s.User.Username
+			}
+			out[i] = gin.H{
+				"id":        s.ID,
+				"userId":   s.UserID,
+				"username": username,
+				"ip":       s.IPAddress,
+				"ipAddress": s.IPAddress,
+				"userAgent": s.UserAgent,
+				"lastActive": s.LastUsed,
+				"lastUsed":  s.LastUsed,
+				"createdAt": s.CreatedAt,
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"sessions": out})
+	}
+}
+
+// GetAdminSecurityAlerts — алерты для Security Dashboard (тот же формат, что safety-alerts).
+func GetAdminSecurityAlerts(db *gorm.DB) gin.HandlerFunc {
+	return GetAdminSafetyAlerts(db)
+}
+
+// GetAdminSecurityBlockedIPs — заблокированные IP (пока пустой список; при появлении таблицы — заполнить).
+func GetAdminSecurityBlockedIPs(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ips": []string{}})
+	}
+}
+
+// PostAdminSecurityBlockIP — блокировка IP (заглушка: 501 или сохранять в конфиг/таблицу при появлении).
+func PostAdminSecurityBlockIP(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "not_implemented", "detail": "block_ip_not_configured"})
+	}
+}
