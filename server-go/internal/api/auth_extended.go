@@ -14,7 +14,9 @@ import (
 	"gorm.io/gorm"
 	"safegram-server/internal/config"
 	"safegram-server/internal/email"
+	"safegram-server/internal/logger"
 	"safegram-server/internal/models"
+	"strings"
 )
 
 // LoginExtended расширенный логин с поддержкой 2FA, PIN, recovery codes
@@ -204,6 +206,10 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 		// Production: отправляем email и ждём результат
 		err := email.SendVerificationCode(*user.Email, code)
 		if err != nil {
+			logger.Error("SendLoginEmailCode: failed to send email", err, map[string]interface{}{
+				"username": req.Username,
+				"email":    maskEmail(*user.Email),
+			})
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":  "failed_to_send_email",
 				"detail": "Не удалось отправить email. Проверьте настройки SMTP.",
@@ -245,6 +251,20 @@ func VerifyEmail(db *gorm.DB) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Email подтвержден"})
 	}
+}
+
+func maskEmail(e string) string {
+	if e == "" {
+		return ""
+	}
+	at := strings.Index(e, "@")
+	if at <= 0 {
+		return "***"
+	}
+	if at <= 2 {
+		return "***" + e[at:]
+	}
+	return e[:2] + "***" + e[at:]
 }
 
 // generateRandomCode генерирует случайный числовой код

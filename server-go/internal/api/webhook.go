@@ -1,12 +1,17 @@
 package api
 
 import (
+	"bufio"
+	"fmt"
 	"net/http"
-	"safegram-server/internal/config"
-	"safegram-server/internal/logger"
+	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+
+	"safegram-server/internal/config"
+	"safegram-server/internal/logger"
 )
 
 // GetWebhookSettings получает текущие настройки webhook
@@ -70,12 +75,48 @@ func TestWebhook(c *gin.Context) {
 	})
 }
 
-// GetLogs получает последние логи (для админов)
+// GetLogs получает последние логи (для админов).
+// Источники: 1) LOG_FILE — последние 300 строк из файла; 2) иначе — подсказка про webhook/stdout.
 func GetLogs(c *gin.Context) {
-	// В будущем можно добавить сохранение логов в БД и возврат их здесь
+	logPath := os.Getenv("LOG_FILE")
+	if logPath == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"logs": []interface{}{},
+			"message": "Set LOG_FILE in .env to see file logs here. Otherwise check process stdout (journalctl -u <service>, docker logs, or terminal).",
+		})
+		return
+	}
+	logPath = filepath.Clean(logPath)
+	f, err := os.Open(logPath)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"logs": []interface{}{},
+			"message": "LOG_FILE not readable: " + err.Error(),
+		})
+		return
+	}
+	defer f.Close()
+	var lines []string
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	if err := sc.Err(); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"logs": []interface{}{},
+			"message": "Read error: " + err.Error(),
+		})
+		return
+	}
+	const lastN = 300
+	start := 0
+	if len(lines) > lastN {
+		start = len(lines) - lastN
+	}
+	lastLines := lines[start:]
 	c.JSON(http.StatusOK, gin.H{
-		"logs": []interface{}{},
-		"message": "Logs are sent to webhook in real-time",
+		"logs":    lastLines,
+		"message": fmt.Sprintf("Last %d lines from LOG_FILE", len(lastLines)),
 	})
 }
 
