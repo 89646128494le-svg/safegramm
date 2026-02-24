@@ -1,0 +1,11 @@
+# Образ только с бинарником (без сборки Go на сервере).
+# Собери бинарник на ПК: GOOS=linux GOARCH=amd64 go build -o main .
+# Залей main в server-go/ на сервер, затем: docker compose -f docker-compose.prebuilt.yml up -d --build
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /app
+COPY main .
+RUN mkdir -p /app/uploads /app/logs
+EXPOSE 8080
+CMD ["./main"]
