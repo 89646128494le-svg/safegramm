@@ -52,6 +52,8 @@ export default function AnonymousDMTab() {
       setMessages(Array.isArray(data.messages) ? data.messages : []);
       setChatId(data.chat?.id ?? null);
     } catch (e: any) {
+      setMessages([]);
+      setChatId(null);
       const msg = e?.status === 404 ? 'Обновите сервер до последней версии для анонимных сообщений.' : getErrorMessage(e, 'Не удалось загрузить переписку');
       showToast(msg, 'error');
     } finally {
@@ -201,9 +203,11 @@ export default function AnonymousDMTab() {
                 </div>
               ) : (
                 <>
-                  {messages.map((m) => (
+                  {messages.map((m, idx) => {
+                    if (!m || typeof m !== 'object') return null;
+                    return (
                     <div
-                      key={m.id}
+                      key={m.id ?? `msg-${idx}`}
                       style={{
                         alignSelf: m.senderId === 'support' ? 'flex-end' : 'flex-start',
                         maxWidth: '80%',
@@ -222,10 +226,10 @@ export default function AnonymousDMTab() {
                       )}
                       <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
                       <div style={{ fontSize: '11px', color: 'var(--subtle)', marginTop: '4px' }}>
-                        {new Date(m.createdAt).toLocaleString('ru-RU')}
+                        {m.createdAt != null ? new Date(m.createdAt).toLocaleString('ru-RU') : ''}
                       </div>
                     </div>
-                  ))}
+                  );})}
                   <div ref={messagesEndRef} />
                 </>
               )}

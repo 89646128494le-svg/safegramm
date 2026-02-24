@@ -256,8 +256,8 @@ function MetricCard({ title, value, change, icon, color }: {
         gap: '8px'
       }}>
         <span>{icon}</span>
-        <span>{value.toLocaleString()}</span>
-        {change !== undefined && (
+        <span>{(value ?? 0).toLocaleString()}</span>
+        {change !== undefined && change !== null && (
           <span style={{
             fontSize: '14px',
             color: change >= 0 ? '#22c55e' : '#ef4444',
@@ -298,7 +298,7 @@ function ActivityChart({ title, data, type }: {
       }}>
         {data.map((item, idx) => {
           const height = (item.count / maxValue) * 100;
-          const label = type === 'hourly' ? `${item.hour}:00` : type === 'daily' ? new Date(item.date!).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : item.week;
+          const label = type === 'hourly' ? `${item.hour ?? 0}:00` : type === 'daily' ? (item.date ? new Date(item.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '') : (item.week ?? '');
           
           return (
             <div
