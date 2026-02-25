@@ -199,6 +199,8 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
           else if (j.error === 'server_error') msg = 'Временная ошибка на сервере. Попробуйте позже.';
           else if (j.error === 'cannot_add_self') msg = 'Нельзя добавить себя в контакты';
           else if (j.error === 'user_not_found') msg = 'Пользователь не найден';
+          else if (j.error === 'no_email') msg = 'К этому аккаунту не привязана почта. Добавьте email в настройках или обратитесь в поддержку.';
+          else if (j.error === 'failed_to_send_email') msg = j.detail || 'Не удалось отправить письмо. Проверьте настройки почты на сервере или попробуйте позже.';
           else if (j.error === 'not_found') {
             if (path.includes('/users/')) msg = 'Пользователь не найден';
             else if (path.includes('/chats/')) msg = 'Чат не найден';

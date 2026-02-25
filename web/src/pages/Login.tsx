@@ -104,10 +104,16 @@ export default function Login({ onDone }: LoginProps) {
         nav(redirectTo || '/app/chats');
         return;
       } else if (res?.error === 'email_verification_required') {
-        // Требуется подтверждение email - автоматически отправляем код
+        // Требуется подтверждение email — переходим на шаг ввода кода и отправляем код
         setHasCloudCode(res.hasCloudCode || false);
         setLoading(false);
-        await sendEmailCode();
+        setStep('email');
+        setErr('');
+        try {
+          await sendEmailCode();
+        } catch (sendErr: any) {
+          setErr(sendErr?.message || 'Не удалось отправить код на почту. Нажмите «Отправить код повторно».');
+        }
         return;
       } else if (res?.error === 'cloud_code_required') {
         // Требуется облачный код
@@ -140,8 +146,8 @@ export default function Login({ onDone }: LoginProps) {
         setLoading(false);
         try {
           await sendEmailCode();
-        } catch {
-          setErr('Требуется подтверждение email. Запросите код повторно или введите код из письма.');
+        } catch (sendErr: any) {
+          setErr(sendErr?.message || 'Не удалось отправить код. Нажмите «Отправить код повторно».');
         }
         return;
       }
