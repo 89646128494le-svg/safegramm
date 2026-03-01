@@ -752,12 +752,32 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* На главной: в шапке не показывать «три полоски», всегда показывать навигацию (Главная, Функции и т.д.) */
+.app-header[data-landing="true"] .header-burger {
+  display: none !important;
+}
+.app-header[data-landing="true"] .header-public-nav {
+  display: flex !important;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+/* Выдвижное меню (Меню с Чаты, Серверы…) и кнопка-бургер — только для телефонов */
 @media (max-width: 768px) {
   .landing-sidebar {
     display: none;
   }
   .landing-sidebar-burger {
     display: flex;
+  }
+}
+
+@media (min-width: 769px) {
+  .landing-sidebar-burger {
+    display: none !important;
   }
 }
 

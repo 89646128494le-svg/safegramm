@@ -45,9 +45,12 @@ export default function Header({ user, onLogout }: HeaderProps) {
   const roles = getUserRoles();
   const isAdmin = roles.includes('admin') || roles.includes('owner');
 
+  const isLandingRoute = ['/', '/features', '/pricing', '/about', '/privacy', '/terms'].includes(location.pathname);
+
   return (
     <motion.header
       className="app-header app-header-frameless"
+      data-landing={isLandingRoute ? 'true' : undefined}
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -156,6 +159,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
             <div className="header-public-nav" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <Navigation />
             </div>
+            {!isLandingRoute && (
             <button
               type="button"
               className="header-burger"
@@ -177,6 +181,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
             >
               {showPublicNav ? <X size={22} /> : <Menu size={22} />}
             </button>
+            )}
           </>
         )}
         <ThemeSwitcher />
