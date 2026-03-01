@@ -20,7 +20,7 @@ type User struct {
 	ProfileColor  string    `gorm:"default:#3b82f6" json:"profileColor"`
 	ShowBio             bool       `gorm:"default:true" json:"showBio"`
 	ShowAvatar          bool       `gorm:"default:true" json:"showAvatar"`
-	AllowFindByUsername bool       `gorm:"default:false" json:"allowFindByUsername"` // иначе поиск по username не покажет пользователя (анти-пробив)
+	AllowFindByUsername bool       `gorm:"default:true" json:"allowFindByUsername"` // по умолчанию показывать в поиске; в настройках можно отключить
 	LastSeenVisibility  string     `gorm:"default:nobody;size:20" json:"lastSeenVisibility"` // nobody | contacts | everyone
 	LastSeen            *time.Time `json:"lastSeen,omitempty"`
 	TwoFASecret   string    `json:"-"`

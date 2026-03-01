@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -25,9 +26,18 @@ import (
 )
 
 func main() {
-	// Загрузка переменных окружения
+	// Загрузка .env: сначала из текущей папки, затем из папки с исполняемым файлом (важно для systemd/docker)
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+		if execPath, errExec := os.Executable(); errExec == nil {
+			envPath := filepath.Join(filepath.Dir(execPath), ".env")
+			if err2 := godotenv.Load(envPath); err2 != nil {
+				log.Println("No .env found (cwd or executable dir), using environment variables")
+			} else {
+				log.Println("Loaded .env from executable dir:", envPath)
+			}
+		} else {
+			log.Println("No .env file found, using environment variables")
+		}
 	}
 
 	// Инициализация конфигурации

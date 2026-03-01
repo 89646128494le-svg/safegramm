@@ -77,6 +77,28 @@ func LoadConfig() *EmailConfig {
 	return config
 }
 
+// IsEmailConfigured возвращает true, если в окружении заданы провайдер и учётные данные для отправки писем.
+func IsEmailConfigured() (bool, string) {
+	config := LoadConfig()
+	if config.Provider == "" {
+		return false, "EMAIL_PROVIDER не задан"
+	}
+	if config.SMTPUser == "" && config.APIKey == "" {
+		return false, "учётные данные не заданы (GMAIL_USER и GMAIL_APP_PASSWORD для gmail)"
+	}
+	switch config.Provider {
+	case "gmail", "smtp":
+		if config.SMTPUser == "" || config.SMTPPass == "" {
+			return false, "для gmail/smtp нужны GMAIL_USER и GMAIL_APP_PASSWORD"
+		}
+	case "sendgrid", "mailgun", "resend":
+		if config.APIKey == "" {
+			return false, "нужен API ключ для " + config.Provider
+		}
+	}
+	return true, "ok"
+}
+
 // SendEmail отправляет email через выбранный провайдер
 func SendEmail(to, subject, body string) error {
 	config := LoadConfig()

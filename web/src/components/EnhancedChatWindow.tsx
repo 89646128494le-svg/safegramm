@@ -593,11 +593,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           index === self.findIndex((m) => m.id === message.id)
         );
         setMessages(uniqueMessages);
-        setTimeout(() => {
+        requestAnimationFrame(() => {
           if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
           }
-        }, 100);
+        });
       }
       
       // Обновляем состояние пагинации
@@ -947,11 +947,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               return newMessages;
             });
             
-            setTimeout(() => {
+            requestAnimationFrame(() => {
               if (messagesEndRef.current) {
                 messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
               }
-            }, 100);
+            });
           } else if (msgType === 'message:update' || msgType === 'message_update') {
             const updateData = data.data || data;
             const msgChatId = updateData.chatId || updateData.chat_id || data.chatId;
@@ -1204,14 +1204,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     };
   }, [chatId, currentUser.id, loadMessages, loadUsers]);
 
-  // Автоскролл при новых сообщениях
+  // Автоскролл при новых сообщениях (мгновенно)
   useEffect(() => {
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       if (messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }
       setShowScrollToBottom(false);
-    }, 50);
+    });
   }, [messages]);
 
   // Автосохранение черновиков
@@ -1371,6 +1371,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           return;
         }
 
+        flushWebSocketBatch();
         const response = await api(`/api/chats/${chatId}/messages`, 'POST', payload);
         const realId = response.id;
         // Заменяем временное сообщение на реальное

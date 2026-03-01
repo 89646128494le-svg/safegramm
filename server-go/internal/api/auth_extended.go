@@ -155,6 +155,12 @@ func SendEmailCode(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// GetEmailStatus возвращает, настроена ли почта на сервере (для проверки .env).
+func GetEmailStatus(c *gin.Context) {
+	ok, msg := email.IsEmailConfigured()
+	c.JSON(http.StatusOK, gin.H{"configured": ok, "message": msg})
+}
+
 // SendLoginEmailCode отправляет код на email при входе (по username)
 func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -210,9 +216,13 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 				"username": req.Username,
 				"email":    maskEmail(*user.Email),
 			})
+			detail := "Не удалось отправить email. Проверьте настройки SMTP."
+			if strings.Contains(err.Error(), "email not configured") {
+				detail = "Почта не настроена на сервере: задайте GMAIL_USER и GMAIL_APP_PASSWORD в .env и перезапустите сервер."
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":  "failed_to_send_email",
-				"detail": "Не удалось отправить email. Проверьте настройки SMTP.",
+				"detail": detail,
 			})
 			return
 		}

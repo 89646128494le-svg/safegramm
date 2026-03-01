@@ -30,6 +30,24 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Payment{},
 	)
 	if err != nil { return err }
+
+	// Одноразовая миграция: включить показ в поиске для существующих пользователей (поиск для обычных пользователей)
+	db.Exec("CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)")
+	var done string
+	if db.Raw("SELECT name FROM schema_migrations WHERE name = ?", "allow_find_by_username_default").Scan(&done).Error == nil && done != "" {
+		// уже выполняли
+	} else {
+		res := db.Exec("UPDATE users SET allow_find_by_username = 1 WHERE allow_find_by_username = 0")
+		if res.Error == nil && res.RowsAffected > 0 {
+			log.Printf("Migration: allow_find_by_username set to true for %d user(s)", res.RowsAffected)
+		}
+		if db.Dialector.Name() == "postgres" {
+			db.Exec("INSERT INTO schema_migrations (name) VALUES (?) ON CONFLICT (name) DO NOTHING", "allow_find_by_username_default")
+		} else {
+			db.Exec("INSERT OR REPLACE INTO schema_migrations (name) VALUES (?)", "allow_find_by_username_default")
+		}
+	}
+
 	log.Println("Database migrations completed successfully")
 	return nil
 }

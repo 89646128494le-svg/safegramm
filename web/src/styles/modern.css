@@ -363,6 +363,7 @@ textarea {
   overflow: hidden;
   position: relative;
   width: 100%;
+  max-width: 100vw;
 }
 @media (min-width: 1280px) {
   .container {

@@ -5,12 +5,13 @@
 	email your-email@example.com
 }
 
+# Без Docker: проксируем на локальный Go-сервер.
 # HTTP по IP (для проверок)
 :80 {
-	reverse_proxy api:8080
+	reverse_proxy 127.0.0.1:8080
 }
 
-# HTTPS через nip.io (браузер не блокирует mixed content). Замени email на свой для Let's Encrypt.
+# HTTPS через nip.io (Caddy получит сертификат автоматически)
 141.8.198.152.nip.io {
-	reverse_proxy api:8080
+	reverse_proxy 127.0.0.1:8080
 }

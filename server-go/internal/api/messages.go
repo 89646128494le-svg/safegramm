@@ -317,13 +317,41 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		// Загружаем полную информацию о сообщении
 		db.Preload("Sender").Preload("Reactions").First(&message, "id = ?", message.ID)
 
-		// Загружаем информацию о сообщении, на которое отвечают
+		// Загружаем информацию о сообщении, на которое отвечаем
 		var replyToMessage *models.Message
 		if message.ReplyTo != "" {
 			var replyMsg models.Message
 			if err := db.Preload("Sender").First(&replyMsg, "id = ?", message.ReplyTo).Error; err == nil {
 				replyToMessage = &replyMsg
 			}
+		}
+
+		// Ранний broadcast по WebSocket — получатели видят сообщение сразу, без ожидания полного ответа API
+		if message.ModerationStatus == "approved" {
+			earlyResponse := gin.H{
+				"id": message.ID, "chatId": message.ChatID, "senderId": message.SenderID,
+				"text": message.Text, "ciphertext": message.Ciphertext,
+				"moderationStatus": message.ModerationStatus, "attachmentUrl": message.AttachmentURL,
+				"replyTo": message.ReplyTo, "forwardFrom": message.ForwardFrom, "threadId": message.ThreadID,
+				"stickerId": message.StickerID, "gifUrl": message.GifURL, "createdAt": message.CreatedAt,
+			}
+			if message.ExpiresAt != nil {
+				earlyResponse["expiresAt"] = message.ExpiresAt
+			}
+			if message.Anonymous {
+				earlyResponse["anonymous"] = true
+				earlyResponse["sender"] = shadowSender
+			} else if message.Sender.ID != "" {
+				earlyResponse["sender"] = gin.H{"id": message.Sender.ID, "username": message.Sender.Username, "avatarUrl": message.Sender.AvatarURL}
+			}
+			if replyToMessage != nil {
+				replySender := gin.H{"id": replyToMessage.Sender.ID, "username": replyToMessage.Sender.Username, "avatarUrl": replyToMessage.Sender.AvatarURL}
+				earlyResponse["replyToMessage"] = gin.H{"id": replyToMessage.ID, "text": replyToMessage.Text, "senderId": replyToMessage.SenderID, "sender": replySender}
+			}
+			wsData := cloneResponseForBroadcast(earlyResponse, message.Anonymous)
+			wsMessage := gin.H{"type": "message", "data": wsData}
+			messageJSON, _ := json.Marshal(wsMessage)
+			wsHub.BroadcastToChat(req.ChatID, messageJSON)
 		}
 
 		// Загружаем опрос если есть
@@ -453,16 +481,8 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			}
 		}
 
-		// Для WS получателям показываем отправителя как «Тень» для анонимных сообщений
-		wsData := cloneResponseForBroadcast(response, message.Anonymous)
+		// WS broadcast уже выполнен выше (ранний broadcast)
 		if message.ModerationStatus == "approved" {
-			wsMessage := gin.H{
-				"type": "message",
-				"data": wsData,
-			}
-			messageJSON, _ := json.Marshal(wsMessage)
-			wsHub.BroadcastToChat(req.ChatID, messageJSON)
-
 			// Вебхуки: message.created
 			webhookPayload, _ := json.Marshal(gin.H{
 				"event":   "message.created",

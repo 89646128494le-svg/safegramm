@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -27,6 +27,7 @@ func Connect(databaseURL string) (*gorm.DB, error) {
 		if path == "" {
 			path = "safegram.db"
 		}
+		// glebarez/sqlite — pure Go, работает без CGO (в т.ч. на сервере)
 		db, err := gorm.Open(sqlite.Open(path), config)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect via SQLite: %w", err)

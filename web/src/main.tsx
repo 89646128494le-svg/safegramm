@@ -7,7 +7,9 @@ import { queryClient } from './services/queryClient';
 import { loadApiConfig } from './services/api';
 import { i18n } from './i18n';
 import './styles.css';
+import './styles/modern.css';
 import './styles/mobile.css';
+import './styles/responsive.css';
 
 i18n.setLocale(i18n.getLocale());
 

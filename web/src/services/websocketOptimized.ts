@@ -10,7 +10,7 @@ interface BatchedMessage {
 
 let messageBatch: BatchedMessage[] = [];
 let batchTimeout: NodeJS.Timeout | null = null;
-const BATCH_DELAY = 50; // 50ms батчинг
+const BATCH_DELAY = 0; // без задержки — сообщения и события чата сразу
 const MAX_BATCH_SIZE = 10; // Максимум сообщений в батче
 
 // Сжатие данных (простая реализация через JSON.stringify с минификацией)
