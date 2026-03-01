@@ -752,7 +752,20 @@
   -webkit-overflow-scrolling: touch;
 }
 
-/* На главной: в шапке не показывать «три полоски», всегда показывать навигацию (Главная, Функции и т.д.) */
+.landing-sidebar-drawer-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 8px 0;
+  flex-shrink: 0;
+}
+
+.landing-sidebar-item-register {
+  background: linear-gradient(135deg, rgba(124, 108, 255, 0.25) 0%, rgba(61, 216, 255, 0.2) 100%) !important;
+  color: #e9ecf5 !important;
+  font-weight: 600;
+}
+
+/* На главной: десктоп — навигация в шапке; телефоны — только лого и название, разделы в выдвижном меню */
 .app-header[data-landing="true"] .header-burger {
   display: none !important;
 }
@@ -763,6 +776,12 @@
   flex-wrap: nowrap;
   gap: 8px;
   padding: 4px 0;
+}
+
+@media (max-width: 768px) {
+  .app-header[data-landing="true"] .header-right-section {
+    display: none !important;
+  }
 }
 
 /* Выдвижное меню (Меню с Чаты, Серверы…) и кнопка-бургер — только для телефонов */

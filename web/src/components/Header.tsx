@@ -153,7 +153,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
         </motion.span>
       </motion.div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div className="header-right-section" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         {!isAppRoute && !user && (
           <>
             <div className="header-public-nav" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Users, Settings, X, Search, Bot, User, Smartphone, MessageSquare, Server } from 'lucide-react';
+import { MessageCircle, Users, Settings, X, Search, Bot, User, Smartphone, MessageSquare, Server, Home, Star, DollarSign, Info, FileText, Shield, LogIn, UserPlus } from 'lucide-react';
 
 /** Нормальная иконка «три полоски» для мобильного меню */
 function BurgerIcon() {
@@ -13,6 +13,16 @@ function BurgerIcon() {
     </svg>
   );
 }
+
+/** Разделы сайта (лендинг) — в выдвижном меню на телефонах */
+const publicNavItems = [
+  { path: '/', label: 'Главная', icon: Home },
+  { path: '/features', label: 'Функции', icon: Star },
+  { path: '/pricing', label: 'Тарифы', icon: DollarSign },
+  { path: '/about', label: 'О нас', icon: Info },
+  { path: '/privacy', label: 'Приватность', icon: Shield },
+  { path: '/terms', label: 'Условия', icon: FileText },
+];
 
 /** Все разделы приложения — отображаются в меню и в сайдбаре */
 const items = [
@@ -91,6 +101,31 @@ export default function LandingSidebar() {
                 </button>
               </div>
               <div className="landing-sidebar-drawer-items" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
+                {publicNavItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className="landing-sidebar-item"
+                      onClick={() => setOpen(false)}
+                      style={isActive ? { color: '#a78bfa', background: 'rgba(124, 108, 255, 0.12)' } : undefined}
+                    >
+                      <Icon size={22} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+                <Link to="/login" className="landing-sidebar-item" onClick={() => setOpen(false)}>
+                  <LogIn size={22} />
+                  <span>Войти</span>
+                </Link>
+                <Link to="/register" className="landing-sidebar-item landing-sidebar-item-register" onClick={() => setOpen(false)}>
+                  <UserPlus size={22} />
+                  <span>Регистрация</span>
+                </Link>
+                <div className="landing-sidebar-drawer-divider" aria-hidden />
                 {items.map((item) => {
                   const Icon = item.icon;
                   return (
