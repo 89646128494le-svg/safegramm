@@ -703,6 +703,7 @@ textarea {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   position: relative;
   overflow: hidden;
@@ -720,7 +721,9 @@ textarea {
   position: relative;
   min-height: 0;
   height: calc(100vh - 250px);
+  height: calc(100dvh - 250px);
   max-height: calc(100vh - 250px);
+  max-height: calc(100dvh - 250px);
 }
 
 .message-wrapper {
