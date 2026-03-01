@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Users, Settings, X } from 'lucide-react';
+import { MessageCircle, Users, Settings, X, Search, Bot, User, Smartphone, MessageSquare, Server } from 'lucide-react';
 
 /** Нормальная иконка «три полоски» для мобильного меню */
 function BurgerIcon() {
@@ -14,10 +14,17 @@ function BurgerIcon() {
   );
 }
 
+/** Все разделы приложения — отображаются в меню и в сайдбаре */
 const items = [
-  { path: '/app/chats', href: '/login', label: 'Чаты', icon: MessageCircle },
-  { path: '/app/contacts', href: '/login', label: 'Контакты', icon: Users },
-  { path: '/app/settings', href: '/login', label: 'Настройки', icon: Settings },
+  { path: '/app/chats', label: 'Чаты', icon: MessageCircle },
+  { path: '/app/servers', label: 'Серверы', icon: Server },
+  { path: '/app/contacts', label: 'Контакты', icon: Users },
+  { path: '/app/search', label: 'Поиск', icon: Search },
+  { path: '/app/bots', label: 'Боты', icon: Bot },
+  { path: '/app/profile', label: 'Профиль', icon: User },
+  { path: '/app/sessions', label: 'Сессии', icon: Smartphone },
+  { path: '/app/settings', label: 'Настройки', icon: Settings },
+  { path: '/app/feedback', label: 'Обратная связь', icon: MessageSquare },
 ];
 
 export default function LandingSidebar() {
@@ -83,7 +90,7 @@ export default function LandingSidebar() {
                   <X size={22} />
                 </button>
               </div>
-              <div className="landing-sidebar-drawer-items">
+              <div className="landing-sidebar-drawer-items" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
                 {items.map((item) => {
                   const Icon = item.icon;
                   return (
