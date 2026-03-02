@@ -6,7 +6,9 @@ import {
   Globe, Bell, Image, FileText, Settings, ArrowRight, Check 
 } from 'lucide-react';
 import Header from '../components/Header';
+import LandingSidebar from '../components/LandingSidebar';
 import { useStore } from '../store/useStore';
+import '../styles/landing.css';
 
 const features = [
   {
@@ -92,7 +94,7 @@ export default function Features() {
       color: '#e9ecf5'
     }}>
       <Header user={user} onLogout={() => {}} />
-      
+      <LandingSidebar />
       <motion.section
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}

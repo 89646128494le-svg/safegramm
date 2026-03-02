@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Shield, Heart, Target, Users, Award, ArrowRight } from 'lucide-react';
 import Header from '../components/Header';
+import LandingSidebar from '../components/LandingSidebar';
+import '../styles/landing.css';
 import { useStore } from '../store/useStore';
 
 const values = [
@@ -46,7 +48,7 @@ export default function About() {
       color: '#e9ecf5'
     }}>
       <Header user={user} onLogout={() => {}} />
-      
+      <LandingSidebar />
       <motion.section
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}

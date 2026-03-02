@@ -209,26 +209,40 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Production: отправляем email и ждём результат
-		err := email.SendVerificationCode(*user.Email, code)
+		// Production: отправляем email с ограничением по времени (15 с), чтобы клиент не получал таймаут
+		const sendTimeout = 15 * time.Second
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- email.SendVerificationCode(*user.Email, code)
+		}()
+		var err error
+		select {
+		case err = <-errCh:
+			// готово
+		case <-time.After(sendTimeout):
+			err = fmt.Errorf("timeout after %v", sendTimeout)
+		}
 		if err != nil {
 			logger.Error("SendLoginEmailCode: failed to send email", err, map[string]interface{}{
 				"username": req.Username,
 				"email":    maskEmail(*user.Email),
 			})
-			detail := "Не удалось отправить email. Проверьте настройки SMTP."
+			detail := "Не удалось отправить email. Проверьте настройки SMTP на сервере или попробуйте позже."
 			if strings.Contains(err.Error(), "email not configured") {
 				detail = "Почта не настроена на сервере: задайте GMAIL_USER и GMAIL_APP_PASSWORD в .env и перезапустите сервер."
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{
+			if strings.Contains(err.Error(), "timeout") {
+				detail = "Таймаут отправки. Проверьте настройки почты на сервере или попробуйте позже."
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":  "failed_to_send_email",
 				"detail": detail,
 			})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"ok":          true,
-			"message":    "Код отправлен на email",
+			"ok":           true,
+			"message":      "Код отправлен на email",
 			"hasCloudCode": user.PinHash != "",
 		})
 	}

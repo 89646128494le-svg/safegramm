@@ -48,7 +48,7 @@ export default function Login({ onDone }: LoginProps) {
     setSendingCode(true);
     setErr('');
     setDevEmailCode('');
-    const SEND_CODE_TIMEOUT_MS = 20000;
+    const SEND_CODE_TIMEOUT_MS = 25000;
     const timeoutPromise = new Promise<never>((_, rej) =>
       setTimeout(() => rej(new Error('Таймаут отправки. Проверьте настройки почты на сервере или попробуйте позже.')), SEND_CODE_TIMEOUT_MS)
     );

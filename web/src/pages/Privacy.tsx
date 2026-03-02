@@ -2,9 +2,17 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Shield, Lock, Eye, Database } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Header from '../components/Header';
+import LandingSidebar from '../components/LandingSidebar';
+import { useStore } from '../store/useStore';
+import '../styles/landing.css';
 
 export default function Privacy() {
+  const { user } = useStore();
   return (
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #0a0e1a 0%, #1a1f35 100%)', color: '#e9ecf5' }}>
+      <Header user={user} onLogout={() => {}} />
+      <LandingSidebar />
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -203,5 +211,6 @@ export default function Privacy() {
         </div>
       </div>
     </motion.div>
+    </div>
   );
 }

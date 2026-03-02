@@ -2,9 +2,11 @@ package email
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/smtp"
 	"net/url"
@@ -122,11 +124,44 @@ func SendEmail(to, subject, body string) error {
 	}
 }
 
-// sendViaSMTP отправляет email через SMTP
+const smtpDialTimeout = 15 * time.Second
+
+// sendViaSMTP отправляет email через SMTP с таймаутом подключения (избегаем зависания).
 func sendViaSMTP(config *EmailConfig, to, subject, body string) error {
 	addr := fmt.Sprintf("%s:%s", config.SMTPHost, config.SMTPPort)
-	
-	// Создаем сообщение
+	conn, err := net.DialTimeout("tcp", addr, smtpDialTimeout)
+	if err != nil {
+		return fmt.Errorf("smtp connect: %w", err)
+	}
+	defer conn.Close()
+
+	host, _, _ := net.SplitHostPort(addr)
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		return fmt.Errorf("smtp client: %w", err)
+	}
+	defer client.Close()
+
+	if config.SMTPPort == "587" || config.SMTPPort == "2587" {
+		if err := client.StartTLS(&tls.Config{ServerName: config.SMTPHost}); err != nil {
+			return fmt.Errorf("smtp starttls: %w", err)
+		}
+	}
+
+	auth := smtp.PlainAuth("", config.SMTPUser, config.SMTPPass, config.SMTPHost)
+	if err := client.Auth(auth); err != nil {
+		return fmt.Errorf("smtp auth: %w", err)
+	}
+	if err := client.Mail(config.FromEmail); err != nil {
+		return fmt.Errorf("smtp mail: %w", err)
+	}
+	if err := client.Rcpt(to); err != nil {
+		return fmt.Errorf("smtp rcpt: %w", err)
+	}
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("smtp data: %w", err)
+	}
 	msg := []byte(fmt.Sprintf("From: %s <%s>\r\n", config.FromName, config.FromEmail) +
 		fmt.Sprintf("To: %s\r\n", to) +
 		fmt.Sprintf("Subject: %s\r\n", subject) +
@@ -134,14 +169,13 @@ func sendViaSMTP(config *EmailConfig, to, subject, body string) error {
 		"Content-Type: text/html; charset=UTF-8\r\n" +
 		"\r\n" +
 		body + "\r\n")
-
-	// Аутентификация
-	auth := smtp.PlainAuth("", config.SMTPUser, config.SMTPPass, config.SMTPHost)
-
-	// Отправка (smtp.SendMail автоматически использует TLS для порта 587)
-	// Для порта 465 нужен SSL, но smtp.SendMail не поддерживает SSL напрямую
-	// В этом случае используйте TLS на порту 587 или настройте клиент с crypto/tls
-	return smtp.SendMail(addr, auth, config.FromEmail, []string{to}, msg)
+	if _, err := w.Write(msg); err != nil {
+		return fmt.Errorf("smtp write: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("smtp close: %w", err)
+	}
+	return nil
 }
 
 // sendViaSendGrid отправляет email через SendGrid API

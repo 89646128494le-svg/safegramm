@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Check, Star, ArrowRight, Zap, Shield, Crown } from 'lucide-react';
 import Header from '../components/Header';
+import LandingSidebar from '../components/LandingSidebar';
+import '../styles/landing.css';
 import { useStore } from '../store/useStore';
 
 const plans = [
@@ -72,7 +74,7 @@ export default function Pricing() {
       color: '#e9ecf5'
     }}>
       <Header user={user} onLogout={() => {}} />
-      
+      <LandingSidebar />
       <motion.section
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
