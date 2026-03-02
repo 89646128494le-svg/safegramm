@@ -1,5 +1,6 @@
 
-const FALLBACK_API = 'http://127.0.0.1:8081';
+const SAFEGRAM_API_SERVER = 'https://141.8.198.152.nip.io';
+const FALLBACK_API = SAFEGRAM_API_SERVER;
 
 function normalizeBaseUrl(url: string): string {
   const u = url.replace(/\/+$/, '');
@@ -17,9 +18,7 @@ function normalizeBaseUrl(url: string): string {
 const DEFAULT_API = normalizeBaseUrl(
   typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL.trim() !== ''
     ? import.meta.env.VITE_API_URL.trim()
-    : (import.meta.env.DEV
-        ? FALLBACK_API
-        : (typeof window !== 'undefined' && window.location?.origin?.startsWith?.('http') ? window.location.origin : FALLBACK_API))
+    : SAFEGRAM_API_SERVER
 );
 
 // Runtime config из /config.json (для деплоя на Vercel при API на своём ПК)
