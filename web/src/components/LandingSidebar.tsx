@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Users, Settings, X, Search, Bot, User, Smartphone, MessageSquare, Server, Home, Star, DollarSign, Info, FileText, Shield, LogIn, UserPlus } from 'lucide-react';
+import { X, Home, Star, DollarSign, Info, FileText, Shield, LogIn, UserPlus } from 'lucide-react';
 
 /** Нормальная иконка «три полоски» для мобильного меню */
 function BurgerIcon() {
@@ -24,49 +24,13 @@ const publicNavItems = [
   { path: '/terms', label: 'Условия', icon: FileText },
 ];
 
-/** Все разделы приложения — отображаются в меню и в сайдбаре */
-const items = [
-  { path: '/app/chats', label: 'Чаты', icon: MessageCircle },
-  { path: '/app/servers', label: 'Серверы', icon: Server },
-  { path: '/app/contacts', label: 'Контакты', icon: Users },
-  { path: '/app/search', label: 'Поиск', icon: Search },
-  { path: '/app/bots', label: 'Боты', icon: Bot },
-  { path: '/app/profile', label: 'Профиль', icon: User },
-  { path: '/app/sessions', label: 'Сессии', icon: Smartphone },
-  { path: '/app/settings', label: 'Настройки', icon: Settings },
-  { path: '/app/feedback', label: 'Обратная связь', icon: MessageSquare },
-];
-
 export default function LandingSidebar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
-  const linkTo = (item: typeof items[0]) => item.path;
-  const content = (
-    <>
-      {items.map((item) => {
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.path}
-            to={linkTo(item)}
-            className="landing-sidebar-item"
-            onClick={() => setOpen(false)}
-            title={item.label}
-          >
-            <Icon size={22} />
-            <span className="landing-sidebar-label">{item.label}</span>
-          </Link>
-        );
-      })}
-    </>
-  );
-
   return (
     <>
-      <aside className="landing-sidebar" aria-label="Навигация приложения">
-        {content}
-      </aside>
+      <aside className="landing-sidebar" aria-hidden="true" />
       <button
         type="button"
         className="landing-sidebar-burger"
@@ -125,21 +89,6 @@ export default function LandingSidebar() {
                   <UserPlus size={22} />
                   <span>Регистрация</span>
                 </Link>
-                <div className="landing-sidebar-drawer-divider" aria-hidden />
-                {items.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.path}
-                      to={linkTo(item)}
-                      className="landing-sidebar-item"
-                      onClick={() => setOpen(false)}
-                    >
-                      <Icon size={22} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
               </div>
             </motion.aside>
           </>

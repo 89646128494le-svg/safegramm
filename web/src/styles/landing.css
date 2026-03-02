@@ -752,13 +752,6 @@
   -webkit-overflow-scrolling: touch;
 }
 
-.landing-sidebar-drawer-divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.08);
-  margin: 8px 0;
-  flex-shrink: 0;
-}
-
 .landing-sidebar-item-register {
   background: linear-gradient(135deg, rgba(124, 108, 255, 0.25) 0%, rgba(61, 216, 255, 0.2) 100%) !important;
   color: #e9ecf5 !important;
@@ -771,11 +764,36 @@
 }
 .app-header[data-landing="true"] .header-public-nav {
   display: flex !important;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: 8px;
   padding: 4px 0;
+  align-items: center;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.app-header[data-landing="true"] .header-public-nav a {
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: fit-content;
+  padding: 10px 16px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s, color 0.2s;
+}
+.app-header[data-landing="true"] .header-right-section {
+  flex-shrink: 0;
+  min-width: 0;
+}
+.app-header[data-landing="true"] > *:first-child {
+  flex-shrink: 0;
+}
+.app-header[data-landing="true"] {
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 @media (max-width: 768px) {
@@ -784,19 +802,20 @@
   }
 }
 
-/* Выдвижное меню (Меню с Чаты, Серверы…) и кнопка-бургер — только для телефонов */
-@media (max-width: 768px) {
+/* На ПК слева сайдбар не показываем — только контент лендинга */
+@media (min-width: 769px) {
   .landing-sidebar {
-    display: none;
+    display: none !important;
   }
   .landing-sidebar-burger {
-    display: flex;
+    display: none !important;
   }
 }
 
-@media (min-width: 769px) {
+/* Выдвижное меню и кнопка-бургер — только для телефонов */
+@media (max-width: 768px) {
   .landing-sidebar-burger {
-    display: none !important;
+    display: flex;
   }
 }
 
