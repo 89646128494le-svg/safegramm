@@ -9,7 +9,10 @@ export default function PrivacyPage() {
     <div className="min-h-screen bg-gradient-to-b from-[#0a0e1a] to-[#1a1f35] text-slate-200">
       <header className="glass border-b border-safegram-border">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold gradient-text">SafeGram</Link>
+          <Link href="/" className="flex items-center gap-2 text-xl font-bold gradient-text">
+          <img src="/logo.png" alt="SafeGram" className="h-8 w-auto object-contain" />
+          SafeGram
+        </Link>
           <Link href="/" className="text-slate-400 hover:text-white transition">На главную</Link>
         </div>
       </header>

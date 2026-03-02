@@ -46,7 +46,10 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0a0e1a] to-[#1a1f35] flex items-center justify-center p-6">
       <div className="glass w-full max-w-md p-8 rounded-2xl">
-        <Link href="/" className="text-lg font-bold gradient-text block mb-6">SafeGram</Link>
+        <Link href="/" className="flex items-center gap-2 mb-6">
+        <img src="/logo.png" alt="SafeGram" className="h-10 w-auto object-contain" />
+        <span className="text-lg font-bold gradient-text">SafeGram</span>
+      </Link>
         <h1 className="text-2xl font-bold text-white mb-6">Регистрация</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input

@@ -75,36 +75,14 @@ export default function Header({ user, onLogout }: HeaderProps) {
         whileHover={{ scale: 1.02 }}
       >
         <motion.div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px'
-          }}
-        >
-          <motion.div
             style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(124, 108, 255, 0.4)'
+              gap: '12px'
             }}
-            animate={{
-              rotate: [0, 5, -5, 0],
-              scale: [1, 1.05, 1]
-            }}
-            transition={{
-              duration: 3,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-          >
-            <Shield size={24} color="#0a0e1a" />
-          </motion.div>
-          <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+        >
+          <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src="/logo.png" alt="SafeGram" style={{ height: 40, width: 'auto', objectFit: 'contain' }} />
             <h1 style={{
               fontSize: '22px',
               fontWeight: 900,

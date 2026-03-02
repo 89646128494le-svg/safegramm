@@ -16,7 +16,10 @@ export default function LandingPage() {
     <div className="min-h-screen bg-gradient-to-b from-[#0a0e1a] to-[#1a1f35] text-slate-200 overflow-x-hidden">
       <header className="fixed top-0 left-0 right-0 z-50 glass border-b border-safegram-border">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <span className="text-xl font-bold gradient-text">SafeGram</span>
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="SafeGram" className="h-8 w-auto object-contain" />
+            <span className="text-xl font-bold gradient-text">SafeGram</span>
+          </Link>
           <nav className="flex items-center gap-6">
             <Link href="/privacy" className="text-slate-400 hover:text-white transition">Политика</Link>
             <Link href="/login" className="text-slate-300 hover:text-white transition">Вход</Link>
