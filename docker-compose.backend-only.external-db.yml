@@ -1,0 +1,60 @@
+# Только Redis + backend. Postgres — внешний (Neon, Supabase, Railway и т.д.).
+# В .env задай DATABASE_URL для внешней БД.
+# В server-go/.env тоже должен быть DATABASE_URL (или переопределится из env ниже).
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - safegram_network
+
+  backend:
+    build:
+      context: ./server-go
+      dockerfile: Dockerfile.runtime
+    image: safegram-api-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ./server-go/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - server_uploads:/app/uploads
+      - ./logs:/app/logs
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/health", "-O", "/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - safegram_network
+
+volumes:
+  redis_data:
+    driver: local
+  server_uploads:
+    driver: local
+
+networks:
+  safegram_network:
+    driver: bridge

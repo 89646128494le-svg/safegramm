@@ -3,7 +3,7 @@
 # Залей main в server-go/ на сервер, затем: docker compose -f docker-compose.prebuilt.yml up -d --build
 
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates wget
 WORKDIR /app
 COPY main .
 RUN chmod +x main && mkdir -p /app/uploads /app/logs
