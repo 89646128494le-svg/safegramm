@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/smtp"
@@ -107,21 +108,43 @@ func SendEmail(to, subject, body string) error {
 
 	// Если провайдер не настроен — возвращаем ошибку, чтобы API не врал «письмо отправлено»
 	if config.Provider == "" || (config.SMTPUser == "" && config.APIKey == "") {
-		return fmt.Errorf("email not configured: set EMAIL_PROVIDER and credentials (e.g. GMAIL_USER, GMAIL_APP_PASSWORD) in .env")
+		err := fmt.Errorf("email not configured: set EMAIL_PROVIDER and credentials (e.g. GMAIL_USER, GMAIL_APP_PASSWORD) in .env")
+		log.Printf("[email] SendEmail failed: %v", err)
+		return err
 	}
 
+	log.Printf("[email] Sending to %s via %s (from %s)", maskEmailForLog(to), config.Provider, config.FromEmail)
+	var err error
 	switch config.Provider {
 	case "gmail", "smtp":
-		return sendViaSMTP(config, to, subject, body)
+		err = sendViaSMTP(config, to, subject, body)
 	case "sendgrid":
-		return sendViaSendGrid(config, to, subject, body)
+		err = sendViaSendGrid(config, to, subject, body)
 	case "mailgun":
-		return sendViaMailgun(config, to, subject, body)
+		err = sendViaMailgun(config, to, subject, body)
 	case "resend":
-		return sendViaResend(config, to, subject, body)
+		err = sendViaResend(config, to, subject, body)
 	default:
-		return fmt.Errorf("unsupported email provider: %s", config.Provider)
+		err = fmt.Errorf("unsupported email provider: %s", config.Provider)
 	}
+	if err != nil {
+		log.Printf("[email] SendEmail failed: %v", err)
+		return err
+	}
+	log.Printf("[email] Sent successfully to %s", maskEmailForLog(to))
+	return nil
+}
+
+// maskEmailForLog скрывает часть email в логах (безопасность)
+func maskEmailForLog(email string) string {
+	if email == "" {
+		return ""
+	}
+	at := strings.Index(email, "@")
+	if at <= 0 || at >= len(email)-1 {
+		return "***"
+	}
+	return string(email[0]) + "***@" + email[at+1:]
 }
 
 const smtpDialTimeout = 15 * time.Second

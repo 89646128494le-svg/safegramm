@@ -120,21 +120,23 @@ func SendEmailCode(db *gorm.DB) gin.HandlerFunc {
 		// Отправляем email
 		err := email.SendVerificationCode(req.Email, code)
 		if err != nil {
-			// Если отправка не удалась, все равно возвращаем успех
-			// но в development режиме показываем код
+			logger.Error("SendEmailCode: failed to send email", err, map[string]interface{}{
+				"email": req.Email,
+			})
 			nodeEnv := os.Getenv("NODE_ENV")
 			if nodeEnv == "development" || nodeEnv == "" {
 				c.JSON(http.StatusOK, gin.H{
 					"ok": true,
 					"message": "Код отправлен на email (или ошибка отправки - проверьте настройки)",
 					"error": err.Error(),
-					"code": code, // Только для development
+					"code": code,
 				})
 				return
 			}
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "failed_to_send_email",
-				"detail": "Не удалось отправить email. Проверьте настройки SMTP.",
+				"error":   "failed_to_send_email",
+				"detail":  "Не удалось отправить email. Проверьте настройки SMTP.",
+				"hint":    err.Error(),
 			})
 			return
 		}
