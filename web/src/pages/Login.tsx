@@ -63,7 +63,11 @@ export default function Login({ onDone }: LoginProps) {
       if (res.code) setDevEmailCode(res.code);
       if (step !== 'email') setStep('email');
     } catch (e: any) {
-      setErr(humanFriendlyMessage(e?.message) || 'Не удалось отправить код. Проверьте логин и попробуйте снова.');
+      const baseMsg = humanFriendlyMessage(e?.message) || 'Не удалось отправить код. Проверьте логин и попробуйте снова.';
+      const isApiUnreachable = e?.status === 404 || /нет связи|network|failed to fetch|api недоступен/i.test(baseMsg);
+      setErr(isApiUnreachable
+        ? 'Сервер API недоступен. Укажите адрес бэкенда в public/config.json (apiUrl) или VITE_API_URL при сборке.'
+        : baseMsg);
     } finally {
       setSendingCode(false);
     }

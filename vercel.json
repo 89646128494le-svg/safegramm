@@ -7,7 +7,7 @@
   "rootDirectory": "web",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/|config\\.json).*)",
       "destination": "/index.html"
     }
   ],
