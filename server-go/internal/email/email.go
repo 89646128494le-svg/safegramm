@@ -42,8 +42,8 @@ func LoadConfig() *EmailConfig {
 	case "gmail":
 		config.SMTPHost = "smtp.gmail.com"
 		config.SMTPPort = "587"
-		config.SMTPUser = getEnv("GMAIL_USER", "")
-		config.SMTPPass = getEnv("GMAIL_APP_PASSWORD", "")
+		config.SMTPUser = strings.TrimSpace(getEnv("GMAIL_USER", ""))
+		config.SMTPPass = strings.ReplaceAll(strings.TrimSpace(getEnv("GMAIL_APP_PASSWORD", "")), " ", "")
 		if config.FromEmail == "" {
 			config.FromEmail = config.SMTPUser
 		}
@@ -69,8 +69,8 @@ func LoadConfig() *EmailConfig {
 	case "smtp":
 		config.SMTPHost = getEnv("SMTP_HOST", "smtp.gmail.com")
 		config.SMTPPort = getEnv("SMTP_PORT", "587")
-		config.SMTPUser = getEnv("SMTP_USER", "")
-		config.SMTPPass = getEnv("SMTP_PASSWORD", "")
+		config.SMTPUser = strings.TrimSpace(getEnv("SMTP_USER", ""))
+		config.SMTPPass = strings.ReplaceAll(strings.TrimSpace(getEnv("SMTP_PASSWORD", "")), " ", "")
 		if config.FromEmail == "" {
 			config.FromEmail = config.SMTPUser
 		}

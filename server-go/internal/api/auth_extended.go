@@ -227,23 +227,25 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 				"username": req.Username,
 				"email":    maskEmail(*user.Email),
 			})
-			detail := "Не удалось отправить email. Проверьте настройки SMTP на сервере или попробуйте позже."
-			if strings.Contains(err.Error(), "email not configured") {
-				detail = "Почта не настроена на сервере: задайте GMAIL_USER и GMAIL_APP_PASSWORD в .env и перезапустите сервер."
-			}
-			if strings.Contains(err.Error(), "timeout") {
-				detail = "Таймаут отправки. Проверьте настройки почты на сервере или попробуйте позже."
-			}
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error":  "failed_to_send_email",
-				"detail": detail,
+			// Временно при ошибке отправки всё равно возвращаем код, чтобы пользователь мог войти
+			c.JSON(http.StatusOK, gin.H{
+				"ok":           true,
+				"message":      "Письмо не отправилось. Используйте код ниже для входа (временно).",
+				"hasCloudCode": user.PinHash != "",
+				"code":         code,
 			})
 			return
 		}
+		logger.Info("SendLoginEmailCode: email sent", map[string]interface{}{
+			"username": req.Username,
+			"to":       maskEmail(*user.Email),
+		})
+		// Временно возвращаем код в ответе, пока не решена доставка писем — пользователь может ввести код с экрана
 		c.JSON(http.StatusOK, gin.H{
 			"ok":           true,
-			"message":      "Код отправлен на email",
+			"message":      "Код отправлен на email (если не пришёл — введите код с экрана)",
 			"hasCloudCode": user.PinHash != "",
+			"code":         code,
 		})
 	}
 }

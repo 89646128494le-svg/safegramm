@@ -1,5 +1,7 @@
 # SafeGram API + PostgreSQL + Caddy (Sprintbox / любой VDS)
 # Перед запуском: скопируй .env.sprintbox.example в .env и заполни значения.
+# Для почты (коды входа): в .env должны быть EMAIL_PROVIDER, GMAIL_USER, GMAIL_APP_PASSWORD.
+# После смены .env: docker compose up -d --force-recreate api
 
 services:
   postgres:

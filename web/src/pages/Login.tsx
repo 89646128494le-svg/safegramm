@@ -181,7 +181,7 @@ export default function Login({ onDone }: LoginProps) {
             </p>
             {devEmailCode && (
               <p style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(124, 108, 255, 0.15)', borderRadius: 10, fontSize: 14, color: 'var(--text-primary)' }}>
-                Код для входа (разработка): <strong style={{ letterSpacing: 2, fontFamily: 'monospace' }}>{devEmailCode}</strong>
+                Код для входа: <strong style={{ letterSpacing: 2, fontFamily: 'monospace' }}>{devEmailCode}</strong>
               </p>
             )}
             <motion.div
