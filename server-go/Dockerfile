@@ -3,15 +3,16 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
-# Копируем go.mod (go.sum может быть в .gitignore — не обязателен для сборки)
-COPY go.mod ./
-RUN go mod download
+# Меньше нагрузка на сеть при таймаутах; повторные попытки загрузки модулей
+ENV GOPROXY=https://proxy.golang.org,direct
+ENV GOMAXPROCS=1
 
-# Копируем исходный код
+COPY go.mod go.sum ./
+# Повторные попытки (на VPS часто TLS handshake timeout до proxy.golang.org)
+RUN for i in 1 2 3 4 5; do go mod download && break; echo "retry $i..."; sleep 20; done
+
 COPY . .
 
-# Генерируем go.sum и собираем с минимальным параллелизмом (меньше RAM на VPS)
-ENV GOMAXPROCS=1
 RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -p 1 -o main .
 
 # Final stage
