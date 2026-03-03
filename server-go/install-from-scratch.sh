@@ -58,10 +58,15 @@ echo "[4/5] Сборка Docker-образа (может занять неско
 docker build -t safegram-server .
 echo "      Готово."
 
-# 5) Остановить старый контейнер (если есть) и запустить новый
+# 5) Остановить старый контейнер и любой процесс на 8080, затем запустить контейнер
 echo "[5/5] Запуск контейнера ..."
 docker stop safegram-server 2>/dev/null || true
 docker rm safegram-server 2>/dev/null || true
+# Освободить порт 8080, если занят бинарником/другим процессом
+if command -v ss >/dev/null 2>&1; then
+  PID=$(ss -tlnp 2>/dev/null | awk '/:8080 / { gsub(/.*pid=/, ""); gsub(/,.*/, ""); print; exit }')
+  [ -n "$PID" ] && kill "$PID" 2>/dev/null && sleep 1 && echo "      Освобождён порт 8080 (PID $PID)."
+fi
 mkdir -p uploads logs
 docker run -d \
   --name safegram-server \

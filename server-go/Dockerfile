@@ -13,7 +13,8 @@ RUN for i in 1 2 3 4 5; do go mod download && break; echo "retry $i..."; sleep 2
 
 COPY . .
 
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -p 1 -o main .
+# Без go mod tidy — не тянем тестовые зависимости (testify, ginkgo и т.д.), сборка в разы быстрее
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
 # Final stage
 FROM alpine:latest
