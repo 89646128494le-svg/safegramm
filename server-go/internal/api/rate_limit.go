@@ -71,6 +71,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		if !limiter.allow(ip) {
+			RecordSecurityViolation(ip)
 			c.JSON(429, gin.H{"error": "too_many_requests"})
 			c.Abort()
 			return
@@ -99,6 +100,7 @@ func AuthRateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		if !authLimiter.allow(ip) {
+			RecordSecurityViolation(ip)
 			c.JSON(429, gin.H{"error": "too_many_attempts"})
 			c.Abort()
 			return

@@ -97,14 +97,11 @@ export default function Login({ onDone }: LoginProps) {
 
       // Обработка различных ответов
       if (res && res.token) {
-        // Успешный вход
         setToken(res.token);
         setUser(res.user);
-        // Устанавливаем флаг принятия политик при успешном входе
         localStorage.setItem('policiesAccepted', '1');
-        if (onDone) {
-          onDone();
-        }
+        if (res.sessionId) localStorage.setItem('safegram_session_id', res.sessionId);
+        if (onDone) onDone();
         nav(redirectTo || '/app/chats');
         return;
       } else if (res?.error === 'email_verification_required') {

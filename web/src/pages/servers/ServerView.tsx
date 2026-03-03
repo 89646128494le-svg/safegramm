@@ -7,6 +7,7 @@ import { ConfirmModal, PromptModal } from '../../components/Modal';
 import EnhancedChatWindow from '../../components/EnhancedChatWindow';
 import VoiceChannelList from '../../components/voice/VoiceChannelList';
 import VoiceChannelView from '../../components/voice/VoiceChannelView';
+import ServerSettingsModal from '../../components/servers/ServerSettingsModal';
 import { useStore } from '../../store/useStore';
 
 interface Server {
@@ -14,6 +15,7 @@ interface Server {
   name: string;
   description?: string;
   ownerId: string;
+  iconUrl?: string;
   inviteLink?: string;
   createdAt: number;
 }
@@ -35,11 +37,18 @@ interface Category {
   position: number;
 }
 
+interface ServerRoleBadge {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface Member {
   id: string;
   username: string;
   avatarUrl?: string;
   role: string;
+  roles?: ServerRoleBadge[];
 }
 
 export default function ServerView() {
@@ -64,6 +73,7 @@ export default function ServerView() {
     channelName: ''
   });
   const [voiceState, setVoiceState] = useState<Record<string, string[]>>({});
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -134,6 +144,7 @@ export default function ServerView() {
         username: m.user?.username ?? m.username ?? '?',
         avatarUrl: m.user?.avatarUrl ?? m.avatarUrl,
         role: m.role ?? 'member',
+        roles: m.roles || [],
       })));
     } catch (e: any) {
       console.error('Failed to load members:', e);
@@ -248,9 +259,19 @@ export default function ServerView() {
   const voiceChannels = channels.filter(c => c.type === 'voice').sort((a, b) => a.position - b.position);
   const categoriesSorted = categories.slice().sort((a, b) => a.position - b.position);
   const uncategorized = textChannels.filter(c => !c.categoryId);
+  const currentUserRole = members.find(m => m.id === user?.id)?.role || 'member';
 
   return (
     <div className="container">
+      {showSettings && server && id && (
+        <ServerSettingsModal
+          serverId={id}
+          server={server}
+          currentUserRole={currentUserRole}
+          onClose={() => setShowSettings(false)}
+          onSaved={() => { loadServer(); setShowSettings(false); }}
+        />
+      )}
       <div className="sidebar" style={{width: '260px'}}>
         <div style={{marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--border, #374151)'}}>
           <div style={{fontSize: '20px', fontWeight: '700', marginBottom: '4px'}}>{server.name}</div>
@@ -284,6 +305,15 @@ export default function ServerView() {
                 >
                   🕓 История
                 </button>
+                {(members.find(m => m.id === user?.id)?.role === 'owner' || members.find(m => m.id === user?.id)?.role === 'admin') && (
+                  <button
+                    onClick={() => setShowSettings(true)}
+                    style={{padding: '6px 10px', fontSize: 12}}
+                    title="Настройки сервера"
+                  >
+                    ⚙️ Настройки
+                  </button>
+                )}
               </div>
               <div style={{marginTop: 10}}>
                 <img
@@ -442,10 +472,17 @@ export default function ServerView() {
                   {(member.username || '?')[0].toUpperCase()}
                 </div>
                 <div style={{flex: 1, minWidth: 0}}>
-                  <div style={{fontSize: '14px', fontWeight: '500'}}>{member.username}</div>
-                  <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
-                    {member.role === 'owner' ? '👑 Владелец' : member.role === 'admin' ? '⚡ Админ' : '👤 Участник'}
+                  <div style={{fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap'}}>
+                    {member.username}
+                    {member.role === 'owner' && <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(251,191,36,0.2)', color: '#fbbf24' }}>👑 Владелец</span>}
+                    {member.role === 'admin' && <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(124,108,255,0.2)', color: '#a78bfa' }}>Админ</span>}
+                    {member.roles?.map((r: ServerRoleBadge) => (
+                      <span key={r.id} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: `${r.color}20`, color: `#${r.color}` }}>{r.name}</span>
+                    ))}
                   </div>
+                  {member.role !== 'owner' && member.role !== 'admin' && (!member.roles || member.roles.length === 0) && (
+                    <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>Участник</div>
+                  )}
                 </div>
               </div>
             ))
@@ -494,11 +531,13 @@ export default function ServerView() {
               if (!ch.chatId) {
                 return <div className="empty" style={{padding: '48px'}}>У канала нет chatId</div>;
               }
+              const serverMemberRoles = Object.fromEntries(members.map((m) => [m.id, m.roles || []]));
               return (
                 <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                   <EnhancedChatWindow
                     chatId={ch.chatId}
                     currentUser={{ id: user.id, username: user.username, avatarUrl: user.avatarUrl, status: user.status } as any}
+                    serverMemberRoles={serverMemberRoles}
                   />
                 </div>
               );

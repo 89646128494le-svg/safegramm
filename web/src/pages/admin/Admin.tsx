@@ -22,7 +22,7 @@ import SecurityPolicyTab from '../../components/admin/SecurityPolicyTab';
 import CommunicationTab from '../../components/admin/CommunicationTab';
 import SystemIntegrationsTab from '../../components/admin/SystemIntegrationsTab';
 import AnalyticsReportsTab from '../../components/admin/AnalyticsReportsTab';
-import { ADMIN_TABS, canAccessAdminTab, getRoleLabel, getRoleLevel, isSystemOwner, canBlockUser, canDemoteUser, canPromoteTo, canDeleteUser, ROLE_LEVEL } from '../../utils/roles';
+import { ADMIN_TABS, ADMIN_SECTIONS, canAccessAdminTab, getRoleLabel, getRoleLevel, isSystemOwner, canBlockUser, canDemoteUser, canPromoteTo, canDeleteUser, ROLE_LEVEL } from '../../utils/roles';
 
 type AdminTabId = typeof ADMIN_TABS[number]['id'];
 
@@ -100,45 +100,64 @@ export default function Admin() {
           )}
         </div>
         <nav style={{ flex: 1, padding: '0 12px' }}>
-          {visibleTabs.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className="admin-nav-item"
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                marginBottom: '4px',
-                fontWeight: tab === id ? '600' : '500',
-                fontSize: '14px',
-                textAlign: 'left',
-                border: 'none',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                background: tab === id
-                  ? 'linear-gradient(135deg, var(--accent, #7c6cff), var(--accent-2, #3dd8ff))'
-                  : 'transparent',
-                color: tab === id ? '#fff' : 'var(--fg, #e9ecf5)',
-                boxShadow: tab === id ? '0 4px 14px rgba(124, 108, 255, 0.35)' : 'none',
-              }}
-              onMouseEnter={(e) => {
-                if (tab !== id) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                  e.currentTarget.style.color = 'var(--fg)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (tab !== id) {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = 'var(--fg)';
-                }
-              }}
-            >
-              {label}
-            </button>
-          ))}
+          {ADMIN_SECTIONS.slice().sort((a, b) => a.order - b.order).map((section) => {
+            const sectionTabs = visibleTabs.filter((t) => (t as typeof ADMIN_TABS[number]).section === section.id);
+            if (sectionTabs.length === 0) return null;
+            return (
+              <div key={section.id} style={{ marginBottom: '16px' }}>
+                <div style={{
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'var(--subtle, #6b7280)',
+                  padding: '8px 14px 6px',
+                  marginBottom: '4px',
+                }}>
+                  {section.label}
+                </div>
+                {sectionTabs.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id)}
+                    className="admin-nav-item"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      marginBottom: '2px',
+                      fontWeight: tab === id ? '600' : '500',
+                      fontSize: '13px',
+                      textAlign: 'left',
+                      border: 'none',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      background: tab === id
+                        ? 'linear-gradient(135deg, var(--accent, #7c6cff), var(--accent-2, #3dd8ff))'
+                        : 'transparent',
+                      color: tab === id ? '#fff' : 'var(--fg, #e9ecf5)',
+                      boxShadow: tab === id ? '0 4px 14px rgba(124, 108, 255, 0.35)' : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (tab !== id) {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                        e.currentTarget.style.color = 'var(--fg)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (tab !== id) {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = 'var(--fg)';
+                      }
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         <p style={{ padding: '12px 20px 0', margin: 0, fontSize: '11px', color: 'var(--subtle)', opacity: 0.8 }}>
           /app/admin

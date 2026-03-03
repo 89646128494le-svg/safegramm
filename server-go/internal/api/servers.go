@@ -92,6 +92,61 @@ func CreateServer(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// UpdateServer обновляет настройки сервера (owner/admin)
+func UpdateServer(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		serverID := c.Param("id")
+		userID, _ := c.Get("userID")
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+
+		var member models.ServerMember
+		if err := db.Where("server_id = ? AND user_id = ?", serverID, userIDStr).First(&member).Error; err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		if member.Role != "owner" && member.Role != "admin" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+
+		var server models.Server
+		if err := db.First(&server, "id = ?", serverID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+
+		var req struct {
+			Name        *string `json:"name"`
+			Description *string `json:"description"`
+			IconURL     *string `json:"iconUrl"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
+			return
+		}
+
+		if req.Name != nil && len(*req.Name) >= 2 {
+			server.Name = *req.Name
+		}
+		if req.Description != nil {
+			server.Description = *req.Description
+		}
+		if req.IconURL != nil {
+			server.IconURL = *req.IconURL
+		}
+		if err := db.Save(&server).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"server": server})
+	}
+}
+
 // GetServers возвращает серверы пользователя
 func GetServers(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {

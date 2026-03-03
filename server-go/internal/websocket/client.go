@@ -35,6 +35,12 @@ type Client struct {
 	send   chan []byte
 	userID string
 	chats  map[string]bool // Подписки на чаты
+	onClose func()        // вызывается при отключении (например, для снятия лимита по IP)
+}
+
+// SetOnClose задаёт callback при отключении клиента (Hub вызовет при unregister).
+func (c *Client) SetOnClose(f func()) {
+	c.onClose = f
 }
 
 // NewClient создает нового клиента

@@ -42,7 +42,13 @@ func GetSessions(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(http.StatusOK, gin.H{"sessions": result})
+		out := gin.H{"sessions": result}
+		if currentID, ok := c.Get("sessionId"); ok && currentID != nil {
+			if sid, ok := currentID.(string); ok {
+				out["currentSessionId"] = sid
+			}
+		}
+		c.JSON(http.StatusOK, out)
 	}
 }
 

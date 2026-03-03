@@ -2,31 +2,233 @@ package api
 
 import (
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-	"safegram-server/internal/models"
 )
 
-// GetTrustScore возвращает уровень доверия сессии (для отображения в UI).
-func GetTrustScore(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID, _ := c.Get("userID")
-		userIDStr, ok := userID.(string)
-		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-			return
-		}
-		var user models.User
-		if err := db.Select("id", "two_fa_secret").First(&user, "id = ?", userIDStr).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
-			return
-		}
-		identityVerified := user.TwoFASecret != ""
-		sessionVerified := true
-		c.JSON(http.StatusOK, gin.H{
-			"identityVerified": identityVerified,
-			"sessionVerified":  sessionVerified,
-		})
+const (
+	defaultMaxBodyBytes     = 10 << 20  // 10 MB для обычных запросов
+	defaultDDoSReqPerMin    = 400       // глобальный лимит запросов/мин с одного IP
+	defaultViolationsToBan  = 15        // после скольких нарушений (429/401/403) банить
+	defaultBanDurationMin   = 30        // минуты бана
+	defaultWSConnsPerIP     = 5         // макс WebSocket соединений с одного IP
+)
+
+// ipBlocklist — временный бан IP после повторных нарушений (rate limit, auth fail).
+type ipBlocklist struct {
+	mu       sync.RWMutex
+	banned   map[string]time.Time
+	violations map[string]*violationCount
+	banDur   time.Duration
+	toBan    int
+}
+
+type violationCount struct {
+	count int
+	seen  time.Time
+}
+
+func newIPBlocklist(banMinutes, violationsToBan int) *ipBlocklist {
+	dur := time.Duration(banMinutes) * time.Minute
+	if dur <= 0 {
+		dur = defaultBanDurationMin * time.Minute
 	}
+	if violationsToBan <= 0 {
+		violationsToBan = defaultViolationsToBan
+	}
+	return &ipBlocklist{
+		banned:     make(map[string]time.Time),
+		violations: make(map[string]*violationCount),
+		banDur:     dur,
+		toBan:      violationsToBan,
+	}
+}
+
+func (b *ipBlocklist) isBanned(ip string) bool {
+	b.mu.RLock()
+	until, ok := b.banned[ip]
+	b.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	if time.Now().After(until) {
+		b.mu.Lock()
+		delete(b.banned, ip)
+		delete(b.violations, ip)
+		b.mu.Unlock()
+		return false
+	}
+	return true
+}
+
+func (b *ipBlocklist) recordViolation(ip string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	v, ok := b.violations[ip]
+	if !ok {
+		b.violations[ip] = &violationCount{count: 1, seen: time.Now()}
+		return
+	}
+	if time.Since(v.seen) > 5*time.Minute {
+		v.count = 1
+		v.seen = time.Now()
+		return
+	}
+	v.count++
+	v.seen = time.Now()
+	if v.count >= b.toBan {
+		b.banned[ip] = time.Now().Add(b.banDur)
+		delete(b.violations, ip)
+	}
+}
+
+func (b *ipBlocklist) isWhitelisted(ip string) bool {
+	wl := os.Getenv("SECURITY_IP_WHITELIST")
+	if wl == "" {
+		return false
+	}
+	for _, s := range strings.Split(wl, ",") {
+		s = strings.TrimSpace(s)
+		if s == ip {
+			return true
+		}
+	}
+	return false
+}
+
+var globalBlocklist = newIPBlocklist(envInt("SECURITY_BAN_MINUTES", defaultBanDurationMin), envInt("SECURITY_VIOLATIONS_TO_BAN", defaultViolationsToBan))
+
+func envInt(key string, defaultVal int) int {
+	if s := os.Getenv(key); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultVal
+}
+
+type ddosVisitor struct {
+	count       int
+	windowStart time.Time
+}
+
+// globalDDoS — жёсткий лимит запросов в минуту с одного IP (защита от флуда).
+type globalDDoS struct {
+	mu     sync.RWMutex
+	perIP  map[string]*ddosVisitor
+	limit  int
+	window time.Duration
+}
+
+var globalDDoSlimiter = &globalDDoS{
+	perIP:  make(map[string]*ddosVisitor),
+	limit:  envInt("SECURITY_GLOBAL_RATE_PER_MIN", defaultDDoSReqPerMin),
+	window: time.Minute,
+}
+
+func (g *globalDDoS) allow(ip string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := time.Now()
+	v, ok := g.perIP[ip]
+	if !ok {
+		g.perIP[ip] = &ddosVisitor{count: 1, windowStart: now}
+		return true
+	}
+	if now.Sub(v.windowStart) > g.window {
+		v.count = 1
+		v.windowStart = now
+		return true
+	}
+	v.count++
+	return v.count <= g.limit
+}
+
+func (g *globalDDoS) recordReject(ip string) {
+	globalBlocklist.recordViolation(ip)
+}
+
+// SecurityMiddleware — порядок: 1) блоклист, 2) глобальный rate limit, 3) лимит тела.
+// Вешать первым после Recovery/CORS, до остальных хендлеров.
+func SecurityMiddleware() gin.HandlerFunc {
+	maxBody := int64(envInt("SECURITY_MAX_BODY_MB", 10) << 20)
+	if maxBody <= 0 {
+		maxBody = defaultMaxBodyBytes
+	}
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if path == "/health" || path == "/metrics" {
+			c.Next()
+			return
+		}
+		ip := c.ClientIP()
+		if globalBlocklist.isWhitelisted(ip) {
+			c.Next()
+			return
+		}
+		if globalBlocklist.isBanned(ip) {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "ip_temporarily_blocked"})
+			return
+		}
+		if !globalDDoSlimiter.allow(ip) {
+			globalDDoSlimiter.recordReject(ip)
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too_many_requests"})
+			return
+		}
+		if c.Request.Body != nil && c.Request.ContentLength > maxBody {
+			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request_body_too_large"})
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBody)
+		c.Next()
+		// Учитываем только 429 (флуд) для временного бана; 401/403 не баним
+		if c.Writer.Status() == 429 {
+			globalBlocklist.recordViolation(ip)
+		}
+	}
+}
+
+// wsConnLimit — макс одновременных WebSocket соединений с одного IP.
+type wsConnLimit struct {
+	mu    sync.Mutex
+	perIP map[string]int
+	max   int
+}
+
+var wsConnLimiter = &wsConnLimit{
+	perIP: make(map[string]int),
+	max:   envInt("SECURITY_WS_CONNS_PER_IP", defaultWSConnsPerIP),
+}
+
+func (w *wsConnLimit) allow(ip string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n := w.perIP[ip]
+	return n < w.max
+}
+
+func (w *wsConnLimit) acquire(ip string) (release func()) {
+	w.mu.Lock()
+	w.perIP[ip]++
+	w.mu.Unlock()
+	return func() {
+		w.mu.Lock()
+		if w.perIP[ip] > 0 {
+			w.perIP[ip]--
+		}
+		if w.perIP[ip] == 0 {
+			delete(w.perIP, ip)
+		}
+		w.mu.Unlock()
+	}
+}
+
+// RecordSecurityViolation вызывается при явном нарушении (например 429) для учёта в блоклисте.
+func RecordSecurityViolation(ip string) {
+	globalBlocklist.recordViolation(ip)
 }

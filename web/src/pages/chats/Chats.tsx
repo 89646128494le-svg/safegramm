@@ -208,21 +208,37 @@ export default function Chats() {
             }
           }
         } else if (data.type === 'message') {
-          // Новое сообщение - обновляем счетчик непрочитанных
           const messageData = data.data || data;
           const msgChatId = messageData.chatId || messageData.chat_id;
-          
-          // Если чат не открыт, увеличиваем счетчик
-          if (msgChatId && msgChatId !== selectedChatId) {
-            setChats(prev => prev.map(chat => {
-              if (chat.id === msgChatId) {
-                return {
-                  ...chat,
-                  unreadCount: ((chat as any).unreadCount || 0) + 1
-                };
-              }
-              return chat;
-            }));
+          const createdAt = typeof messageData.createdAt === 'string'
+            ? new Date(messageData.createdAt).getTime()
+            : (typeof messageData.createdAt === 'number' ? messageData.createdAt : Date.now());
+
+          if (msgChatId) {
+            setChats(prev => {
+              const lastMessage = {
+                text: messageData.text || '',
+                attachmentUrl: messageData.attachmentUrl || messageData.attachment_url,
+                createdAt,
+                senderId: messageData.senderId || messageData.sender_id,
+                stickerId: messageData.stickerId || messageData.sticker_id,
+                gifUrl: messageData.gifUrl || messageData.gif_url,
+              };
+              const updated = prev.map(chat =>
+                chat.id === msgChatId
+                  ? {
+                      ...chat,
+                      lastMessage,
+                      unreadCount: msgChatId !== selectedChatId ? ((chat as any).unreadCount || 0) + 1 : (chat as any).unreadCount || 0,
+                    }
+                  : chat
+              );
+              return updated.sort((a, b) => {
+                const aTime = a.lastMessage?.createdAt ?? (a as any).lastMessageAt ?? 0;
+                const bTime = b.lastMessage?.createdAt ?? (b as any).lastMessageAt ?? 0;
+                return (typeof bTime === 'number' ? bTime : new Date(bTime).getTime()) - (typeof aTime === 'number' ? aTime : new Date(aTime).getTime());
+              });
+            });
           }
         } else if (data.type === 'message:read' || data.type === 'chat:read') {
           // Сообщения прочитаны - сбрасываем счетчик

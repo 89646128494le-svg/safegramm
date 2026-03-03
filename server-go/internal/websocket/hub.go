@@ -9,18 +9,22 @@ import (
 	"safegram-server/internal/redis"
 )
 
+// ChatPeerResolver возвращает userID участников чата (кроме excludeUserID). Для DM — один ID.
+type ChatPeerResolver func(chatID string, excludeUserID string) []string
+
 // Hub поддерживает множество активных подключений и рассылает сообщения
 type Hub struct {
-	clients     map[*Client]bool
-	clientsMu   sync.RWMutex
-	register    chan *Client
-	unregister  chan *Client
-	broadcast   chan []byte
-	sendToChat  chan *ChatMessage
-	voiceRooms  map[string]map[string]bool
-	voiceRoomsMu sync.RWMutex
-	voiceAction chan *VoiceRoomAction
-	quit        chan struct{}
+	clients       map[*Client]bool
+	clientsMu     sync.RWMutex
+	register      chan *Client
+	unregister    chan *Client
+	broadcast     chan []byte
+	sendToChat    chan *ChatMessage
+	voiceRooms    map[string]map[string]bool
+	voiceRoomsMu  sync.RWMutex
+	voiceAction   chan *VoiceRoomAction
+	quit          chan struct{}
+	chatPeerResolver ChatPeerResolver
 }
 
 type ChatMessage struct {
@@ -122,6 +126,9 @@ func (h *Hub) Run() {
 			if ok {
 				delete(h.clients, client)
 				close(client.send)
+				if client.onClose != nil {
+					client.onClose()
+				}
 			}
 			h.clientsMu.Unlock()
 			if ok {
@@ -279,6 +286,24 @@ func (h *Hub) Run() {
 			h.voiceRoomsMu.Unlock()
 		}
 	}
+}
+
+// SetChatPeerResolver задаёт функцию разрешения участников чата (для доставки звонков без подписки на чат).
+func (h *Hub) SetChatPeerResolver(r ChatPeerResolver) {
+	h.chatPeerResolver = r
+}
+
+// SendToChatPeers отправляет сообщение всем остальным участникам чата по userID (не по подписке).
+// Используется для webrtc signaling, чтобы звонок дошёл до абонента, даже если он не открыл чат.
+func (h *Hub) SendToChatPeers(chatID string, excludeUserID string, message []byte) {
+	if h.chatPeerResolver != nil {
+		peerIDs := h.chatPeerResolver(chatID, excludeUserID)
+		for _, uid := range peerIDs {
+			h.SendToUser(uid, message)
+		}
+		return
+	}
+	h.BroadcastToChat(chatID, message)
 }
 
 // BroadcastToChat отправляет сообщение всем клиентам в чате

@@ -2,6 +2,7 @@ package api
 
 import (
 	"safegram-server/internal/config"
+	"safegram-server/internal/models"
 	"safegram-server/internal/websocket"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +11,18 @@ import (
 
 // SetupRoutes настраивает все маршруты API
 func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *config.Config) {
+	wsHub.SetChatPeerResolver(func(chatID, excludeUserID string) []string {
+		var members []models.ChatMember
+		if err := db.Where("chat_id = ? AND user_id != ? AND deleted_at IS NULL", chatID, excludeUserID).Find(&members).Error; err != nil {
+			return nil
+		}
+		ids := make([]string, 0, len(members))
+		for _, m := range members {
+			ids = append(ids, m.UserID)
+		}
+		return ids
+	})
+
 	api := router.Group("/api")
 
 	// Публичные маршруты (с rate limiting)
@@ -42,7 +55,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 
 	// Защищенные маршруты (требуют аутентификации)
 	protected := api.Group("")
-	protected.Use(authMiddleware(cfg))
+	protected.Use(authMiddleware(cfg, db))
 	protected.Use(RateLimitMiddleware())
 
 	// WebSocket endpoint
@@ -173,10 +186,9 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// Серверы
 	protected.POST("/servers", CreateServer(db))
 	protected.GET("/servers", GetServers(db))
-	// Более специфичные маршруты должны быть раньше общих
 	protected.POST("/servers/:id/channels", CreateChannel(db))
-		protected.GET("/servers/:id/channels", GetChannels(db))
-		protected.GET("/servers/:id/voice-state", GetServerVoiceState(db, wsHub))
+	protected.GET("/servers/:id/channels", GetChannels(db))
+	protected.GET("/servers/:id/voice-state", GetServerVoiceState(db, wsHub))
 	protected.DELETE("/servers/:id/channels/:channelId", DeleteChannel(db))
 	protected.PATCH("/servers/:id/channels/:channelId/category", SetChannelCategory(db))
 	protected.POST("/servers/:id/categories", CreateChannelCategory(db))
@@ -185,6 +197,13 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/servers/:id/members", GetServerMembers(db))
 	protected.POST("/servers/:id/members/bulk", BulkAddServerMembers(db))
 	protected.PATCH("/servers/:id/members/:userId/role", SetServerMemberRole(db))
+	protected.GET("/servers/:id/roles", GetServerRoles(db))
+	protected.POST("/servers/:id/roles", CreateServerRole(db))
+	protected.PATCH("/servers/:id/roles/:roleId", UpdateServerRole(db))
+	protected.DELETE("/servers/:id/roles/:roleId", DeleteServerRole(db))
+	protected.GET("/servers/:id/members/:userId/roles", GetServerMemberRoles(db))
+	protected.PUT("/servers/:id/members/:userId/roles", SetServerMemberRoles(db))
+	protected.PATCH("/servers/:id", UpdateServer(db))
 	protected.POST("/servers/:id/join", JoinServer(db))
 	protected.POST("/servers/:id/leave", LeaveServer(db))
 	protected.POST("/servers/:id/invite-link", GenerateServerInviteLink(db))

@@ -33,11 +33,26 @@ func GetServerMembers(db *gorm.DB) gin.HandlerFunc {
 
 		result := make([]gin.H, len(members))
 		for i, m := range members {
+			var memberRoles []models.ServerMemberRole
+			db.Where("server_id = ? AND user_id = ?", serverID, m.UserID).Find(&memberRoles)
+			roleIDs := make([]string, 0, len(memberRoles))
+			for _, mr := range memberRoles {
+				roleIDs = append(roleIDs, mr.RoleID)
+			}
+			var serverRoles []models.ServerRole
+			if len(roleIDs) > 0 {
+				db.Where("id IN ?", roleIDs).Find(&serverRoles)
+			}
+			rolesOut := make([]gin.H, 0, len(serverRoles))
+			for _, r := range serverRoles {
+				rolesOut = append(rolesOut, gin.H{"id": r.ID, "name": r.Name, "color": r.Color})
+			}
 			result[i] = gin.H{
 				"id":       m.ID,
 				"userId":   m.UserID,
 				"role":     m.Role,
 				"joinedAt": m.JoinedAt,
+				"roles":    rolesOut,
 				"user": gin.H{
 					"id":       m.User.ID,
 					"username": m.User.Username,

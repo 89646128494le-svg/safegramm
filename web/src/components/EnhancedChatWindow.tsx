@@ -174,6 +174,12 @@ interface User {
   roles?: string[] | string;
 }
 
+export interface ServerRoleBadge {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface EnhancedChatWindowProps {
   chatId: string;
   currentUser: User;
@@ -181,6 +187,8 @@ interface EnhancedChatWindowProps {
   onBack?: () => void;
   chatMembers?: string[];
   onMarkAsRead?: () => void;
+  /** Map userId -> server role badges (for server channel chat) */
+  serverMemberRoles?: Record<string, ServerRoleBadge[]>;
 }
 
 // Функция для воспроизведения звука сообщения
@@ -229,7 +237,7 @@ const playCallSound = () => {
   }
 };
 
-export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBack, chatMembers, onMarkAsRead }: EnhancedChatWindowProps) {
+export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBack, chatMembers, onMarkAsRead, serverMemberRoles }: EnhancedChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -813,10 +821,24 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     
     const socket = getSocket();
     socketRef.current = socket;
-    
+
+    const doSubscribe = () => {
+      const s = getSocket();
+      if (s && s.readyState === WebSocket.OPEN) {
+        sendOptimized('subscribe', { chatId }, true);
+      }
+    };
+
     if (socket) {
-      // Подписываемся на чат
-      sendOptimized('subscribe', { chatId }, true); // immediate для подписки
+      if (socket.readyState === WebSocket.OPEN) {
+        doSubscribe();
+      } else {
+        const onOpen = () => {
+          doSubscribe();
+          socket.removeEventListener('open', onOpen);
+        };
+        socket.addEventListener('open', onOpen);
+      }
 
       const handleMessage = (event: MessageEvent) => {
         try {
@@ -1123,23 +1145,26 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 loadPinnedMessages();
                 showToast('Сообщение откреплено', 'info');
               } else if (msgType === 'presence') {
-                // Обновление онлайн статуса
                 const presenceData = data.data || data;
                 const userId = presenceData.userId;
                 const status = presenceData.status;
-                const onlineList = presenceData.online || [];
-                
-                // Обновляем статус пользователя в списке
-                if (userId && status) {
-                  setUsers(prev => {
-                    const newMap = new Map(prev);
+                const onlineList = presenceData.online || [] as string[];
+                setUsers(prev => {
+                  const newMap = new Map(prev);
+                  if (userId && status) {
                     const user = newMap.get(userId);
                     if (user) {
                       newMap.set(userId, { ...user, status: status === 'online' ? 'online' : 'offline' });
                     }
-                    return newMap;
-                  });
-                }
+                  }
+                  if (Array.isArray(onlineList) && onlineList.length > 0) {
+                    onlineList.forEach((id: string) => {
+                      const u = newMap.get(id);
+                      if (u) newMap.set(id, { ...u, status: 'online' });
+                    });
+                  }
+                  return newMap;
+                });
               } else if (msgType === 'message:read' || msgType === 'chat:read') {
                 // Обновление статуса прочтения
                 const readData = data.data || data;
@@ -1194,13 +1219,18 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
 
       return () => {
         socket.removeEventListener('message', handleMessage);
-        sendOptimized('unsubscribe', { chatId }, true); // immediate для отписки
+        if (socket.readyState === WebSocket.OPEN) {
+          sendOptimized('unsubscribe', { chatId }, true);
+        }
         clearInterval(expireCheckInterval);
       };
     }
 
     return () => {
-      sendOptimized('unsubscribe', { chatId }, true); // immediate для отписки
+      const s = getSocket();
+      if (s && s.readyState === WebSocket.OPEN) {
+        sendOptimized('unsubscribe', { chatId }, true);
+      }
     };
   }, [chatId, currentUser.id, loadMessages, loadUsers]);
 
@@ -2153,32 +2183,53 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           )}
           <div className="chat-title">
             {chatInfoRef.current ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-                {chatInfoRef.current.type === 'dm' ? '💬' : chatInfoRef.current.type === 'group' ? '👥' : '📢'}
-                <span style={{ fontWeight: '600' }}>
-                  {chatInfoRef.current.type === 'dm' ? (() => {
-                    // Для DM показываем ник собеседника
-                    const otherMemberId = chatInfoRef.current.members.find(id => id !== currentUser.id);
-                    if (otherMemberId) {
-                      const otherUser = users.get(otherMemberId);
-                      if (otherUser) {
-                        return otherUser.username;
-                      }
-                    }
-                    return 'Личный чат';
-                  })() : (chatInfoRef.current.name || 'Чат')}
-                </span>
-                {isE2EEEnabled && (chatInfoRef.current.type === 'group' || chatInfoRef.current.type === 'channel') && (
-                  <span 
-                    title="End-to-End Encryption активен"
-                    style={{
-                      fontSize: '14px',
-                      color: '#10b981',
-                      marginLeft: '4px'
-                    }}
-                  >
-                    🔒
-                  </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', flex: 1, minWidth: 0 }}>
+                {chatInfoRef.current.type === 'dm' ? (() => {
+                  const otherMemberId = chatInfoRef.current.members.find((id: string) => id !== currentUser.id);
+                  const otherUser = otherMemberId ? users.get(otherMemberId) : null;
+                  const displayName = otherUser?.username || 'Личный чат';
+                  const isOnline = otherUser?.status === 'online';
+                  return (
+                    <>
+                      <div style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: 'var(--bg-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '18px',
+                        color: 'var(--text-secondary)',
+                      }}>
+                        {otherUser?.avatarUrl ? (
+                          <img src={otherUser.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          displayName[0]?.toUpperCase() || '?'
+                        )}
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ fontWeight: '600', display: 'block' }}>{displayName}</span>
+                        <span style={{
+                          fontSize: '12px',
+                          color: isOnline ? 'var(--accent-primary, #7c6cff)' : 'var(--text-secondary)',
+                          fontWeight: isOnline ? 500 : 400,
+                        }}>
+                          {isOnline ? 'онлайн' : 'был(а) недавно'}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })() : (
+                  <>
+                    {chatInfoRef.current.type === 'group' ? '👥' : '📢'}
+                    <span style={{ fontWeight: '600' }}>{chatInfoRef.current.name || 'Чат'}</span>
+                    {isE2EEEnabled && (chatInfoRef.current.type === 'group' || chatInfoRef.current.type === 'channel') && (
+                      <span title="End-to-End Encryption активен" style={{ fontSize: '14px', color: '#10b981', marginLeft: '4px' }}>🔒</span>
+                    )}
+                  </>
                 )}
               </div>
             ) : selectedThreadId ? (
@@ -2977,8 +3028,23 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               )}
               <div className="message-content">
                 {!isMe && showAvatar && (
-                  <div className="message-sender">
+                  <div className="message-sender" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <UsernameWithRole user={sender} username={sender.username} showBadge showColor />
+                    {serverMemberRoles?.[msg.senderId]?.map((role) => (
+                      <span
+                        key={role.id}
+                        style={{
+                          fontSize: 10,
+                          padding: '2px 5px',
+                          borderRadius: 4,
+                          background: `#${(role.color || '').replace(/^#/, '')}20`,
+                          color: `#${(role.color || '').replace(/^#/, '')}`,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {role.name}
+                      </span>
+                    ))}
                   </div>
                 )}
                 {msg.threadId && (
@@ -3506,16 +3572,24 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             </React.Fragment>
           );
         })}
-        {typingUsers.size > 0 && (
-          <div className="typing-indicator">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span className="typing-indicator-names">
-              {Array.from(typingUsers).map((userId: string) => getUser(userId).username).join(', ')} печатает...
-            </span>
-          </div>
-        )}
+        {typingUsers.size > 0 && (() => {
+          const names = Array.from(typingUsers).map((userId: string) => getUser(userId).username || userId);
+          const text = names.length === 1
+            ? `${names[0]} печатает...`
+            : names.length === 2
+              ? `${names[0]} и ${names[1]} печатают...`
+              : names.length > 2
+                ? `${names.slice(0, -1).join(', ')} и ${names[names.length - 1]} печатают...`
+                : 'печатают...';
+          return (
+            <div className="typing-indicator">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span className="typing-indicator-names">{text}</span>
+            </div>
+          );
+        })()}
         <div ref={messagesEndRef} />
       </div>
 

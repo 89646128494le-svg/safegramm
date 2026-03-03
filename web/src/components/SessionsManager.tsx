@@ -25,11 +25,14 @@ export default function SessionsManager({ onClose }: SessionsManagerProps) {
     loadSessions();
   }, []);
 
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
   const loadSessions = async () => {
     try {
       setLoading(true);
       const data = await api('/api/users/me/sessions');
       setSessions(data.sessions || []);
+      setCurrentSessionId(data.currentSessionId ?? null);
     } catch (e: any) {
       showToast('Ошибка загрузки сессий: ' + e.message, 'error');
     } finally {
@@ -81,8 +84,7 @@ export default function SessionsManager({ onClose }: SessionsManagerProps) {
     }
   };
 
-  const currentToken = localStorage.getItem('token');
-  const currentSession = sessions.find(s => s.id === currentToken?.slice(0, 8)); // Упрощенная проверка
+  const currentSession = currentSessionId ? sessions.find(s => s.id === currentSessionId) : null;
 
   return (
     <div style={{

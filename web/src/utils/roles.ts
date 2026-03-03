@@ -138,35 +138,45 @@ export function canDeleteUser(actor: UserLike | null, target: UserLike | null): 
   return getRoleLevel(actor) >= ROLE_LEVEL.owner && getRoleLevel(actor) > getRoleLevel(target);
 }
 
-/** Вкладки админки и минимальная роль для доступа. */
+/** Секции админки: только вложенные вкладки видны по ролям. */
+export const ADMIN_SECTIONS = [
+  { id: 'moderation' as const, label: '🛡️ Модерация', order: 1 },
+  { id: 'users' as const, label: '👥 Пользователи и связь', order: 2 },
+  { id: 'security' as const, label: '🔒 Безопасность', order: 3 },
+  { id: 'system' as const, label: '⚙️ Система', order: 4 },
+  { id: 'analytics' as const, label: '📊 Аналитика', order: 5 },
+  { id: 'owner' as const, label: '👑 Владелец', order: 6 },
+] as const;
+
+/** Вкладки админки: section + minRole. В сайдбаре показываются только вкладки, доступные по роли. */
 export const ADMIN_TABS = [
-  { id: 'sovereign' as const, label: '👑 Sovereign Control Panel', minRole: 'support' as const },
-  { id: 'users' as const, label: '👥 Пользователи', minRole: 'sysadmin' as const },
-  { id: 'analytics' as const, label: '📊 Аналитика', minRole: 'sysadmin' as const },
-  { id: 'bans' as const, label: '🚫 Баны и муты', minRole: 'moderator' as const },
-  { id: 'maintenance' as const, label: '🔧 Техработы', minRole: 'sysadmin' as const },
-  { id: 'broadcast' as const, label: '📢 Рассылка', minRole: 'sysadmin' as const },
-  { id: 'messages' as const, label: '✉️ Письма и тех. работы', minRole: 'sysadmin' as const },
-  { id: 'anonymous_dm' as const, label: '👤 Написать пользователю (анонимно)', minRole: 'sysadmin' as const },
-  { id: 'logs' as const, label: '📋 Логи сервера', minRole: 'safety' as const },
-  { id: 'monitor' as const, label: '📡 Мониторинг и нагрузка', minRole: 'sysadmin' as const },
-  { id: 'security' as const, label: '🛡️ Security Dashboard', minRole: 'safety' as const },
-  { id: 'mod' as const, label: '✅ Модочередь', minRole: 'moderator' as const },
-  { id: 'reports' as const, label: '⚠️ Жалобы', minRole: 'moderator' as const },
-  { id: 'feedback' as const, label: '💬 Фидбек', minRole: 'support' as const },
-  { id: 'recruit' as const, label: '🧑‍💻 Набор (тестеры/хелперы)', minRole: 'support' as const },
-  { id: 'premium_apps' as const, label: '⭐ Заявки на Premium', minRole: 'moderator' as const },
-  { id: 'push' as const, label: '🔔 Уведомления', minRole: 'sysadmin' as const },
-  { id: 'services' as const, label: '⚙️ Сервисы (супер-панель)', minRole: 'owner' as const },
-  { id: 'database' as const, label: '📦 База данных (онлайн)', minRole: 'owner' as const },
-  { id: 'webhook' as const, label: '🔗 Webhook', minRole: 'sysadmin' as const },
-  { id: 'support' as const, label: '🎫 Поддержка (тикеты)', minRole: 'support' as const },
-  { id: 'audit' as const, label: '📜 Аудит-лог', minRole: 'sysadmin' as const },
-  { id: 'content_moderation' as const, label: '🔍 Контент и модерация', minRole: 'moderator' as const },
-  { id: 'security_policy' as const, label: '🔐 Безопасность и политики', minRole: 'safety' as const },
-  { id: 'communication' as const, label: '📧 Шаблоны и инвайты', minRole: 'sysadmin' as const },
-  { id: 'system_integrations' as const, label: '🤖 Система и интеграции', minRole: 'sysadmin' as const },
-  { id: 'analytics_reports' as const, label: '📈 Аналитика и отчёты', minRole: 'sysadmin' as const },
+  { id: 'mod' as const, label: 'Модочередь', minRole: 'moderator' as const, section: 'moderation' as const },
+  { id: 'reports' as const, label: 'Жалобы', minRole: 'moderator' as const, section: 'moderation' as const },
+  { id: 'bans' as const, label: 'Баны и муты', minRole: 'moderator' as const, section: 'moderation' as const },
+  { id: 'content_moderation' as const, label: 'Контент и модерация', minRole: 'moderator' as const, section: 'moderation' as const },
+  { id: 'premium_apps' as const, label: 'Заявки на Premium', minRole: 'moderator' as const, section: 'moderation' as const },
+  { id: 'users' as const, label: 'Пользователи', minRole: 'sysadmin' as const, section: 'users' as const },
+  { id: 'feedback' as const, label: 'Фидбек', minRole: 'support' as const, section: 'users' as const },
+  { id: 'recruit' as const, label: 'Набор (тестеры)', minRole: 'support' as const, section: 'users' as const },
+  { id: 'support' as const, label: 'Поддержка (тикеты)', minRole: 'support' as const, section: 'users' as const },
+  { id: 'broadcast' as const, label: 'Рассылка', minRole: 'sysadmin' as const, section: 'users' as const },
+  { id: 'messages' as const, label: 'Письма и тех. работы', minRole: 'sysadmin' as const, section: 'users' as const },
+  { id: 'anonymous_dm' as const, label: 'Написать анонимно', minRole: 'sysadmin' as const, section: 'users' as const },
+  { id: 'security' as const, label: 'Security Dashboard', minRole: 'safety' as const, section: 'security' as const },
+  { id: 'security_policy' as const, label: 'Безопасность и политики', minRole: 'safety' as const, section: 'security' as const },
+  { id: 'logs' as const, label: 'Логи сервера', minRole: 'safety' as const, section: 'security' as const },
+  { id: 'maintenance' as const, label: 'Техработы', minRole: 'sysadmin' as const, section: 'system' as const },
+  { id: 'monitor' as const, label: 'Мониторинг', minRole: 'sysadmin' as const, section: 'system' as const },
+  { id: 'webhook' as const, label: 'Webhook', minRole: 'sysadmin' as const, section: 'system' as const },
+  { id: 'push' as const, label: 'Уведомления', minRole: 'sysadmin' as const, section: 'system' as const },
+  { id: 'audit' as const, label: 'Аудит-лог', minRole: 'sysadmin' as const, section: 'system' as const },
+  { id: 'communication' as const, label: 'Шаблоны и инвайты', minRole: 'sysadmin' as const, section: 'system' as const },
+  { id: 'system_integrations' as const, label: 'Система и интеграции', minRole: 'sysadmin' as const, section: 'system' as const },
+  { id: 'analytics' as const, label: 'Аналитика', minRole: 'sysadmin' as const, section: 'analytics' as const },
+  { id: 'analytics_reports' as const, label: 'Аналитика и отчёты', minRole: 'sysadmin' as const, section: 'analytics' as const },
+  { id: 'sovereign' as const, label: 'Sovereign Control Panel', minRole: 'sysadmin' as const, section: 'owner' as const },
+  { id: 'services' as const, label: 'Сервисы', minRole: 'owner' as const, section: 'owner' as const },
+  { id: 'database' as const, label: 'База данных', minRole: 'owner' as const, section: 'owner' as const },
 ] as const;
 
 export function canAccessAdminTab(

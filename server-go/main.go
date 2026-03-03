@@ -98,6 +98,7 @@ func main() {
 		router.Use(gin.Logger())
 	}
 	router.Use(corsMiddleware()) // первым, чтобы preflight OPTIONS всегда получал CORS-заголовки
+	router.Use(api.SecurityMiddleware()) // DDoS: блоклист IP, глобальный rate limit, лимит тела
 	router.Use(gzipMiddleware())
 	if cfg.NodeEnv == "production" {
 		router.Use(hstsMiddleware())
@@ -167,7 +168,15 @@ func main() {
 		port = "8080"
 	}
 
-	srv := &http.Server{Addr: "0.0.0.0:" + port, Handler: router, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+	srv := &http.Server{
+		Addr:              "0.0.0.0:" + port,
+		Handler:           router,
+		ReadTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
 	go func() {
 		log.Printf("🚀 SafeGram Server starting on port %s", port)
 		logger.Info("SafeGram Server starting", map[string]interface{}{"service": "server", "port": port, "env": cfg.NodeEnv})

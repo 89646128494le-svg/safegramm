@@ -140,7 +140,8 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		session, _ := CreateSession(db, user.ID, tokenString, c.ClientIP(), c.GetHeader("User-Agent"))
+		resp := gin.H{
 			"token":    tokenString,
 			"mnemonic": mnemonicResponse,
 			"user": gin.H{
@@ -149,7 +150,11 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				"status":   user.Status,
 				"roles":    user.ParseRoles(),
 			},
-		})
+		}
+		if session != nil {
+			resp["sessionId"] = session.ID
+		}
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
@@ -268,7 +273,13 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
+		session, errSession := CreateSession(db, user.ID, tokenString, c.ClientIP(), c.GetHeader("User-Agent"))
+		if errSession != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+
+		resp := gin.H{
 			"token": tokenString,
 			"user": gin.H{
 				"id":       user.ID,
@@ -276,7 +287,11 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				"status":   user.Status,
 				"roles":    roles,
 			},
-		})
+		}
+		if session != nil {
+			resp["sessionId"] = session.ID
+		}
+		c.JSON(http.StatusOK, resp)
 	}
 }
 

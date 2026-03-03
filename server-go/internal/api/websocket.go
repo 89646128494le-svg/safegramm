@@ -21,6 +21,13 @@ var upgrader = gorillaWS.Upgrader{
 // handleWebSocket обрабатывает WebSocket подключения
 func handleWebSocket(hub *websocket.Hub, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		if !wsConnLimiter.allow(ip) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too_many_websocket_connections"})
+			return
+		}
+		release := wsConnLimiter.acquire(ip)
+
 		// Извлекаем токен из query параметра или заголовка
 		tokenString := c.Query("token")
 		if tokenString == "" {
@@ -31,6 +38,7 @@ func handleWebSocket(hub *websocket.Hub, cfg *config.Config) gin.HandlerFunc {
 		}
 
 		if tokenString == "" {
+			release()
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
@@ -41,18 +49,21 @@ func handleWebSocket(hub *websocket.Hub, cfg *config.Config) gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
+			release()
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
+			release()
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 
 		userID, ok := claims["sub"].(string)
 		if !ok {
+			release()
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
@@ -60,12 +71,14 @@ func handleWebSocket(hub *websocket.Hub, cfg *config.Config) gin.HandlerFunc {
 		// Обновляем соединение до WebSocket
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
+			release()
 			log.Printf("WebSocket upgrade error: %v", err)
 			return
 		}
 
-		// Создаем клиента
+		// Создаем клиента и снимаем лимит по IP при отключении
 		client := websocket.NewClient(hub, conn, userID)
+		client.SetOnClose(release)
 		hub.Register(client)
 
 		// Запускаем горутины для чтения и записи

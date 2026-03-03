@@ -17,37 +17,38 @@ func (c *Client) HandleWebRTCMessage(msg map[string]interface{}) {
 	chatID, _ := msg["chatId"].(string)
 	toUserID, _ := msg["to"].(string)
 
+	payload := c.marshalMessage(msg)
+	if payload == nil {
+		return
+	}
+
 	switch msgType {
 	case "webrtc:offer":
-		// Пересылаем offer конкретному пользователю или всем в чате
 		if toUserID != "" {
-			c.hub.SendToUser(toUserID, c.marshalMessage(msg))
+			c.hub.SendToUser(toUserID, payload)
 		} else if chatID != "" {
-			c.hub.BroadcastToChat(chatID, c.marshalMessage(msg))
+			c.hub.SendToChatPeers(chatID, c.userID, payload)
 		}
 
 	case "webrtc:answer":
-		// Пересылаем answer конкретному пользователю или всем в чате
 		if toUserID != "" {
-			c.hub.SendToUser(toUserID, c.marshalMessage(msg))
+			c.hub.SendToUser(toUserID, payload)
 		} else if chatID != "" {
-			c.hub.BroadcastToChat(chatID, c.marshalMessage(msg))
+			c.hub.SendToChatPeers(chatID, c.userID, payload)
 		}
 
 	case "webrtc:ice":
-		// Пересылаем ICE candidate конкретному пользователю или всем в чате
 		if toUserID != "" {
-			c.hub.SendToUser(toUserID, c.marshalMessage(msg))
+			c.hub.SendToUser(toUserID, payload)
 		} else if chatID != "" {
-			c.hub.BroadcastToChat(chatID, c.marshalMessage(msg))
+			c.hub.SendToChatPeers(chatID, c.userID, payload)
 		}
 
 	case "webrtc:hangup":
-		// Уведомляем о завершении звонка конкретному пользователю или всем в чате
 		if toUserID != "" {
-			c.hub.SendToUser(toUserID, c.marshalMessage(msg))
+			c.hub.SendToUser(toUserID, payload)
 		} else if chatID != "" {
-			c.hub.BroadcastToChat(chatID, c.marshalMessage(msg))
+			c.hub.SendToChatPeers(chatID, c.userID, payload)
 		}
 
 	case "call:recording:request", "call:recording:response":

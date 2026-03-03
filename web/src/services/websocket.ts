@@ -6,6 +6,17 @@ let reconnectTimeout: NodeJS.Timeout | null = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
+type QueuedMessage = { type: string; data: Record<string, unknown> };
+const messageQueue: QueuedMessage[] = [];
+
+function flushMessageQueue() {
+  if (!ws || ws.readyState !== WebSocket.OPEN || messageQueue.length === 0) return;
+  while (messageQueue.length > 0) {
+    const msg = messageQueue.shift()!;
+    ws.send(JSON.stringify({ type: msg.type, ...msg.data }));
+  }
+}
+
 export function getSocket(): WebSocket | null {
   const token = localStorage.getItem('token');
   if (!token) {
@@ -17,16 +28,21 @@ export function getSocket(): WebSocket | null {
   const wsOrigin = base.startsWith('https') ? base.replace(/^https/, 'wss') : base.startsWith('http') ? base.replace(/^http/, 'ws') : 'ws://localhost:8081';
   const wsUrl = (wsOrigin.endsWith('/') ? wsOrigin.slice(0, -1) : wsOrigin) + '/ws?token=' + encodeURIComponent(token);
 
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return ws;
+  }
+
+  if (ws && (ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED)) {
+    ws = null;
   }
 
   try {
     ws = new WebSocket(wsUrl);
-    
+
     ws.onopen = () => {
       console.log('WebSocket connected');
       reconnectAttempts = 0;
+      flushMessageQueue();
     };
 
     ws.onerror = (error) => {
@@ -36,8 +52,7 @@ export function getSocket(): WebSocket | null {
     ws.onclose = () => {
       console.log('WebSocket closed');
       ws = null;
-      
-      // Автопереподключение
+
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
         reconnectTimeout = setTimeout(() => {
@@ -65,10 +80,16 @@ export function closeSocket() {
   reconnectAttempts = 0;
 }
 
-export function sendWebSocketMessage(type: string, data: any) {
+export function sendWebSocketMessage(type: string, data: Record<string, unknown>) {
   const socket = getSocket();
-  if (socket && socket.readyState === WebSocket.OPEN) {
+  if (!socket) {
+    console.warn('WebSocket not available');
+    return;
+  }
+  if (socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify({ type, ...data }));
+  } else if (socket.readyState === WebSocket.CONNECTING) {
+    messageQueue.push({ type, data });
   } else {
     console.warn('WebSocket not connected');
   }
