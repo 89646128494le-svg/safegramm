@@ -1,0 +1,17 @@
+# Образ без сборки Go — только готовый бинарник.
+# На ПК: собери бинарник (build-for-server.bat или build-for-server.sh), залей на сервер папку server-go с файлом main.
+# На сервере: docker build -f Dockerfile.prebuilt -t safegram-server . && bash start-container.sh
+
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+COPY main .
+
+RUN mkdir -p /app/uploads /app/logs
+
+EXPOSE 8080
+
+CMD ["./main"]
