@@ -1,0 +1,17 @@
+#!/bin/bash
+# Проверка доступности API на сервере. Запуск: bash check-api.sh
+echo "=== Контейнеры ==="
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "safegram|caddy|NAMES"
+echo ""
+echo "=== Бэкенд локально :8080 ==="
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/health && echo " OK" || echo " FAIL"
+echo "=== API maintenance локально ==="
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/api/maintenance/status && echo " OK" || echo " FAIL"
+echo ""
+echo "=== Через Caddy :443 (локально) ==="
+curl -sk -o /dev/null -w "%{http_code}" https://127.0.0.1/api/maintenance/status && echo " OK" || echo " FAIL (Caddy не слушает 443?)"
+echo ""
+echo "=== Снаружи (если доступен) ==="
+curl -sk -o /dev/null -w "%{http_code}" https://141.8.198.152.nip.io/api/maintenance/status 2>/dev/null && echo " OK" || echo " FAIL"
+echo ""
+echo "Логи Caddy: docker logs caddy-safegram 2>&1 | tail -30"

@@ -7,10 +7,14 @@ cd "$(dirname "$0")"
 
 [ -f .env ] || { echo "Создай .env (скопируй из .env.example и заполни DATABASE_URL и др.)"; exit 1; }
 
-docker stop safegram-server 2>/dev/null || true
-docker rm safegram-server 2>/dev/null || true
+docker rm -f safegram-server 2>/dev/null || true
+docker stop safegram-api-backend-1 2>/dev/null || true
+docker rm -f safegram-api-backend-1 2>/dev/null || true
+for cid in $(docker ps -aq --filter "publish=8080" 2>/dev/null); do docker rm -f "$cid" 2>/dev/null || true; done
+sleep 1
 PID=$(ss -tlnp 2>/dev/null | awk '/:8080 / { gsub(/.*pid=/, ""); gsub(/,.*/, ""); print; exit }')
-[ -n "$PID" ] && kill "$PID" 2>/dev/null && sleep 1 && echo "Порт 8080 освобождён (PID $PID)."
+[ -n "$PID" ] && kill "$PID" 2>/dev/null && sleep 2 && echo "Порт 8080 освобождён (PID $PID)."
+sleep 1
 mkdir -p uploads logs
 docker run -d \
   --name safegram-server \

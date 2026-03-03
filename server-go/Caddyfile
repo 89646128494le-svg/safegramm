@@ -1,17 +1,13 @@
-# Замени api.yourdomain.com на свой поддомен (A-запись на IP сервера).
-# Тогда Caddy сам получит SSL (Let's Encrypt). Без домена — используй блок :80 ниже.
-
-{
-	email your-email@example.com
-}
-
-# Без Docker: проксируем на локальный Go-сервер.
-# HTTP по IP (для проверок)
+# HTTP по 80 (редирект и проверки)
 :80 {
 	reverse_proxy 127.0.0.1:8080
 }
 
-# HTTPS через nip.io (Caddy получит сертификат автоматически)
+# HTTPS для nip.io (Let's Encrypt). Нужны открытые порты 80 и 443.
 141.8.198.152.nip.io {
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:8080 {
+		header_up Host {host}
+		header_up X-Forwarded-Proto https
+		header_up X-Real-IP {remote_host}
+	}
 }
