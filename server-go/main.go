@@ -226,25 +226,31 @@ func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 
-		// Разрешаем все локальные адреса и IP адреса для разработки
+		// Разрешаем все локальные адреса, Vercel и бэкенд nip.io
 		allowedOrigins := []string{
 			"http://localhost:8081",
 			"http://localhost:5173",
 			"http://127.0.0.1:5173",
 			"http://26.241.113.242:5173",
 			"https://safegram.app",
-			"https://safegram-hazel.vercel.app", // Vercel preview
+			"https://safegram-hazel.vercel.app",
+			"https://141.8.198.152.nip.io",
+			"http://141.8.198.152.nip.io",
 		}
 
-		// Разрешаем все Vercel домены и туннели
+		// Разрешаем Vercel, nip.io (бэкенд/прокси) и туннели
 		isVercelDomain := false
 		isTunnelDomain := false
+		isNipIO := false
 		if origin != "" {
 			if strings.Contains(origin, ".vercel.app") ||
 				strings.Contains(origin, ".vercel-dns.com") ||
 				strings.Contains(origin, "vercel.live") ||
 				(strings.HasPrefix(origin, "https://") && strings.Contains(origin, "safegram")) {
 				isVercelDomain = true
+			}
+			if strings.Contains(origin, ".nip.io") {
+				isNipIO = true
 			}
 			if strings.Contains(origin, ".loca.lt") ||
 				strings.Contains(origin, ".ngrok.io") ||
@@ -316,7 +322,7 @@ func corsMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		if !allowed && (isLocalIP || isDevServer || isVercelDomain || isTunnelDomain) {
+		if !allowed && (isLocalIP || isDevServer || isVercelDomain || isTunnelDomain || isNipIO) {
 			c.Header("Access-Control-Allow-Origin", origin)
 			allowed = true
 		}
