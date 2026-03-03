@@ -1,0 +1,17 @@
+# На сервере выполни (одним блоком, из папки server-go):
+# cd ~/safegram-api/server-go
+# затем вставь команду ниже до конца EOF
+
+cat > .env << 'ENVEOF'
+PORT=8080
+NODE_ENV=production
+JWT_SECRET=e5drtucfyigvuhibjnsrd6ycftguyvhibjn6d4r8tf7vyuhbjinkdr67c8tvyuhobijnex5r7fctyvguhb
+DATABASE_URL=postgresql://neondb_owner:npg_6zNi7JItXYfc@ep-divine-snow-agzwx8ef-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+REDIS_URL=
+ALLOWED_ORIGINS=https://safegram-hazel.vercel.app,https://141.8.198.152.nip.io
+EMAIL_PROVIDER=gmail
+GMAIL_USER=safegram.noreply@gmail.com
+GMAIL_APP_PASSWORD=zclu jkai hhoy qwrb
+EMAIL_FROM_NAME=SafeGram
+GEMINI_API_KEY=AIzaSyC6_5zUK9DjOTdKxojT2i78ZfJUj93ATRQ
+ENVEOF

@@ -1,0 +1,141 @@
+# SafeGram Backend — команды и настройки (сервер 141.8.198.152)
+
+## Что запущено
+- safegram-server — контейнер с API (порт 8080)
+- caddy-safegram — Caddy для HTTPS (порты 80, 443 → прокси на 8080)
+
+Папка на сервере: ~/safegram-api/server-go
+
+---
+
+## Остановка
+
+# Остановить API
+docker stop safegram-server
+
+# Остановить Caddy (HTTPS перестанет работать)
+docker stop caddy-safegram
+
+# Остановить всё
+docker stop safegram-server caddy-safegram
+
+---
+
+## Запуск
+
+cd ~/safegram-api/server-go
+
+# 1) Запустить бэкенд (нужен образ safegram-server и файл .env)
+bash start-container.sh
+
+# 2) Запустить Caddy (HTTPS 141.8.198.152.nip.io)
+bash start-caddy.sh
+
+---
+
+## Перезапуск
+
+cd ~/safegram-api/server-go
+
+# Перезапуск только API
+docker stop safegram-server; docker rm safegram-server
+bash start-container.sh
+
+# Перезапуск только Caddy
+docker rm -f caddy-safegram
+bash start-caddy.sh
+
+# Полный перезапуск (API + Caddy)
+docker stop safegram-server; docker rm safegram-server
+docker rm -f caddy-safegram
+bash start-container.sh
+bash start-caddy.sh
+
+---
+
+## Обновление бинарника (сборка на ПК, заливка на сервер)
+
+# На ПК (в папке server-go):
+build-for-server.bat
+scp main .env root@141.8.198.152:~/safegram-api/server-go/
+
+# На сервере:
+cd ~/safegram-api/server-go
+docker build -f Dockerfile.prebuilt -t safegram-server .
+docker stop safegram-server; docker rm safegram-server
+bash start-container.sh
+
+---
+
+## Обновление кода с GitHub (без смены бинарника)
+
+cd ~/safegram-api
+git stash
+git pull origin main
+cd server-go
+# перезапуск только если меняли Caddyfile или скрипты:
+# docker rm -f caddy-safegram && bash start-caddy.sh
+
+---
+
+## Проверка
+
+# Статус контейнеров
+docker ps | grep -E "safegram|caddy"
+
+# Бэкенд отвечает
+curl -s http://127.0.0.1:8080/health
+
+# Через Caddy (HTTPS)
+curl -sk https://127.0.0.1/health
+curl -sk https://141.8.198.152.nip.io/api/maintenance/status
+
+# Скрипт проверки
+bash check-api.sh
+
+# Логи
+docker logs -f safegram-server
+docker logs -f caddy-safegram
+
+---
+
+## Фаервол (один раз)
+
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw allow 8080
+sudo ufw status
+
+---
+
+## Файл .env (создать заново)
+
+cd ~/safegram-api/server-go
+cat > .env << 'ENVEOF'
+PORT=8080
+NODE_ENV=production
+JWT_SECRET=e5drtucfyigvuhibjnsrd6ycftguyvhibjn6d4r8tf7vyuhbjinkdr67c8tvyuhobijnex5r7fctyvguhb
+DATABASE_URL=postgresql://neondb_owner:npg_6zNi7JItXYfc@ep-divine-snow-agzwx8ef-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+REDIS_URL=
+ALLOWED_ORIGINS=https://safegram-hazel.vercel.app,https://141.8.198.152.nip.io
+EMAIL_PROVIDER=gmail
+GMAIL_USER=safegram.noreply@gmail.com
+GMAIL_APP_PASSWORD=zclu jkai hhoy qwrb
+EMAIL_FROM_NAME=SafeGram
+GEMINI_API_KEY=AIzaSyC6_5zUK9DjOTdKxojT2i78ZfJUj93ATRQ
+ENVEOF
+
+---
+
+## Полезные команды
+
+# Кто слушает порты
+ss -tlnp | grep -E ":80|:443|:8080"
+
+# Убить контейнер, занимающий 8080 (старый бэкенд из compose)
+docker stop safegram-api-backend-1
+docker rm -f safegram-api-backend-1
+
+# Полная переустановка с нуля (удалить папку и клонировать заново)
+# cd ~ && rm -rf safegram-api && git clone https://github.com/89646128494le-svg/safegramm.git safegram-api
+# затем создать .env, собрать образ или залить main, запустить start-container.sh и start-caddy.sh

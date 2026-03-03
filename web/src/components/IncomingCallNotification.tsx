@@ -99,7 +99,7 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
     stopRingtone();
     if (call) {
       onDecline(call);
-      showToast('Звонок отклонён', 'info');
+      showToast('Звонок сброшен', 'info');
     }
   };
 
@@ -185,11 +185,19 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
             )}
           </motion.div>
 
-          {/* Информация о звонке */}
+          {/* Сообщение: ответить или сбросить */}
           <div style={{
             textAlign: 'center',
             color: '#e9ecf5',
           }}>
+            <p style={{
+              margin: 0,
+              fontSize: '14px',
+              color: 'rgba(233, 236, 245, 0.9)',
+              marginBottom: '6px',
+            }}>
+              Вам звонят — ответить или сбросить?
+            </p>
             <h3 style={{
               margin: 0,
               fontSize: '20px',
@@ -227,7 +235,7 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
             width: '100%',
             justifyContent: 'center',
           }}>
-            {/* Кнопка "Отклонить" */}
+            {/* Кнопка "Сбросить" */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -252,10 +260,10 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
               }}
             >
               <PhoneOff size={20} />
-              Отклонить
+              Сбросить
             </motion.button>
 
-            {/* Кнопка "Принять" */}
+            {/* Кнопка "Ответить" */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -292,7 +300,7 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
               }}
             >
               <Phone size={20} />
-              Принять
+              Ответить
             </motion.button>
           </div>
 
