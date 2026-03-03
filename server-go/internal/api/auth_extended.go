@@ -49,11 +49,12 @@ func LoginExtended(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 
 		// Проверяем PIN, если установлен
 		if user.PinHash != "" {
-			if req.PIN == "" {
+			pin := strings.TrimSpace(req.PIN)
+			if pin == "" {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "pin_required"})
 				return
 			}
-			if err := bcrypt.CompareHashAndPassword([]byte(user.PinHash), []byte(req.PIN)); err != nil {
+			if err := bcrypt.CompareHashAndPassword([]byte(user.PinHash), []byte(pin)); err != nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "pin_invalid"})
 				return
 			}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -15,47 +16,46 @@ type EmailCodeData struct {
 var emailCodeStorage = make(map[string]EmailCodeData)
 var emailCodeMutex sync.RWMutex
 
-// StoreEmailCode сохраняет код для email
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// StoreEmailCode сохраняет код для email (email и code нормализуются)
 func StoreEmailCode(email, code string, expiresIn time.Duration) {
 	emailCodeMutex.Lock()
 	defer emailCodeMutex.Unlock()
-	emailCodeStorage[email] = EmailCodeData{
-		Code:      code,
+	key := normalizeEmail(email)
+	emailCodeStorage[key] = EmailCodeData{
+		Code:      strings.TrimSpace(code),
 		ExpiresAt: time.Now().Add(expiresIn),
 	}
 }
 
-// VerifyEmailCode проверяет код для email
+// VerifyEmailCode проверяет код для email (email и code нормализуются)
 func VerifyEmailCode(email, code string) (bool, error) {
+	key := normalizeEmail(email)
+	code = strings.TrimSpace(code)
 	emailCodeMutex.RLock()
-	stored, exists := emailCodeStorage[email]
+	stored, exists := emailCodeStorage[key]
 	if !exists {
 		emailCodeMutex.RUnlock()
 		return false, nil
 	}
-	
-	// Проверяем срок действия
 	expired := time.Now().After(stored.ExpiresAt)
 	storedCode := stored.Code
 	emailCodeMutex.RUnlock()
-	
 	if expired {
-		// Удаляем истекший код
 		emailCodeMutex.Lock()
-		delete(emailCodeStorage, email)
+		delete(emailCodeStorage, key)
 		emailCodeMutex.Unlock()
 		return false, nil
 	}
-	
 	if storedCode != code {
 		return false, nil
 	}
-	
-	// Код верный, удаляем его
 	emailCodeMutex.Lock()
-	delete(emailCodeStorage, email)
+	delete(emailCodeStorage, key)
 	emailCodeMutex.Unlock()
-	
 	return true, nil
 }
 
@@ -63,5 +63,5 @@ func VerifyEmailCode(email, code string) (bool, error) {
 func DeleteEmailCode(email string) {
 	emailCodeMutex.Lock()
 	defer emailCodeMutex.Unlock()
-	delete(emailCodeStorage, email)
+	delete(emailCodeStorage, normalizeEmail(email))
 }

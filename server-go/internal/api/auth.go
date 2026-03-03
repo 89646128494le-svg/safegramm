@@ -201,7 +201,8 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 
 			// Если есть облачный код (PIN), проверяем его
 			if user.PinHash != "" {
-				if req.CloudCode == "" {
+				cloudCode := strings.TrimSpace(req.CloudCode)
+				if cloudCode == "" {
 					c.JSON(http.StatusOK, gin.H{
 						"error":       "cloud_code_required",
 						"message":     "Требуется облачный код",
@@ -209,18 +210,16 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 					})
 					return
 				}
-
-				// Проверяем облачный код (PIN)
-				if err := bcrypt.CompareHashAndPassword([]byte(user.PinHash), []byte(req.CloudCode)); err != nil {
+				if err := bcrypt.CompareHashAndPassword([]byte(user.PinHash), []byte(cloudCode)); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_cloud_code"})
 					return
 				}
 			}
 		} else {
 			// Если email нет, вход без подтверждения
-			// Но если есть облачный код, все равно требуем его
 			if user.PinHash != "" {
-				if req.CloudCode == "" {
+				cloudCode := strings.TrimSpace(req.CloudCode)
+				if cloudCode == "" {
 					c.JSON(http.StatusOK, gin.H{
 						"error":       "cloud_code_required",
 						"message":     "Требуется облачный код",
@@ -228,9 +227,7 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 					})
 					return
 				}
-
-				// Проверяем облачный код (PIN)
-				if err := bcrypt.CompareHashAndPassword([]byte(user.PinHash), []byte(req.CloudCode)); err != nil {
+				if err := bcrypt.CompareHashAndPassword([]byte(user.PinHash), []byte(cloudCode)); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_cloud_code"})
 					return
 				}

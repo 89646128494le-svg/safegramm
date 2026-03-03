@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math/rand"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pquerna/otp/totp"
@@ -168,7 +169,12 @@ func SetPIN(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_password"})
 			return
 		}
-		pinHash, err := bcrypt.GenerateFromPassword([]byte(req.PIN), bcrypt.DefaultCost)
+		pin := strings.TrimSpace(req.PIN)
+		if len(pin) < 4 || len(pin) > 12 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "PIN от 4 до 12 символов"})
+			return
+		}
+		pinHash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
