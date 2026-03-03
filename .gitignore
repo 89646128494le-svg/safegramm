@@ -120,6 +120,7 @@ OneDrive/
 # Go specific
 go.work
 go.sum
+!server-go/go.sum
 
 # Electron
 desktop/dist/

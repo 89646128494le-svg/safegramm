@@ -7,8 +7,8 @@ WORKDIR /app
 ENV GOPROXY=https://proxy.golang.org,direct
 ENV GOMAXPROCS=1
 
-COPY go.mod go.sum ./
-# Повторные попытки (на VPS часто TLS handshake timeout до proxy.golang.org)
+# Сначала только go.mod — так сборка работает даже без go.sum в репозитории
+COPY go.mod ./
 RUN for i in 1 2 3 4 5; do go mod download && break; echo "retry $i..."; sleep 20; done
 
 COPY . .
