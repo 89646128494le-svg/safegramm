@@ -82,7 +82,9 @@ export default function LoginPage() {
           </button>
         </form>
         <p className="mt-4 text-slate-400 text-sm text-center">
-          Нет аккаунта? <Link href="/register" className="text-safegram-accent hover:underline">Регистрация</Link>
+          <Link href="/login/forgot-password" className="text-safegram-accent hover:underline">Забыли пароль?</Link>
+          {' · '}
+          <Link href="/register" className="text-safegram-accent hover:underline">Регистрация</Link>
         </p>
       </div>
     </div>

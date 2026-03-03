@@ -65,3 +65,33 @@ func DeleteEmailCode(email string) {
 	defer emailCodeMutex.Unlock()
 	delete(emailCodeStorage, normalizeEmail(email))
 }
+
+// ——— Коды восстановления пароля (отдельное хранилище) ———
+
+var resetCodeStorage = make(map[string]EmailCodeData)
+var resetCodeMutex sync.RWMutex
+
+// StorePasswordResetCode сохраняет код сброса пароля (15 мин)
+func StorePasswordResetCode(email, code string, expiresIn time.Duration) {
+	resetCodeMutex.Lock()
+	defer resetCodeMutex.Unlock()
+	key := normalizeEmail(email)
+	resetCodeStorage[key] = EmailCodeData{
+		Code:      strings.TrimSpace(code),
+		ExpiresAt: time.Now().Add(expiresIn),
+	}
+}
+
+// VerifyAndConsumePasswordResetCode проверяет код и удаляет его при успехе
+func VerifyAndConsumePasswordResetCode(email, code string) bool {
+	key := normalizeEmail(email)
+	code = strings.TrimSpace(code)
+	resetCodeMutex.Lock()
+	defer resetCodeMutex.Unlock()
+	stored, exists := resetCodeStorage[key]
+	if !exists || stored.Code != code || time.Now().After(stored.ExpiresAt) {
+		return false
+	}
+	delete(resetCodeStorage, key)
+	return true
+}

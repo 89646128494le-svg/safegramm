@@ -21,6 +21,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	api.POST("/auth/send-login-email-code", AuthRateLimitMiddleware(), SendLoginEmailCode(db))
 	api.GET("/auth/email-status", AuthRateLimitMiddleware(), GetEmailStatus)
 	api.POST("/auth/verify-email", AuthRateLimitMiddleware(), VerifyEmail(db))
+	api.POST("/auth/forgot-password", AuthRateLimitMiddleware(), ForgotPassword(db))
+	api.POST("/auth/reset-password", AuthRateLimitMiddleware(), ResetPassword(db))
 
 	// Тестовый endpoint для просмотра всех email шаблонов (только development)
 	api.POST("/test/email", AuthRateLimitMiddleware(), TestEmailTemplates(db))
