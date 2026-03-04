@@ -645,6 +645,29 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [loadMessages, loadingMoreMessages, hasMoreMessages, oldestMessageId]);
 
+  // Подтягивание новых сообщений по таймеру (fallback, если WebSocket не доставил)
+  const pollNewMessages = useCallback(async () => {
+    if (!chatId || selectedThreadId) return;
+    const url = `/api/chats/${chatId}/messages`;
+    try {
+      const data = await api(`${url}?limit=50`);
+      const loaded = (data.messages || []).map((m: any) => ({
+        ...m,
+        createdAt: m.createdAt ? (typeof m.createdAt === 'string' ? new Date(m.createdAt).getTime() : (typeof m.createdAt === 'number' ? m.createdAt : Date.now())) : Date.now(),
+        expiresAt: m.expiresAt ? (typeof m.expiresAt === 'string' ? new Date(m.expiresAt).getTime() : (typeof m.expiresAt === 'number' ? m.expiresAt : undefined)) : undefined,
+        isRead: m.isRead !== undefined ? m.isRead : false,
+        readReceipts: (m.readReceipts || []).map((r: any) => ({ userId: r.userId, readAt: typeof r.readAt === 'string' ? new Date(r.readAt).getTime() : (r.readAt ?? 0), user: r.user })),
+      }));
+      setMessages(prev => {
+        const prevIds = new Set(prev.map(m => m.id));
+        const newOnes = loaded.filter((m: Message) => !prevIds.has(m.id));
+        if (newOnes.length === 0) return prev;
+        const combined = [...prev, ...newOnes].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        return combined.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i);
+      });
+    } catch (_) { /* ignore */ }
+  }, [chatId, selectedThreadId]);
+
   // Обработка прокрутки для автоматической загрузки
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
@@ -1233,6 +1256,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       }
     };
   }, [chatId, currentUser.id, loadMessages, loadUsers]);
+
+  // Опрос новых сообщений каждые 4 с (fallback, если WebSocket не доставил)
+  useEffect(() => {
+    if (!chatId || selectedThreadId) return;
+    const t = setInterval(pollNewMessages, 4000);
+    return () => clearInterval(t);
+  }, [chatId, selectedThreadId, pollNewMessages]);
 
   // Автоскролл при новых сообщениях (мгновенно)
   useEffect(() => {
