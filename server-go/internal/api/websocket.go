@@ -22,11 +22,16 @@ var upgrader = gorillaWS.Upgrader{
 func handleWebSocket(hub *websocket.Hub, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
-		if !wsConnLimiter.allow(ip) {
-			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too_many_websocket_connections"})
-			return
+		var release func()
+		if IsDDoSDisabled() {
+			release = func() {}
+		} else {
+			if !wsConnLimiter.allow(ip) {
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": "too_many_websocket_connections"})
+				return
+			}
+			release = wsConnLimiter.acquire(ip)
 		}
-		release := wsConnLimiter.acquire(ip)
 
 		// Извлекаем токен из query параметра или заголовка
 		tokenString := c.Query("token")

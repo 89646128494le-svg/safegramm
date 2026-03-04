@@ -139,3 +139,13 @@ docker rm -f safegram-api-backend-1
 # Полная переустановка с нуля (удалить папку и клонировать заново)
 # cd ~ && rm -rf safegram-api && git clone https://github.com/89646128494le-svg/safegramm.git safegram-api
 # затем создать .env, собрать образ или залить main, запустить start-container.sh и start-caddy.sh
+
+---
+
+## Отключить DDoS/rate limit на время тестов
+
+В .env добавить (или экспорт в консоли перед запуском):
+DISABLE_DDOS=true
+
+Перезапустить контейнер: docker stop safegram-server; docker rm safegram-server; bash start-container.sh
+После тестов убрать DISABLE_DDOS и снова перезапустить.

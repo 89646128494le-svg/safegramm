@@ -155,12 +155,17 @@ func (g *globalDDoS) recordReject(ip string) {
 
 // SecurityMiddleware — порядок: 1) блоклист, 2) глобальный rate limit, 3) лимит тела.
 // Вешать первым после Recovery/CORS, до остальных хендлеров.
+// Для тестов: DISABLE_DDOS=true или SECURITY_DISABLED=true — отключает DDoS/rate limit/блоклист.
 func SecurityMiddleware() gin.HandlerFunc {
 	maxBody := int64(envInt("SECURITY_MAX_BODY_MB", 10) << 20)
 	if maxBody <= 0 {
 		maxBody = defaultMaxBodyBytes
 	}
 	return func(c *gin.Context) {
+		if IsDDoSDisabled() {
+			c.Next()
+			return
+		}
 		path := c.Request.URL.Path
 		if path == "/health" || path == "/metrics" {
 			c.Next()
@@ -231,4 +236,10 @@ func (w *wsConnLimit) acquire(ip string) (release func()) {
 // RecordSecurityViolation вызывается при явном нарушении (например 429) для учёта в блоклисте.
 func RecordSecurityViolation(ip string) {
 	globalBlocklist.recordViolation(ip)
+}
+
+// IsDDoSDisabled возвращает true, если защита отключена (для тестов).
+func IsDDoSDisabled() bool {
+	return os.Getenv("DISABLE_DDOS") == "true" || os.Getenv("DISABLE_DDOS") == "1" ||
+		os.Getenv("SECURITY_DISABLED") == "true" || os.Getenv("SECURITY_DISABLED") == "1"
 }
