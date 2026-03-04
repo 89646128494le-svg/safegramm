@@ -101,6 +101,36 @@ func (b *ipBlocklist) isWhitelisted(ip string) bool {
 	return false
 }
 
+// ListBanned возвращает список IP, которые сейчас в бане (время ещё не истекло).
+func (b *ipBlocklist) ListBanned() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	now := time.Now()
+	out := make([]string, 0, len(b.banned))
+	for ip, until := range b.banned {
+		if now.Before(until) {
+			out = append(out, ip)
+		}
+	}
+	return out
+}
+
+// Unblock снимает бан с IP.
+func (b *ipBlocklist) Unblock(ip string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	delete(b.banned, ip)
+	delete(b.violations, ip)
+}
+
+// BlockManual добавляет IP в бан на стандартный срок (для админки).
+func (b *ipBlocklist) BlockManual(ip string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.banned[ip] = time.Now().Add(b.banDur)
+	delete(b.violations, ip)
+}
+
 var globalBlocklist = newIPBlocklist(envInt("SECURITY_BAN_MINUTES", defaultBanDurationMin), envInt("SECURITY_VIOLATIONS_TO_BAN", defaultViolationsToBan))
 
 func envInt(key string, defaultVal int) int {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -226,16 +227,50 @@ func GetAdminSecurityAlerts(db *gorm.DB) gin.HandlerFunc {
 	return GetAdminSafetyAlerts(db)
 }
 
-// GetAdminSecurityBlockedIPs — заблокированные IP (пока пустой список; при появлении таблицы — заполнить).
+// GetAdminSecurityBlockedIPs — список заблокированных IP (из in-memory блоклиста).
 func GetAdminSecurityBlockedIPs(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"ips": []string{}})
+		list := globalBlocklist.ListBanned()
+		c.JSON(http.StatusOK, gin.H{"ips": list})
 	}
 }
 
-// PostAdminSecurityBlockIP — блокировка IP (заглушка: 501 или сохранять в конфиг/таблицу при появлении).
+// PostAdminSecurityBlockIP — ручная блокировка IP через админку.
 func PostAdminSecurityBlockIP(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.JSON(http.StatusNotImplemented, gin.H{"error": "not_implemented", "detail": "block_ip_not_configured"})
+		var req struct {
+			IP string `json:"ip" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ip_required"})
+			return
+		}
+		ip := strings.TrimSpace(req.IP)
+		if ip == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ip_required"})
+			return
+		}
+		if globalBlocklist.isWhitelisted(ip) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ip_whitelisted"})
+			return
+		}
+		globalBlocklist.BlockManual(ip)
+		c.JSON(http.StatusOK, gin.H{"ok": true, "ip": ip})
+	}
+}
+
+// PostAdminSecurityUnblockIP — разблокировать IP через админку.
+func PostAdminSecurityUnblockIP(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			IP string `json:"ip" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ip_required"})
+			return
+		}
+		ip := strings.TrimSpace(req.IP)
+		globalBlocklist.Unblock(ip)
+		c.JSON(http.StatusOK, gin.H{"ok": true, "ip": ip})
 	}
 }

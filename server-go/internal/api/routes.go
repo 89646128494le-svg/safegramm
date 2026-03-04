@@ -371,6 +371,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/admin/security/alerts", RequireAdmin(db), GetAdminSecurityAlerts(db))
 	protected.GET("/admin/security/blocked-ips", RequireAdmin(db), GetAdminSecurityBlockedIPs(db))
 	protected.POST("/admin/security/block-ip", RequireAdmin(db), PostAdminSecurityBlockIP(db))
+	protected.POST("/admin/security/unblock-ip", RequireAdmin(db), PostAdminSecurityUnblockIP(db))
 	protected.POST("/admin/broadcast-email", RequireAdmin(db), BroadcastPersonalEmail(db))
 
 	// Технические работы
