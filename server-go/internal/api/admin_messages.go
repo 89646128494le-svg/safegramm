@@ -53,11 +53,9 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Target user has no email address"})
 			return
 		}
-		if err := email.SendAdminMessage(*targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "EMAIL_SEND_FAILED"})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Email sent successfully", "to": *targetUser.Email})
+		to, uname, msg, atext, alink := *targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink
+		go func() { _ = email.SendAdminMessage(to, uname, msg, atext, alink) }()
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Email sent successfully", "to": to})
 	}
 }
 
@@ -83,29 +81,19 @@ func BroadcastPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
 			return
 		}
-		successCount := 0
-		failedCount := 0
-		var errors []string
+		msg, atext, alink := req.Message, req.ActionText, req.ActionLink
 		for _, targetUserID := range req.UserIDs {
 			var targetUser models.User
 			if err := db.First(&targetUser, targetUserID).Error; err != nil {
-				failedCount++
-				errors = append(errors, "User "+targetUserID+" not found")
 				continue
 			}
 			if targetUser.Email == nil {
-				failedCount++
-				errors = append(errors, "User "+targetUserID+" has no email")
 				continue
 			}
-			if err := email.SendAdminMessage(*targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink); err != nil {
-				failedCount++
-				errors = append(errors, "Failed to send to "+*targetUser.Email+": "+err.Error())
-				continue
-			}
-			successCount++
+			to, uname := *targetUser.Email, targetUser.Username
+			go func() { _ = email.SendAdminMessage(to, uname, msg, atext, alink) }()
 		}
-		c.JSON(http.StatusOK, gin.H{"success": true, "successCount": successCount, "failedCount": failedCount, "errors": errors})
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Рассылка запущена"})
 	}
 }
 
@@ -147,18 +135,15 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "USERS_FETCH_FAILED"})
 				return
 			}
-			successCount := 0
-			failedCount := 0
+			ts, msg := req.Timestamp, req.Message
 			for _, targetUser := range users {
-				if targetUser.Email == nil { continue }
-				if err := email.SendMaintenanceNotification(*targetUser.Email, targetUser.Username, req.Timestamp, req.Message); err != nil {
-					failedCount++
+				if targetUser.Email == nil {
 					continue
 				}
-				successCount++
+				to, uname := *targetUser.Email, targetUser.Username
+				go func() { _ = email.SendMaintenanceNotification(to, uname, ts, msg) }()
 			}
-			response["emailsSent"] = successCount
-			response["emailsFailed"] = failedCount
+			response["emailsQueued"] = len(users)
 		}
 		c.JSON(http.StatusOK, response)
 	}

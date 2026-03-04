@@ -115,6 +115,8 @@ interface Message {
   deletedAt?: number;
   expiresAt?: number;
   createdAt: number;
+  /** Длительность голосового/аудио вложения в секундах (если есть с бэкенда). */
+  attachmentDuration?: number;
   isRead?: boolean; // Прочитано ли сообщение текущим пользователем
   readReceipts?: Array<{ // Список пользователей, прочитавших сообщение
     userId: string;
@@ -274,6 +276,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [showExpirePicker, setShowExpirePicker] = useState(false);
   const [showPollCreator, setShowPollCreator] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showCalendarCreator, setShowCalendarCreator] = useState(false);
   const [showContactCreator, setShowContactCreator] = useState(false);
   const [showMessagePreview, setShowMessagePreview] = useState(false);
@@ -908,6 +911,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               senderId: messageData.senderId || messageData.sender_id,
               text: messageData.text || '',
               attachmentUrl: messageData.attachmentUrl || messageData.attachment_url,
+              attachmentDuration: messageData.attachmentDuration ?? messageData.attachment_duration,
               replyTo: messageData.replyTo || messageData.reply_to,
               replyToMessage: messageData.replyToMessage || messageData.reply_to_message,
               forwardFrom: messageData.forwardFrom || messageData.forward_from,
@@ -1512,6 +1516,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         senderId: msg.senderId || msg.sender_id,
         text: msg.text || '',
         attachmentUrl: msg.attachmentUrl || msg.attachment_url,
+        attachmentDuration: msg.attachmentDuration ?? msg.attachment_duration,
         replyTo: msg.replyTo || msg.reply_to,
         replyToMessage: msg.replyToMessage,
         forwardFrom: msg.forwardFrom || msg.forward_from,
@@ -1573,11 +1578,18 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   };
 
+  const MAX_ATTACHMENT_MB = 50;
+  const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
+
   // Отправка файла с прогрессом и сжатием
   const sendFile = async (file: File, isVoiceMessage: boolean = false) => {
     try {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        showToast(`Файл слишком большой. Макс. ${MAX_ATTACHMENT_MB} МБ`, 'error');
+        return;
+      }
       let fileToUpload = file;
-      
+
       // Сжимаем изображения если нужно
       if (!isVoiceMessage && file.type.startsWith('image/') && shouldCompressImage(file)) {
         try {
@@ -1731,6 +1743,10 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   // Отправка документа
   const sendDocument = async (file: File) => {
     try {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        showToast(`Файл слишком большой. Макс. ${MAX_ATTACHMENT_MB} МБ`, 'error');
+        return;
+      }
       const form = new FormData();
       form.append('file', file);
       form.append('kind', 'document');
@@ -2235,6 +2251,25 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           {isOnline ? 'онлайн' : 'был(а) недавно'}
                         </span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowVerificationModal(true)}
+                        title="Подтверждение личности / отпечаток ключа"
+                        style={{
+                          padding: '6px 10px',
+                          background: 'transparent',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          color: 'var(--fg)',
+                          fontSize: '14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        🛡️
+                      </button>
                     </>
                   );
                 })() : (
@@ -3448,7 +3483,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                         } else if (msg.attachmentUrl.match(/\.(mp3|wav|ogg|webm)$/i)) {
                           return (
                             <div style={{ marginTop: '8px' }}>
-                              <AudioPlayer src={attachmentUrl} />
+                              <AudioPlayer src={attachmentUrl} duration={msg.attachmentDuration} />
                             </div>
                           );
                         } else {
@@ -3780,6 +3815,31 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         cancelText="Отмена"
       />
 
+      {/* Модальное окно: отпечаток ключа / подтверждение личности */}
+      {showVerificationModal && chatInfoRef.current?.type === 'dm' && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }} onClick={() => setShowVerificationModal(false)}>
+          <div className="modal-content" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', maxWidth: '400px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>🛡️ Подтверждение личности</h3>
+              <button type="button" onClick={() => setShowVerificationModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--subtle)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+            </div>
+            <p style={{ fontSize: '14px', color: 'var(--subtle)', marginBottom: '16px', lineHeight: 1.5 }}>
+              Сравните этот отпечаток с отпечатком на устройстве собеседника. При полном E2E здесь будет отображаться отпечаток ключа.
+            </p>
+            <div style={{ fontFamily: 'monospace', fontSize: '16px', letterSpacing: '0.15em', padding: '16px', background: 'var(--panel-2)', borderRadius: '8px', textAlign: 'center', wordBreak: 'break-all' }}>
+              {(() => {
+                const otherId = chatInfoRef.current?.members?.find((id: string) => id !== currentUser.id);
+                const raw = chatId && otherId ? [chatId, otherId].sort().join('') : '';
+                const hash = raw ? Array.from(raw).reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0) | 0, 0).toString(16).toUpperCase().slice(-12) : '—';
+                const fp = hash !== '—' ? (hash.match(/.{1,4}/g) || [hash]).join(' ') : '—';
+                return fp;
+              })()}
+            </div>
+            <button type="button" onClick={() => setShowVerificationModal(false)} style={{ marginTop: '16px', width: '100%', padding: '10px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>Закрыть</button>
+          </div>
+        </div>
+      )}
+
       {/* Модальное окно пересылки */}
       {showForwardModal && forwardMessageId && (
         <div className="modal-overlay" onClick={() => setShowForwardModal(false)}>
@@ -3918,7 +3978,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             <button
               className="attach-btn"
               onClick={() => document.getElementById('file-input')?.click()}
-              title="Прикрепить файл"
+              title={`Прикрепить файл (макс. ${MAX_ATTACHMENT_MB} МБ)`}
               onMouseEnter={(e) => {
                 const menu = e.currentTarget.nextElementSibling as HTMLElement;
                 if (menu) menu.style.display = 'flex';

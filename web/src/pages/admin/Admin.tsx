@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
-import { api, getApiBaseUrl, getErrorMessage } from '../../services/api';
+import { Link } from 'react-router-dom';
+import { api, getApiBaseUrl, getErrorMessage, setAdmin2FAToken } from '../../services/api';
 import { showToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/Modal';
 import ServiceManager from '../../components/ServiceManager';
@@ -26,24 +27,14 @@ import { ADMIN_TABS, ADMIN_SECTIONS, canAccessAdminTab, getRoleLabel, getRoleLev
 
 type AdminTabId = typeof ADMIN_TABS[number]['id'];
 
+type AdminGate = 'loading' | 'no_2fa' | 'need_code' | 'verified';
+
 export default function Admin() {
   const [tab, setTab] = useState<AdminTabId>('users');
   const [user, setUser] = useState<any>(null);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const visibleTabs = React.useMemo(
-    () => ADMIN_TABS.filter((t) => user && canAccessAdminTab(user, t.id)),
-    [user]
-  );
-
-  useEffect(() => {
-    if (visibleTabs.length && !visibleTabs.some((t) => t.id === tab)) {
-      setTab(visibleTabs[0].id);
-    }
-  }, [visibleTabs, tab]);
+  const [adminGate, setAdminGate] = useState<AdminGate>('loading');
+  const [twoFACode, setTwoFACode] = useState('');
+  const [verifying, setVerifying] = useState(false);
 
   const loadUser = async () => {
     try {
@@ -56,12 +47,150 @@ export default function Admin() {
     }
   };
 
+  useEffect(() => {
+    loadUser();
+  }, []);
+
+  useEffect(() => {
+    if (!user || adminGate !== 'loading') return;
+    if (!ADMIN_TABS.some((t) => canAccessAdminTab(user, t.id))) {
+      setAdminGate('verified');
+      return;
+    }
+    api('/api/admin/2fa-status')
+      .then((status: any) => {
+        if (!status.twoFactorEnabled) {
+          setAdminGate('no_2fa');
+          return;
+        }
+        return api('/api/admin/users').then(() => setAdminGate('verified'));
+      })
+      .catch((e: any) => {
+        const err = e?.response ?? e?.responseData ?? e?.body ?? {};
+        if (e?.status === 401 && err?.error === 'admin_2fa_verify_required') setAdminGate('need_code');
+        else setAdminGate('need_code');
+      });
+  }, [user, adminGate]);
+
+  const submit2FACode = async () => {
+    const code = twoFACode.trim().replace(/\s/g, '');
+    if (!code || code.length < 6) {
+      showToast('Введите 6-значный код из приложения', 'error');
+      return;
+    }
+    setVerifying(true);
+    try {
+      const data = await api('/api/admin/verify-2fa', 'POST', { code });
+      if (data.token) {
+        setAdmin2FAToken(data.token);
+        setAdminGate('verified');
+        setTwoFACode('');
+        showToast('Вход в админку выполнен', 'success');
+      }
+    } catch (e: any) {
+      const err = e?.response ?? e?.responseData ?? e?.body ?? {};
+      if (err.error === 'invalid_code') showToast('Неверный код. Проверьте и введите снова.', 'error');
+      else showToast(getErrorMessage(e, 'Не удалось войти'), 'error');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const visibleTabs = React.useMemo(
+    () => ADMIN_TABS.filter((t) => user && canAccessAdminTab(user, t.id)),
+    [user]
+  );
+
+  useEffect(() => {
+    if (visibleTabs.length && !visibleTabs.some((t) => t.id === tab)) {
+      setTab(visibleTabs[0].id);
+    }
+  }, [visibleTabs, tab]);
+
   const roleLabel = user ? getRoleLabel(user) : '';
   const roleBadgeStyle = roleLabel === 'Владелец'
     ? { background: 'linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.2))', border: '1px solid rgba(251,191,36,0.4)', color: '#fcd34d' }
     : roleLabel === 'Тех. Админ'
     ? { background: 'linear-gradient(135deg, rgba(124,108,255,0.2), rgba(61,216,255,0.15))', border: '1px solid rgba(124,108,255,0.35)', color: '#a5b4fc' }
     : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--subtle, #9ca3af)' };
+
+  if (adminGate === 'loading') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg, #05060c)' }}>
+        <div className="empty" style={{ color: 'var(--subtle)' }}>Загрузка…</div>
+      </div>
+    );
+  }
+
+  if (adminGate === 'no_2fa') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg, #05060c)', padding: '24px' }}>
+        <div style={{ maxWidth: '420px', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛡️</div>
+          <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '12px', color: 'var(--fg)' }}>Требуется двухфакторная аутентификация</h2>
+          <p style={{ color: 'var(--subtle)', marginBottom: '24px', lineHeight: 1.5 }}>
+            Для доступа в админку необходимо включить двухфакторную аутентификацию в настройках.
+          </p>
+          <Link to="/app/settings" style={{ display: 'inline-block', padding: '12px 24px', background: 'var(--accent, #3b82f6)', color: '#fff', borderRadius: '8px', fontWeight: '600', textDecoration: 'none' }}>
+            Перейти в Настройки → Безопасность
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (adminGate === 'need_code') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg, #05060c)', padding: '24px' }}>
+        <div style={{ maxWidth: '360px', width: '100%' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px', textAlign: 'center' }}>🔐</div>
+          <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px', color: 'var(--fg)', textAlign: 'center' }}>Вход в админку</h2>
+          <p style={{ color: 'var(--subtle)', marginBottom: '24px', textAlign: 'center', fontSize: '14px' }}>
+            Введите код из приложения двухфакторной аутентификации
+          </p>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={8}
+            placeholder="000000"
+            value={twoFACode}
+            onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            onKeyDown={(e) => e.key === 'Enter' && submit2FACode()}
+            style={{
+              width: '100%',
+              padding: '14px 16px',
+              fontSize: '18px',
+              letterSpacing: '0.3em',
+              textAlign: 'center',
+              background: 'var(--panel-2)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              color: 'var(--fg)',
+              marginBottom: '16px',
+            }}
+          />
+          <button
+            type="button"
+            onClick={submit2FACode}
+            disabled={verifying || twoFACode.replace(/\D/g, '').length < 6}
+            style={{
+              width: '100%',
+              padding: '14px',
+              background: verifying ? 'var(--subtle)' : 'var(--accent, #3b82f6)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: '600',
+              cursor: verifying ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {verifying ? 'Проверка…' : 'Войти'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-root" style={{
@@ -774,10 +903,11 @@ function UsersTab({ currentUser }: { currentUser: any }) {
     let filtered = list;
     
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(u => 
-        u.username.toLowerCase().includes(query) ||
-        (u.email && u.email.toLowerCase().includes(query))
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(u =>
+        (u.username && u.username.toLowerCase().includes(query)) ||
+        (u.email && u.email.toLowerCase().includes(query)) ||
+        (u.id && (u.id.toLowerCase().includes(query) || u.id === query))
       );
     }
     
@@ -906,7 +1036,7 @@ function UsersTab({ currentUser }: { currentUser: any }) {
       }}>
         <input
           type="text"
-          placeholder="Поиск по имени или email..."
+          placeholder="Поиск по имени, email или ID..."
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           style={{
@@ -1415,13 +1545,27 @@ function PremiumApplicationsTab() {
       </div>
     );
   }
+  const exportPremiumCsv = () => {
+    const headers = ['id', 'subject', 'body', 'userId', 'createdAt'];
+    const rows = list.map((f: any) => [f.id ?? '', (f.subject ?? '').replace(/"/g, '""'), (f.body ?? '').replace(/"/g, '""'), f.userId ?? '', f.createdAt ? new Date(f.createdAt).toISOString() : '']);
+    const csv = [headers.join(','), ...rows.map((r: string[]) => r.map(x => `"${String(x)}"`).join(','))].join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `premium_applications_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    showToast('CSV сохранён', 'success');
+  };
+
   return (
     <div>
-      <div style={{marginBottom: '24px'}}>
-        <h3 style={{fontSize: '20px', fontWeight: '600', marginBottom: '8px'}}>Заявки на Premium / Enterprise</h3>
-        <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
-          Рассмотрите заявки и выдайте тариф во вкладке «Пользователи» (план Premium).
+      <div style={{marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px'}}>
+        <div>
+          <h3 style={{fontSize: '20px', fontWeight: '600', marginBottom: '8px'}}>Заявки на Premium / Enterprise</h3>
+          <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
+            Рассмотрите заявки и выдайте тариф во вкладке «Пользователи» (план Premium). Всего: {list.length}
+          </div>
         </div>
+        {list.length > 0 && (
+          <button type="button" onClick={exportPremiumCsv} style={{padding: '8px 16px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--fg)', cursor: 'pointer', fontWeight: '500'}}>Экспорт CSV</button>
+        )}
       </div>
       {list.length === 0 ? (
         <div className="empty" style={{padding: '48px'}}>
@@ -1469,6 +1613,7 @@ function RecruitTab() {
   const [declineId, setDeclineId] = useState<string | null>(null);
   const [declineReason, setDeclineReason] = useState('');
   const [actioning, setActioning] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
 
   const load = () => {
     setLoading(true);
@@ -1525,19 +1670,41 @@ function RecruitTab() {
       </div>
     );
   }
+  const filteredRecruit = filterStatus === 'all' ? list : list.filter((a: any) => a.status === filterStatus);
+
+  const exportRecruitCsv = () => {
+    const headers = ['id', 'name', 'email', 'role', 'status', 'message', 'declineReason', 'createdAt'];
+    const rows = filteredRecruit.map((a: any) => [a.id, a.name ?? '', a.email ?? '', a.role ?? '', a.status ?? '', (a.message ?? '').replace(/"/g, '""'), (a.declineReason ?? '').replace(/"/g, '""'), a.createdAt ? new Date(a.createdAt).toISOString() : '']);
+    const csv = [headers.join(','), ...rows.map((r: string[]) => r.map(x => `"${x}"`).join(','))].join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `recruit_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    showToast('CSV сохранён', 'success');
+  };
+
   return (
     <div>
-      <div style={{marginBottom: '24px'}}>
-        <h3 style={{fontSize: '20px', fontWeight: '600', marginBottom: '8px'}}>Набор: тестировщики и хелперы</h3>
-        <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
-          Заявки с публичной страницы <a href="/join" target="_blank" rel="noopener noreferrer" style={{color: 'var(--accent)'}}>/join</a>. Всего: {list.length}
+      <div style={{marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px'}}>
+        <div>
+          <h3 style={{fontSize: '20px', fontWeight: '600', marginBottom: '8px'}}>Набор: тестировщики и хелперы</h3>
+          <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
+            Заявки с публичной страницы <a href="/join" target="_blank" rel="noopener noreferrer" style={{color: 'var(--accent)'}}>/join</a>. Всего: {list.length} {filteredRecruit.length !== list.length && `(отфильтровано: ${filteredRecruit.length})`}
+          </div>
+        </div>
+        <div style={{display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap'}}>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{padding: '8px 12px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--fg)', cursor: 'pointer'}}>
+            <option value="all">Все</option>
+            <option value="pending">Ожидают</option>
+            <option value="approved">Приняты</option>
+            <option value="declined">Отклонены</option>
+          </select>
+          <button type="button" onClick={exportRecruitCsv} style={{padding: '8px 16px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--fg)', cursor: 'pointer', fontWeight: '500'}}>Экспорт CSV</button>
         </div>
       </div>
-      {list.length === 0 ? (
+      {filteredRecruit.length === 0 ? (
         <div className="empty" style={{padding: '48px'}}>Нет заявок</div>
       ) : (
         <div style={{display: 'grid', gap: '12px'}}>
-          {list.map((a: any) => (
+          {filteredRecruit.map((a: any) => (
             <div key={a.id} style={{padding: '16px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '12px'}}>
               <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap'}}>
                 <span style={{fontWeight: '600'}}>{a.name || '—'}</span>

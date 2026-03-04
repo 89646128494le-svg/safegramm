@@ -62,12 +62,14 @@ func ForgotPassword(db *gorm.DB) gin.HandlerFunc {
 
 		code := generateRandomCode(6)
 		StorePasswordResetCode(emailStr, code, passwordResetExpiry)
-		if err := email.SendPasswordResetCode(emailStr, user.Username, code); err != nil {
-			logger.Error("ForgotPassword: failed to send email", err, map[string]interface{}{"email": maskEmail(emailStr)})
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "send_failed", "detail": "Не удалось отправить письмо"})
-			return
-		}
-		logger.Info("ForgotPassword: reset code sent", map[string]interface{}{"email": maskEmail(emailStr)})
+		to, uname, codeVal := emailStr, user.Username, code
+		go func() {
+			if err := email.SendPasswordResetCode(to, uname, codeVal); err != nil {
+				logger.Error("ForgotPassword: failed to send email", err, map[string]interface{}{"email": maskEmail(to)})
+				return
+			}
+			logger.Info("ForgotPassword: reset code sent", map[string]interface{}{"email": maskEmail(to)})
+		}()
 		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Код восстановления отправлен на вашу почту"})
 	}
 }

@@ -164,7 +164,16 @@ func ChangePassword(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		db.Model(&user).Update("pass_hash", string(hashedPassword))
-		c.JSON(http.StatusOK, gin.H{"ok": true})
+
+		// Инвалидируем все остальные сессии пользователя (текущая остаётся)
+		currentSessionID, _ := c.Get("sessionId")
+		if sid, ok := currentSessionID.(string); ok && sid != "" {
+			db.Model(&models.Session{}).
+				Where("user_id = ? AND id != ? AND is_active = ?", userIDStr, sid, true).
+				Update("is_active", false)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"ok": true, "otherSessionsRevoked": true})
 	}
 }
 

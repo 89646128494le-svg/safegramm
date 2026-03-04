@@ -10,6 +10,7 @@ export default function SecurityDashboard() {
   const [blockedIps, setBlockedIps] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [blockIpInput, setBlockIpInput] = useState('');
+  const [showIds, setShowIds] = useState(false);
 
   const load = async () => {
     try {
@@ -112,10 +113,16 @@ export default function SecurityDashboard() {
 
       {/* Активные сессии */}
       <section style={{ marginBottom: '24px' }}>
-        <h4 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Activity size={20} />
-          Активные сессии
-        </h4>
+        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Activity size={20} />
+            Активные сессии
+          </h4>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--subtle)' }}>
+            <input type="checkbox" checked={showIds} onChange={e => setShowIds(e.target.checked)} />
+            Показать ID
+          </label>
+        </div>
         <div style={{
           padding: '16px',
           background: 'var(--panel, rgba(31, 41, 55, 0.6))',
@@ -129,9 +136,27 @@ export default function SecurityDashboard() {
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
               {sessions.map((s: any, i: number) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                  <span>{s.username || 'Пользователь'}</span>
-                  <span className="small" style={{ color: 'var(--subtle)' }}>{s.ip || s.userAgent || ''} • {s.lastActive ? new Date(s.lastActive).toLocaleString('ru-RU') : ''}</span>
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <span>{s.username || 'Пользователь'}</span>
+                    {showIds && (s.userId || s.id) && (
+                      <code style={{ marginLeft: '8px', fontSize: '12px', background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '4px', color: 'var(--subtle)' }} title={s.userId || s.id}>
+                        {s.userId || s.id}
+                      </code>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {(s.userId || s.id) && (
+                      <button
+                        type="button"
+                        onClick={() => { const id = s.userId || s.id; navigator.clipboard.writeText(id); showToast('ID скопирован', 'success'); }}
+                        style={{ padding: '4px 8px', fontSize: '11px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--fg)' }}
+                      >
+                        Копировать ID
+                      </button>
+                    )}
+                    <span className="small" style={{ color: 'var(--subtle)' }}>{s.ip || s.userAgent || ''} • {s.lastActive ? new Date(s.lastActive).toLocaleString('ru-RU') : ''}</span>
+                  </div>
                 </div>
               ))}
             </div>

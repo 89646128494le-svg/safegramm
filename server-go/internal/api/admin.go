@@ -411,10 +411,10 @@ func ApproveRecruitApplication(db *gorm.DB) gin.HandlerFunc {
 		if name == "" {
 			name = app.Email
 		}
-		if err := email.SendRecruitApproved(app.Email, name); err != nil {
-			c.JSON(http.StatusOK, gin.H{"ok": true, "warning": "email_failed"})
-			return
-		}
+		to, n := app.Email, name
+		go func() {
+			_ = email.SendRecruitApproved(to, n)
+		}()
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
@@ -449,10 +449,10 @@ func DeclineRecruitApplication(db *gorm.DB) gin.HandlerFunc {
 		if name == "" {
 			name = app.Email
 		}
-		if err := email.SendRecruitDeclined(app.Email, name, app.DeclineReason); err != nil {
-			c.JSON(http.StatusOK, gin.H{"ok": true, "warning": "email_failed"})
-			return
-		}
+		to, n, reason := app.Email, name, app.DeclineReason
+		go func() {
+			_ = email.SendRecruitDeclined(to, n, reason)
+		}()
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }

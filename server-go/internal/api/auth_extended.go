@@ -114,46 +114,22 @@ func SendEmailCode(db *gorm.DB) gin.HandlerFunc {
 
 		// Генерируем 6-значный код
 		code := generateRandomCode(6)
-		
 		// Сохраняем код (действителен 10 минут)
 		StoreEmailCode(req.Email, code, 10*time.Minute)
 
-		// Отправляем email
-		err := email.SendVerificationCode(req.Email, code)
-		if err != nil {
-			logger.Error("SendEmailCode: failed to send email", err, map[string]interface{}{
-				"email": req.Email,
-			})
-			nodeEnv := os.Getenv("NODE_ENV")
-			if nodeEnv == "development" || nodeEnv == "" {
-				c.JSON(http.StatusOK, gin.H{
-					"ok": true,
-					"message": "Код отправлен на email (или ошибка отправки - проверьте настройки)",
-					"error": err.Error(),
-					"code": code,
-				})
-				return
+		// Отправляем email в фоне — ответ клиенту сразу
+		to, codeVal := req.Email, code
+		go func() {
+			if err := email.SendVerificationCode(to, codeVal); err != nil {
+				logger.Error("SendEmailCode: failed to send email", err, map[string]interface{}{"email": to})
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "failed_to_send_email",
-				"detail":  "Не удалось отправить email. Проверьте настройки SMTP.",
-				"hint":    err.Error(),
-			})
-			return
-		}
+		}()
 
-		// Успешная отправка
 		nodeEnv := os.Getenv("NODE_ENV")
-		response := gin.H{
-			"ok": true,
-			"message": "Код отправлен на email",
-		}
-		
-		// В development режиме показываем код для тестирования
+		response := gin.H{"ok": true, "message": "Код отправлен на email"}
 		if nodeEnv == "development" || nodeEnv == "" {
 			response["code"] = code
 		}
-		
 		c.JSON(http.StatusOK, response)
 	}
 }
@@ -194,15 +170,20 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 		// Сохраняем код (действителен 10 минут)
 		StoreEmailCode(*user.Email, code, 10*time.Minute)
 
+		// Отправляем email в фоне — ответ клиенту сразу (и в dev, и в production)
+		userEmail, codeVal := *user.Email, code
+		go func() {
+			if err := email.SendVerificationCode(userEmail, codeVal); err != nil {
+				logger.Error("SendLoginEmailCode: failed to send email", err, map[string]interface{}{
+					"username": req.Username,
+					"email":    maskEmail(userEmail),
+				})
+			}
+		}()
+
 		nodeEnv := os.Getenv("NODE_ENV")
 		isDev := nodeEnv == "development" || nodeEnv == ""
-
 		if isDev {
-			// В разработке сразу возвращаем ответ с кодом, отправку письма — в фоне (не блокируем)
-			userEmail := *user.Email
-			go func() {
-				_ = email.SendVerificationCode(userEmail, code)
-			}()
 			c.JSON(http.StatusOK, gin.H{
 				"ok":          true,
 				"message":     "Код для входа (режим разработки). Используйте код ниже или проверьте почту.",
@@ -211,44 +192,10 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 			})
 			return
 		}
-
-		// Production: отправляем email с ограничением по времени (15 с), чтобы клиент не получал таймаут
-		const sendTimeout = 15 * time.Second
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- email.SendVerificationCode(*user.Email, code)
-		}()
-		var err error
-		select {
-		case err = <-errCh:
-			// готово
-		case <-time.After(sendTimeout):
-			err = fmt.Errorf("timeout after %v", sendTimeout)
-		}
-		if err != nil {
-			logger.Error("SendLoginEmailCode: failed to send email", err, map[string]interface{}{
-				"username": req.Username,
-				"email":    maskEmail(*user.Email),
-			})
-			// Временно при ошибке отправки всё равно возвращаем код, чтобы пользователь мог войти
-			c.JSON(http.StatusOK, gin.H{
-				"ok":           true,
-				"message":      "Письмо не отправилось. Используйте код ниже для входа (временно).",
-				"hasCloudCode": user.PinHash != "",
-				"code":         code,
-			})
-			return
-		}
-		logger.Info("SendLoginEmailCode: email sent", map[string]interface{}{
-			"username": req.Username,
-			"to":       maskEmail(*user.Email),
-		})
-		// Временно возвращаем код в ответе, пока не решена доставка писем — пользователь может ввести код с экрана
 		c.JSON(http.StatusOK, gin.H{
-			"ok":           true,
-			"message":      "Код отправлен на email (если не пришёл — введите код с экрана)",
+			"ok":          true,
+			"message":     "Код отправлен на email",
 			"hasCloudCode": user.PinHash != "",
-			"code":         code,
 		})
 	}
 }

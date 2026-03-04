@@ -119,6 +119,10 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
     const token = localStorage.getItem('token');
     const headers: Record<string,string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
+    const admin2FA = typeof window !== 'undefined' && path.startsWith('/api/admin/') && !path.includes('2fa-status') && !path.includes('verify-2fa')
+      ? sessionStorage.getItem('admin_2fa_token')
+      : null;
+    if (admin2FA) headers['X-Admin-2FA-Token'] = admin2FA;
 
     const base = getApiBaseUrl();
     // Заголовок Bypass-Tunnel-Reminder ломает CORS при запросах с другого origin (например Vercel → loca.lt).
@@ -279,6 +283,14 @@ export function clearCache(path?: string): void {
   } else {
     cache.clear();
   }
+}
+
+/** Токен верификации 2FA для входа в админку (хранится в sessionStorage). */
+export function setAdmin2FAToken(token: string): void {
+  if (typeof window !== 'undefined') sessionStorage.setItem('admin_2fa_token', token);
+}
+export function clearAdmin2FAToken(): void {
+  if (typeof window !== 'undefined') sessionStorage.removeItem('admin_2fa_token');
 }
 
 /** Для обратной совместимости; при наличии прокси лучше использовать getApiBaseUrl(). */
