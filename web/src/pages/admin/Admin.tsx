@@ -66,6 +66,10 @@ export default function Admin() {
         return api('/api/admin/users').then(() => setAdminGate('verified'));
       })
       .catch((e: any) => {
+        if (e?.status === 404) {
+          setAdminGate('verified');
+          return;
+        }
         const err = e?.response ?? e?.responseData ?? e?.body ?? {};
         if (e?.status === 401 && err?.error === 'admin_2fa_verify_required') setAdminGate('need_code');
         else setAdminGate('need_code');
