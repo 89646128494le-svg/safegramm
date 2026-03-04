@@ -32,7 +32,7 @@ func envRateLimit(defaultRate int) int {
 
 var limiter = &rateLimiter{
 	visitors: make(map[string]*visitor),
-	rate:     envRateLimit(100),
+	rate:     envRateLimit(800),
 	window:   time.Minute,
 }
 
@@ -66,12 +66,11 @@ func (rl *rateLimiter) allow(ip string) bool {
 	return v.count <= rl.rate
 }
 
-// RateLimitMiddleware ограничивает количество запросов
+// RateLimitMiddleware ограничивает количество запросов (без блокировки IP)
 func RateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		if !limiter.allow(ip) {
-			RecordSecurityViolation(ip)
 			c.JSON(429, gin.H{"error": "too_many_requests"})
 			c.Abort()
 			return
@@ -83,7 +82,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 // AuthRateLimit более строгий лимит для аутентификации (AUTH_RATE_LIMIT — макс попыток за окно)
 var authLimiter = &rateLimiter{
 	visitors: make(map[string]*visitor),
-	rate:     envAuthRateLimit(30),
+	rate:     envAuthRateLimit(60),
 	window:   time.Minute * 5,
 }
 
@@ -100,7 +99,6 @@ func AuthRateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		if !authLimiter.allow(ip) {
-			RecordSecurityViolation(ip)
 			c.JSON(429, gin.H{"error": "too_many_attempts"})
 			c.Abort()
 			return

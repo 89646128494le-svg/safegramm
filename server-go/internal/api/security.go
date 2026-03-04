@@ -13,10 +13,10 @@ import (
 
 const (
 	defaultMaxBodyBytes     = 10 << 20  // 10 MB для обычных запросов
-	defaultDDoSReqPerMin    = 400       // глобальный лимит запросов/мин с одного IP
-	defaultViolationsToBan  = 15        // после скольких нарушений (429/401/403) банить
-	defaultBanDurationMin   = 30        // минуты бана
-	defaultWSConnsPerIP     = 5         // макс WebSocket соединений с одного IP
+	defaultDDoSReqPerMin    = 2000      // глобальный лимит запросов/мин с одного IP (не баним по 429)
+	defaultViolationsToBan  = 9999      // по умолчанию не банить по счётчику (только ручной бан в админке)
+	defaultBanDurationMin   = 30        // минуты бана при ручном бане
+	defaultWSConnsPerIP     = 10        // макс WebSocket соединений с одного IP
 )
 
 // ipBlocklist — временный бан IP после повторных нарушений (rate limit, auth fail).
@@ -211,7 +211,7 @@ func SecurityMiddleware() gin.HandlerFunc {
 			return
 		}
 		if !globalDDoSlimiter.allow(ip) {
-			globalDDoSlimiter.recordReject(ip)
+			// Не записываем нарушение — только 429, без блокировки IP
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too_many_requests"})
 			return
 		}
@@ -221,10 +221,7 @@ func SecurityMiddleware() gin.HandlerFunc {
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBody)
 		c.Next()
-		// Учитываем только 429 (флуд) для временного бана; 401/403 не баним
-		if c.Writer.Status() == 429 {
-			globalBlocklist.recordViolation(ip)
-		}
+		// Не баним IP по 429 — убрано, чтобы не блокировать при обычном использовании
 	}
 }
 

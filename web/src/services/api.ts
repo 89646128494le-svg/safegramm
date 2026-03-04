@@ -70,7 +70,8 @@ export function getErrorMessage(e: unknown, fallback = 'Что-то пошло �
 
 // Кэш для GET запросов
 const cache = new Map<string, { data: any; expires: number }>();
-const CACHE_TTL = 5000; // 5 секунд для часто запрашиваемых данных
+const CACHE_TTL = 5000; // 5 секунд для чатов/серверов
+const USER_ME_CACHE_TTL = 30_000; // 30 секунд для /api/users/me, чтобы не лимитило
 
 // Очередь запросов для предотвращения дублирования
 const pendingRequests = new Map<string, Promise<any>>();
@@ -106,6 +107,7 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
   // Проверяем кэш для GET запросов
   if (shouldCache(path, method)) {
     const cached = cache.get(cacheKey);
+    const ttl = path.includes('/api/users/me') && !path.includes('/users/me/') ? USER_ME_CACHE_TTL : CACHE_TTL;
     if (cached && cached.expires > Date.now()) {
       return cached.data;
     }
@@ -150,16 +152,31 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
         return null; // Возвращаем null вместо ошибки
       }
 
-      // Retry для 429 (Too Many Requests) с exponential backoff
-      if (rsp.status === 429 && attempt < retries) {
-        const retryAfter = rsp.headers.get('Retry-After');
-        const delayMs = retryAfter 
-          ? parseInt(retryAfter) * 1000 
-          : Math.min(1000 * Math.pow(2, attempt), 10000); // Max 10 seconds
-        
-        console.warn(`Rate limited (429), retrying after ${delayMs}ms...`);
-        await delay(delayMs);
-        return makeRequest(attempt + 1);
+      // 429: не ретраим при блокировке IP; при лимите — не более 1 повтора, чтобы не усугублять
+      if (rsp.status === 429) {
+        const raw429 = await rsp.text();
+        let errCode = '';
+        try {
+          const j = JSON.parse(raw429 || '{}');
+          errCode = j.error || '';
+        } catch (_) {}
+        if (errCode === 'ip_temporarily_blocked') {
+          const e = new Error('IP временно заблокирован. Подождите несколько минут.') as any;
+          e.status = 429;
+          e.errorCode = errCode;
+          throw e;
+        }
+        const max429Retries = 1;
+        if (attempt < max429Retries) {
+          const delayMs = Math.min(1000 * Math.pow(2, attempt), 5000);
+          console.warn(`Rate limited (429), retry once after ${delayMs}ms...`);
+          await delay(delayMs);
+          return makeRequest(attempt + 1);
+        }
+        const e = new Error('Слишком много запросов. Подождите минуту.') as any;
+        e.status = 429;
+        e.errorCode = errCode || 'too_many_requests';
+        throw e;
       }
 
       if (!rsp.ok) {
@@ -236,9 +253,10 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
       
       // Кэшируем результат для GET запросов
       if (shouldCache(path, method)) {
+        const ttl = path.includes('/api/users/me') && !path.includes('/users/me/') ? USER_ME_CACHE_TTL : CACHE_TTL;
         cache.set(cacheKey, {
           data,
-          expires: Date.now() + CACHE_TTL
+          expires: Date.now() + ttl
         });
       }
       
