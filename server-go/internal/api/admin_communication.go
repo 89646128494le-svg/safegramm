@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -215,6 +216,7 @@ func GetAdminInviteLinks(db *gorm.DB) gin.HandlerFunc {
 		for i, l := range list {
 			out[i] = gin.H{
 				"id": l.ID, "code": l.Code, "createdBy": l.CreatedBy,
+				"inviterName": l.InviterName, "questionnaire": l.Questionnaire,
 				"maxUses": l.MaxUses, "usedCount": l.UsedCount,
 				"expiresAt": l.ExpiresAt, "active": l.Active, "createdAt": l.CreatedAt,
 			}
@@ -229,8 +231,10 @@ func PostAdminInviteLink(db *gorm.DB) gin.HandlerFunc {
 		adminID, _ := c.Get("userID")
 		adminIDStr, _ := adminID.(string)
 		var req struct {
-			MaxUses   int    `json:"maxUses"`
-			ExpiresAt string `json:"expiresAt"`
+			MaxUses       int    `json:"maxUses"`
+			ExpiresAt     string `json:"expiresAt"`
+			InviterName   string `json:"inviterName"`
+			Questionnaire string `json:"questionnaire"`
 		}
 		c.ShouldBindJSON(&req)
 		code := uuid.New().String()[:12]
@@ -242,6 +246,7 @@ func PostAdminInviteLink(db *gorm.DB) gin.HandlerFunc {
 		}
 		l := models.GlobalInviteLink{
 			ID: uuid.New().String(), Code: code, CreatedBy: adminIDStr,
+			InviterName: strings.TrimSpace(req.InviterName), Questionnaire: strings.TrimSpace(req.Questionnaire),
 			MaxUses: req.MaxUses, ExpiresAt: expires, Active: true,
 		}
 		db.Create(&l)
@@ -283,5 +288,34 @@ func DeleteAdminInviteLink(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// GetInviteByCode — публичный эндпоинт для страницы приглашения (без авторизации)
+func GetInviteByCode(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		code := strings.TrimSpace(c.Param("code"))
+		if code == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_code"})
+			return
+		}
+		var l models.GlobalInviteLink
+		if err := db.Where("code = ? AND active = ?", code, true).First(&l).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		if l.ExpiresAt != nil && l.ExpiresAt.Before(time.Now()) {
+			c.JSON(http.StatusGone, gin.H{"error": "expired"})
+			return
+		}
+		if l.MaxUses > 0 && l.UsedCount >= l.MaxUses {
+			c.JSON(http.StatusGone, gin.H{"error": "limit_reached"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"code": l.Code,
+			"inviterName": l.InviterName,
+			"questionnaire": l.Questionnaire,
+		})
 	}
 }

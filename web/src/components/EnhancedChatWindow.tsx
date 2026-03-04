@@ -911,50 +911,28 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             };
             
             setMessages(prev => {
-              // Проверяем есть ли уже это сообщение
               if (prev.some(m => m.id === msg.id)) return prev;
-              
-              // Добавляем новое сообщение
               const newMessages = [...prev, msg];
-              
-              // Дополнительная проверка: удаляем дубликаты если они есть
               const uniqueMessages = newMessages.filter((message, index, self) =>
                 index === self.findIndex((m) => m.id === message.id)
               );
-              
               return uniqueMessages;
-              
-              // Добавляем класс анимации для входящего сообщения
-              setTimeout(() => {
-                const messageElement = document.querySelector(`[data-message-id="${msg.id}"]`);
-                if (messageElement) {
-                  messageElement.classList.add('received');
-                }
-              }, 0);
-              
-              // Показываем уведомление только если:
-              // 1. Сообщение не от текущего пользователя
-              // 2. Страница не видна ИЛИ уведомления включены
-              // 3. Настройки уведомлений разрешают
-              if (msg.senderId !== currentUser?.id && 
-                  ui.notificationsEnabled && 
-                  notificationSettings.desktopEnabled &&
-                  (!isPageVisible || document.hidden)) {
-                
+            });
+
+            setTimeout(() => {
+              const el = document.querySelector(`[data-message-id="${msg.id}"]`);
+              if (el) el.classList.add('received');
+            }, 0);
+
+            if (msg.senderId !== currentUser?.id) {
+              if (ui.notificationsEnabled && notificationSettings.desktopEnabled && (!isPageVisible || document.hidden)) {
                 const sender = users.get(msg.senderId);
                 const senderName = sender?.username || 'Неизвестный';
-                const chatName = chatInfoRef.current?.name || (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel' 
-                  ? chatInfoRef.current.type 
-                  : undefined);
+                const chatName = chatInfoRef.current?.name || (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel' ? chatInfoRef.current.type : undefined);
                 const chatType = chatInfoRef.current?.type as 'dm' | 'group' | 'channel' | undefined;
-                
-                // Проверяем упоминание
                 const isMention = currentUser && msg.text?.includes(`@${currentUser.username}`);
-                
-                // Определяем звук и громкость в зависимости от типа
                 let soundType = notificationSettings.soundType;
                 let volume = notificationSettings.soundVolume / 100;
-                
                 if (isMention && notificationSettings.soundMention) {
                   soundType = notificationSettings.soundMention as any;
                   volume = (notificationSettings.volumeMention || notificationSettings.soundVolume) / 100;
@@ -968,7 +946,6 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   soundType = notificationSettings.soundMessage as any;
                   volume = (notificationSettings.volumeMessage || notificationSettings.soundVolume) / 100;
                 }
-                
                 notifyNewMessage(
                   senderName,
                   msg.text || (msg.attachmentUrl ? '📎 Вложение' : 'Сообщение'),
@@ -978,20 +955,17 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   notificationSettings.soundEnabled,
                   volume,
                   soundType,
-                  msg.attachmentUrl, // imageUrl для превью
+                  msg.attachmentUrl,
                   isMention,
                   chatType,
                   notificationSettings.dndStart,
                   notificationSettings.dndEnd
                 ).catch(err => console.warn('Failed to show notification:', err));
-              } else if (msg.senderId !== currentUser?.id && notificationSettings.soundEnabled) {
-                // Если уведомления не показываем, но звук включен - играем звук
+              } else if (notificationSettings.soundEnabled) {
                 playMessageSound();
               }
-              
-              return newMessages;
-            });
-            
+            }
+
             requestAnimationFrame(() => {
               if (messagesEndRef.current) {
                 messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });

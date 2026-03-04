@@ -584,6 +584,31 @@ func SendMaintenanceNotification(to, username, timestamp, message string) error 
 	return SendEmail(to, subject, htmlBody)
 }
 
+// SendRecruitApproved отправляет письмо «Поздравляем, вы приняты»
+func SendRecruitApproved(to, name string) error {
+	subject := "🎉 SafeGram: ваша заявка одобрена"
+	if name == "" {
+		name = "пользователь"
+	}
+	data := EmailTemplateData{Username: name}
+	htmlBody := TemplateRecruitApproved(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
+// SendRecruitDeclined отправляет письмо об отклонении заявки с причиной
+func SendRecruitDeclined(to, name, reason string) error {
+	subject := "SafeGram: результат рассмотрения заявки"
+	if name == "" {
+		name = "пользователь"
+	}
+	if reason == "" {
+		reason = "Причина не указана."
+	}
+	data := EmailTemplateData{Username: name, Message: reason}
+	htmlBody := TemplateRecruitDeclined(data)
+	return SendEmail(to, subject, htmlBody)
+}
+
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

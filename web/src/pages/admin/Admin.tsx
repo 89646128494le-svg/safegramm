@@ -1459,13 +1459,58 @@ function PremiumApplicationsTab() {
 function RecruitTab() {
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
+  const [declineId, setDeclineId] = useState<string | null>(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [actioning, setActioning] = useState(false);
+
+  const load = () => {
+    setLoading(true);
     api('/api/admin/recruit')
       .then((r: any) => (Array.isArray(r) ? r : []))
       .catch(() => [])
       .then(setList)
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const onApprove = async (id: string) => {
+    try {
+      setActioning(true);
+      await api(`/api/admin/recruit/${id}/approve`, 'POST');
+      showToast('Заявка принята, письмо отправлено', 'success');
+      load();
+    } catch (e: any) {
+      showToast(getErrorMessage(e, 'Ошибка'), 'error');
+    } finally {
+      setActioning(false);
+    }
+  };
+
+  const onDeclineOpen = (id: string) => {
+    setDeclineId(id);
+    setDeclineReason('');
+  };
+
+  const onDeclineSubmit = async () => {
+    if (!declineId || !declineReason.trim()) {
+      showToast('Укажите причину отклонения', 'error');
+      return;
+    }
+    try {
+      setActioning(true);
+      await api(`/api/admin/recruit/${declineId}/decline`, 'POST', { reason: declineReason.trim() });
+      showToast('Заявка отклонена, письмо отправлено', 'success');
+      setDeclineId(null);
+      setDeclineReason('');
+      load();
+    } catch (e: any) {
+      showToast(getErrorMessage(e, 'Ошибка'), 'error');
+    } finally {
+      setActioning(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{padding: '48px', textAlign: 'center'}}>
@@ -1487,15 +1532,39 @@ function RecruitTab() {
         <div style={{display: 'grid', gap: '12px'}}>
           {list.map((a: any) => (
             <div key={a.id} style={{padding: '16px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '12px'}}>
-              <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px'}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap'}}>
                 <span style={{fontWeight: '600'}}>{a.name || '—'}</span>
                 <span className="small" style={{color: 'var(--subtle)'}}>{a.email}</span>
                 <span style={{fontSize: '12px', padding: '2px 8px', background: 'var(--accent)', borderRadius: 6}}>{a.role === 'helper' ? 'Хелпер' : 'Тестировщик'}</span>
+                {a.status === 'approved' && <span style={{fontSize: '12px', padding: '2px 8px', background: '#22c55e', borderRadius: 6}}>Принят</span>}
+                {a.status === 'declined' && <span style={{fontSize: '12px', padding: '2px 8px', background: '#ef4444', borderRadius: 6}}>Отклонён</span>}
               </div>
               {a.message && <div style={{marginBottom: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{a.message}</div>}
-              <div className="small" style={{color: 'var(--subtle)'}}>{a.createdAt ? new Date(a.createdAt).toLocaleString('ru-RU') : ''}</div>
+              {a.status === 'declined' && a.declineReason && <div style={{marginBottom: '8px', color: 'var(--subtle)', fontSize: '13px'}}>Причина: {a.declineReason}</div>}
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8}}>
+                <div className="small" style={{color: 'var(--subtle)'}}>{a.createdAt ? new Date(a.createdAt).toLocaleString('ru-RU') : ''}</div>
+                {a.status === 'pending' && (
+                  <div style={{display: 'flex', gap: 8}}>
+                    <button onClick={() => onApprove(a.id)} disabled={actioning} style={{padding: '8px 16px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: 8, cursor: actioning ? 'not-allowed' : 'pointer', fontWeight: '500'}}>Принять</button>
+                    <button onClick={() => onDeclineOpen(a.id)} disabled={actioning} style={{padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8, cursor: actioning ? 'not-allowed' : 'pointer', fontWeight: '500'}}>Отклонить</button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {declineId && (
+        <div className="modal-overlay" style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999}} onClick={() => !actioning && setDeclineId(null)}>
+          <div style={{background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, maxWidth: 420, width: '90%'}} onClick={e => e.stopPropagation()}>
+            <h4 style={{marginBottom: 16}}>Причина отклонения</h4>
+            <textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)} placeholder="Укажите причину (будет отправлена заявителю на почту)" rows={4} style={{width: '100%', padding: 12, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--fg)', resize: 'vertical', marginBottom: 16}} />
+            <div style={{display: 'flex', gap: 8, justifyContent: 'flex-end'}}>
+              <button onClick={() => setDeclineId(null)} disabled={actioning} style={{padding: '8px 16px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--fg)'}}>Отмена</button>
+              <button onClick={onDeclineSubmit} disabled={actioning || !declineReason.trim()} style={{padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8, cursor: actioning ? 'not-allowed' : 'pointer'}}>Отклонить и отправить письмо</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

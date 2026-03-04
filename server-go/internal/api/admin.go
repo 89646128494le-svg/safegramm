@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"safegram-server/internal/audit"
+	"safegram-server/internal/email"
 	"safegram-server/internal/models"
 	"safegram-server/internal/redis"
 )
@@ -382,9 +383,77 @@ func GetAdminRecruit(db *gorm.DB) gin.HandlerFunc {
 		}
 		out := make([]gin.H, len(list))
 		for i, a := range list {
-			out[i] = gin.H{"id": a.ID, "email": a.Email, "name": a.Name, "role": a.Role, "message": a.Message, "createdAt": a.CreatedAt}
+				out[i] = gin.H{"id": a.ID, "email": a.Email, "name": a.Name, "role": a.Role, "message": a.Message, "status": a.Status, "declineReason": a.DeclineReason, "createdAt": a.CreatedAt}
 		}
 		c.JSON(http.StatusOK, out)
+	}
+}
+
+// ApproveRecruitApplication — принять заявку и отправить письмо
+func ApproveRecruitApplication(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		var app models.RecruitApplication
+		if err := db.First(&app, "id = ?", id).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		if app.Status != "pending" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "already_processed"})
+			return
+		}
+		app.Status = "approved"
+		if err := db.Save(&app).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		name := app.Name
+		if name == "" {
+			name = app.Email
+		}
+		if err := email.SendRecruitApproved(app.Email, name); err != nil {
+			c.JSON(http.StatusOK, gin.H{"ok": true, "warning": "email_failed"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// DeclineRecruitApplication — отклонить заявку с причиной и отправить письмо
+func DeclineRecruitApplication(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		var req struct {
+			Reason string `json:"reason" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "reason_required"})
+			return
+		}
+		var app models.RecruitApplication
+		if err := db.First(&app, "id = ?", id).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		if app.Status != "pending" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "already_processed"})
+			return
+		}
+		app.Status = "declined"
+		app.DeclineReason = strings.TrimSpace(req.Reason)
+		if err := db.Save(&app).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		name := app.Name
+		if name == "" {
+			name = app.Email
+		}
+		if err := email.SendRecruitDeclined(app.Email, name, app.DeclineReason); err != nil {
+			c.JSON(http.StatusOK, gin.H{"ok": true, "warning": "email_failed"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
 

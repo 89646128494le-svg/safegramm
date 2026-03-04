@@ -169,10 +169,10 @@ func GetMaintenanceStatus(db *gorm.DB) gin.HandlerFunc {
 		var maintenance models.MaintenanceMode
 		db.Where("is_active = ?", true).Order("created_at DESC").Limit(1).Find(&maintenance)
 		if maintenance.ID == "" {
-			c.JSON(http.StatusOK, gin.H{"isActive": false, "message": ""})
+			c.JSON(http.StatusOK, gin.H{"isActive": false, "enabled": false, "message": ""})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"isActive": maintenance.IsActive, "timestamp": maintenance.Timestamp, "message": maintenance.Message, "id": maintenance.ID})
+		c.JSON(http.StatusOK, gin.H{"isActive": maintenance.IsActive, "enabled": maintenance.IsActive, "timestamp": maintenance.Timestamp, "message": maintenance.Message, "id": maintenance.ID, "createdAt": maintenance.CreatedAt})
 	}
 }
 

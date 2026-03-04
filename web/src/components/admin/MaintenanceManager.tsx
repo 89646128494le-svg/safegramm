@@ -29,47 +29,48 @@ export default function MaintenanceManager() {
     try {
       setLoading(true);
       const response = await api('/api/admin/maintenance');
-      setSettings(response);
+      const enabled = response?.enabled ?? response?.isActive ?? false;
+      const startTime = response?.createdAt ? new Date(response.createdAt).getTime() : undefined;
+      setSettings(prev => ({
+        ...prev,
+        enabled,
+        message: (response?.message != null && response.message !== '') ? response.message : prev.message,
+        startTime: startTime ?? prev.startTime,
+      }));
     } catch (e: any) {
-      showToast('Ошибка загрузки: ' + e.message, 'error');
+      showToast('Ошибка загрузки: ' + (e?.message || 'не найдено'), 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const saveSettings = async () => {
-    try {
-      setSaving(true);
-      await api('/api/admin/maintenance', 'POST', settings);
-      showToast('Настройки сохранены', 'success');
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('maintenance-updated'));
-      }
-    } catch (e: any) {
-      showToast('Ошибка сохранения: ' + e.message, 'error');
-    } finally {
-      setSaving(false);
-    }
+    showToast('Сообщение сохранено локально. Для включения техработ нажмите «Включить».', 'success');
   };
 
   const toggleMaintenance = async () => {
-    const newSettings = { ...settings, enabled: !settings.enabled };
-    if (newSettings.enabled) {
-      newSettings.startTime = Date.now();
-    } else {
-      newSettings.endTime = Date.now();
-    }
-    setSettings(newSettings);
+    const enabling = !settings.enabled;
     try {
       setSaving(true);
-      await api('/api/admin/maintenance', 'POST', newSettings);
-      setSettings(newSettings);
-      showToast(newSettings.enabled ? 'Техработы включены' : 'Техработы выключены', 'success');
+      if (enabling) {
+        const timestamp = new Date().toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short' });
+        await api('/api/admin/maintenance', 'POST', {
+          timestamp,
+          message: settings.message,
+          sendEmail: true,
+        });
+        setSettings(prev => ({ ...prev, enabled: true, startTime: Date.now() }));
+        showToast('Техработы включены', 'success');
+      } else {
+        await api('/api/admin/maintenance/disable', 'POST');
+        setSettings(prev => ({ ...prev, enabled: false }));
+        showToast('Техработы выключены', 'success');
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('maintenance-updated'));
       }
     } catch (e: any) {
-      showToast('Ошибка: ' + e.message, 'error');
+      showToast('Ошибка: ' + (e?.message || 'не найдено'), 'error');
     } finally {
       setSaving(false);
     }

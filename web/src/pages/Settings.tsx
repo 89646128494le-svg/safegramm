@@ -479,7 +479,35 @@ export default function Settings() {
                   className="settings-toggle"
                 />
               </label>
+            </div>
 
+            <div className="settings-group">
+              <h3>📞 Звонки</h3>
+              <p className="settings-item-description" style={{ marginBottom: 12, lineHeight: 1.5 }}>
+                Разрешите уведомления и звук для сайта в браузере — тогда вы будете стабильно получать входящие звонки (в том числе в другой вкладке) и слышать собеседника. Рекомендуется не блокировать автовоспроизведение для SafeGram.
+              </p>
+              {typeof window !== 'undefined' && 'Notification' in window && (
+                <button
+                  type="button"
+                  onClick={requestNotificationPermission}
+                  style={{
+                    padding: '10px 18px',
+                    background: Notification.permission === 'granted' ? 'rgba(34, 197, 94, 0.2)' : 'var(--accent, #7c6cff)',
+                    color: Notification.permission === 'granted' ? '#22c55e' : '#fff',
+                    border: '1px solid ' + (Notification.permission === 'granted' ? '#22c55e' : 'transparent'),
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: 14,
+                  }}
+                >
+                  {Notification.permission === 'granted' ? '✓ Уведомления разрешены' : 'Разрешить уведомления для звонков'}
+                </button>
+              )}
+            </div>
+
+            <div className="settings-group">
+              <h3>Звук и тип</h3>
               {notifications.soundEnabled && (
                 <>
                   <div className="settings-item">

@@ -49,6 +49,9 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// Набор тестировщиков и хелперов (публичная заявка, с rate limit)
 	api.POST("/recruit", AuthRateLimitMiddleware(), SubmitRecruit(db))
 
+	// Публичная страница приглашения по коду (без авторизации)
+	api.GET("/invite/:code", GetInviteByCode(db))
+
 	// Платежи: вебхуки (без авторизации, проверка подписи внутри)
 	api.POST("/webhooks/stripe", StripeWebhook(db))
 	api.POST("/webhooks/yookassa", YooKassaWebhook(db))
@@ -263,6 +266,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/admin/system/health", RequireAdmin(db), GetSystemHealth(db))
 	protected.GET("/admin/feedback", RequireAdmin(db), GetAdminFeedback(db))
 	protected.GET("/admin/recruit", RequireAdmin(db), GetAdminRecruit(db))
+	protected.POST("/admin/recruit/:id/approve", RequireAdmin(db), ApproveRecruitApplication(db))
+	protected.POST("/admin/recruit/:id/decline", RequireAdmin(db), DeclineRecruitApplication(db))
 	protected.GET("/admin/reports", RequireAdmin(db), GetAdminReports(db))
 	protected.GET("/admin/modqueue", RequireAdmin(db), GetAdminModQueue(db))
 	protected.POST("/admin/approve/:id", RequireAdmin(db), ApproveModItem(db))

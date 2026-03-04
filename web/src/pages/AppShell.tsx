@@ -40,34 +40,39 @@ export default function AppShell() {
   const [showSafety, setShowSafety] = useState(false); 
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const [activeCall, setActiveCall] = useState<any>(null);
+  const activeCallRef = React.useRef<any>(null);
+  activeCallRef.current = activeCall;
   const nav = useNavigate();
   const { toasts, removeToast } = useToast();
 
-  // WebSocket listener для входящих звонков
+  // WebSocket: входящие звонки и завершение звонка (чтобы не залипал экран)
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
 
-    const handleIncomingCall = (event: MessageEvent) => {
+    const handleMessage = (event: MessageEvent) => {
       try {
         const messages = event.data.split('\n').filter((m: string) => m.trim());
         for (const msgText of messages) {
           if (!msgText.trim()) continue;
           try {
             const data = JSON.parse(msgText);
-            
-            if (data.type === 'webrtc:offer' && user) {
-              if (data.from !== user.id) {
-                setIncomingCall({
-                  callId: data.chatId || `call-${Date.now()}`,
-                  from: data.from,
-                  fromName: data.fromName,
-                  fromAvatar: data.fromAvatar,
-                  chatId: data.chatId,
-                  isVideo: data.video || false,
-                  offer: data,
-                  timestamp: Date.now(),
-                });
+
+            if (data.type === 'webrtc:offer' && user && data.from !== user.id) {
+              setIncomingCall({
+                callId: data.chatId || `call-${Date.now()}`,
+                from: data.from,
+                fromName: data.fromName,
+                fromAvatar: data.fromAvatar,
+                chatId: data.chatId,
+                isVideo: data.video || false,
+                offer: data,
+                timestamp: Date.now(),
+              });
+            } else if (data.type === 'webrtc:hangup' && activeCallRef.current) {
+              const cur = activeCallRef.current;
+              if (data.chatId === cur.chatId && data.from === cur.otherUserId) {
+                setActiveCall(null);
               }
             }
           } catch (e) {
@@ -79,17 +84,22 @@ export default function AppShell() {
       }
     };
 
-    socket.addEventListener('message', handleIncomingCall);
-
-    return () => {
-      socket.removeEventListener('message', handleIncomingCall);
-    };
+    socket.addEventListener('message', handleMessage);
+    return () => socket.removeEventListener('message', handleMessage);
   }, [user]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', ui.theme);
     initAppearance();
   }, [ui.theme]);
+
+  // Разрешение уведомлений — чтобы при звонке в другой вкладке приходило браузерное уведомление
+  useEffect(() => {
+    if (!user || typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, [user]);
 
   // Синхронизация статуса онлайн/офлайн при фокусе и сворачивании окна/вкладки
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, PhoneOff, Video, User } from 'lucide-react';
 import { showToast } from './Toast';
@@ -22,70 +22,66 @@ interface Props {
 
 export default function IncomingCallNotification({ call, onAccept, onDecline }: Props) {
   const [isRinging, setIsRinging] = useState(false);
-  const [audio] = useState(() => {
-    // Создаем аудио для рингтона (можно заменить на свой файл)
-    const audio = new Audio();
-    audio.loop = true;
-    audio.volume = 0.5;
-    
-    // Генерируем простой рингтон через Web Audio API
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = 440; // A4 note
-    oscillator.type = 'sine';
-    gainNode.gain.value = 0.3;
-    
-    return { audioContext, oscillator, gainNode };
-  });
+  const ringtoneRef = useRef<{ audioContext: AudioContext; oscillator: OscillatorNode; gainNode: GainNode } | null>(null);
+
+  const stopRingtone = useCallback(() => {
+    try {
+      if (ringtoneRef.current) {
+        ringtoneRef.current.oscillator.stop();
+        ringtoneRef.current.audioContext.close();
+        ringtoneRef.current = null;
+      }
+    } catch (_) {}
+    setIsRinging(false);
+  }, []);
 
   useEffect(() => {
-    if (call) {
-      setIsRinging(true);
-      
-      // Запускаем рингтон
-      try {
-        audio.oscillator.start();
-        audio.audioContext.resume();
-      } catch (e) {
-        console.error('Failed to start ringtone:', e);
-      }
+    if (!call) return;
 
-      // Показываем браузерное уведомление
-      if ('Notification' in window && Notification.permission === 'granted') {
+    setIsRinging(true);
+
+    // Каждый раз создаём новый контекст и осциллятор — иначе после первого звонка звук не играет
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioContext = new AudioContextClass();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.frequency.value = 440;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.3;
+      ringtoneRef.current = { audioContext, oscillator, gainNode };
+      audioContext.resume().then(() => oscillator.start(0)).catch(() => {});
+    } catch (e) {
+      console.warn('Ringtone failed:', e);
+    }
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
         new Notification(`Входящий ${call.isVideo ? 'видео' : ''}звонок`, {
           body: `${call.fromName || call.from} звонит вам`,
           icon: call.fromAvatar || '/icons/icon-192.png',
           tag: 'incoming-call',
           requireInteraction: true,
         });
-      }
-
-      // Автоматически отклоняем через 30 секунд
-      const timeout = setTimeout(() => {
-        handleDecline();
-      }, 30000);
-
-      return () => {
-        clearTimeout(timeout);
-        stopRingtone();
-      };
+      } catch (_) {}
     }
+
+    const timeout = setTimeout(() => {
+      stopRingtone();
+      if (call) onDecline(call);
+    }, 30000);
+
+    return () => {
+      clearTimeout(timeout);
+      stopRingtone();
+    };
   }, [call]);
 
-  const stopRingtone = () => {
-    try {
-      audio.oscillator.stop();
-      audio.audioContext.close();
-    } catch (e) {
-      // Oscillator уже остановлен
-    }
-    setIsRinging(false);
-  };
+  useEffect(() => {
+    if (!call) stopRingtone();
+  }, [call, stopRingtone]);
 
   const handleAccept = () => {
     stopRingtone();

@@ -37,6 +37,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const iceServersRef = useRef<RTCConfiguration['iceServers']>([]);
@@ -684,10 +685,8 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   // Начинаем звонок при монтировании
   useEffect(() => {
     if (isIncoming && offerData) {
-      // Входящий звонок - принимаем
       handleAcceptCall(offerData);
     } else if (!isIncoming) {
-      // Исходящий звонок - начинаем
       startCall();
     }
     return () => {
@@ -695,10 +694,29 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     };
   }, [isIncoming, offerData]);
 
-  // Обновляем remote video
+  // Авто-завершение, если долго нет соединения (чтобы не залипал экран «Звонок»)
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+    if (!(isCalling || isRinging) || isConnected) return;
+    const t = setTimeout(() => {
+      if (!isConnected) {
+        showToast('Звонок не отвечает. Завершение.', 'info');
+        handleHangup();
+      }
+    }, 90000);
+    return () => clearTimeout(t);
+  }, [isCalling, isRinging, isConnected]);
+
+  // Обновляем remote video и audio (для голосовых — звук через audio, иначе через video)
+  useEffect(() => {
+    if (remoteStream) {
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.volume = 1;
+        remoteAudioRef.current.play().catch(() => {});
+      }
     }
   }, [remoteStream]);
 
@@ -725,6 +743,8 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 50%, #0f172a 100%)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
+      {/* Скрытый audio для голосового звонка — без него удалённый звук не воспроизводится */}
+      {!isVideo && <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />}
       <div className="dm-call-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0 }}>
         <div className="dm-call-header" style={{
           position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,

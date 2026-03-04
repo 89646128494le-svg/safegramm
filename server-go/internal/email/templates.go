@@ -634,3 +634,33 @@ func TemplateMaintenanceNotification(data EmailTemplateData) string {
 	)
 	return GetBaseTemplate("Технические работы", content)
 }
+
+// TemplateRecruitApproved шаблон «Поздравляем, вы приняты»
+func TemplateRecruitApproved(data EmailTemplateData) string {
+	content := fmt.Sprintf(`
+		<h2>🎉 Поздравляем!</h2>
+		<p>Здравствуйте, <strong>%s</strong>!</p>
+		<p>Ваша заявка рассмотрена. Мы рады сообщить, что вы приняты в команду SafeGram.</p>
+		<p>Скоро с вами свяжутся по дальнейшим шагам.</p>
+		<div class="divider"></div>
+		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">С уважением, команда SafeGram</p>
+	`, data.Username)
+	return GetBaseTemplate("Вы приняты", content)
+}
+
+// TemplateRecruitDeclined шаблон отклонения заявки с причиной
+func TemplateRecruitDeclined(data EmailTemplateData) string {
+	content := fmt.Sprintf(`
+		<h2>Уведомление по заявке</h2>
+		<p>Здравствуйте, <strong>%s</strong>!</p>
+		<p>К сожалению, ваша заявка не была одобрена.</p>
+		<div class="info-box">
+			<p><strong>Причина:</strong></p>
+			<p>%s</p>
+		</div>
+		<p>Вы можете подать новую заявку позже, если условия изменятся.</p>
+		<div class="divider"></div>
+		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">С уважением, команда SafeGram</p>
+	`, data.Username, data.Message)
+	return GetBaseTemplate("Результат рассмотрения заявки", content)
+}
