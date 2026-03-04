@@ -60,7 +60,7 @@ export default function GlobalChatSearch({
           .map((chat: any) => ({
             type: 'chat' as const,
             id: chat.id,
-            title: chat.name || `Чат ${chat.id}`,
+            title: chat.name || (chat.type === 'dm' ? 'Пользователь' : 'Чат'),
             subtitle: chat.type === 'dm' ? 'Личный чат' : chat.type === 'group' ? 'Группа' : 'Канал',
             chatId: chat.id,
             chatType: chat.type,

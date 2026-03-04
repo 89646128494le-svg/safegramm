@@ -184,7 +184,7 @@ export default function VirtualizedMessages({
           )}
           <div className="message-content">
             {!isMe && showAvatar && (
-              <div className="message-sender">{sender?.username || 'Unknown'}</div>
+              <div className="message-sender">{sender?.username || 'Пользователь'}</div>
             )}
             {msg.text && (
               <div className="message-text">{msg.text}</div>

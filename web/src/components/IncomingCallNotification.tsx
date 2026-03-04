@@ -60,7 +60,7 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
         new Notification(`Входящий ${call.isVideo ? 'видео' : ''}звонок`, {
-          body: `${call.fromName || call.from} звонит вам`,
+          body: `${call.fromName || 'Пользователь'} звонит вам`,
           icon: call.fromAvatar || '/icons/icon-192.png',
           tag: 'incoming-call',
           requireInteraction: true,
@@ -200,7 +200,7 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
               fontWeight: 600,
               marginBottom: '8px',
             }}>
-              {call.fromName || call.from}
+              {call.fromName || 'Пользователь'}
             </h3>
             <div style={{
               display: 'flex',

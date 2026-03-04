@@ -97,12 +97,12 @@ export default function VoiceChannelView({
   const activeRemoteStream = activeScreenUserId && !isScreenSharing ? remoteScreenStreams[activeScreenUserId] : null;
   const displayStream = activeScreenStream ?? activeRemoteStream ?? null;
   const displayName = activeScreenUserId
-    ? (activeScreenUserId === currentUserId ? 'Вы' : membersMap.get(activeScreenUserId)?.username ?? activeScreenUserId)
+    ? (activeScreenUserId === currentUserId ? 'Вы' : membersMap.get(activeScreenUserId)?.username ?? 'Участник')
     : '';
 
   const participantsWithNames = participants.map((p) => ({
     ...p,
-    username: membersMap.get(p.userId)?.username ?? p.username,
+    username: membersMap.get(p.userId)?.username ?? p.username ?? 'Участник',
     avatarUrl: membersMap.get(p.userId)?.avatarUrl ?? p.avatarUrl,
   }));
 

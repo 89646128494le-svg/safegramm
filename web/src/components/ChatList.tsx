@@ -92,7 +92,7 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
   const getChatName = (chat: Chat) => {
     if (chat.name) return chat.name;
     if (chat.title) return chat.title;
-    if (chat.type === 'dm') return 'Личный чат';
+    if (chat.type === 'dm') return (chat as any).name || 'Пользователь';
     if (chat.type === 'group') return 'Группа';
     if (chat.type === 'channel') return 'Канал';
     return '(без названия)';

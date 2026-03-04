@@ -528,7 +528,18 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         const memberIds: string[] = rawMembers.map((m: any) =>
           typeof m === 'string' ? m : (m.userId ?? m.id ?? m?.user?.id ?? '')
         ).filter(Boolean);
-        chatInfoRef.current = { members: memberIds, type: chat.type || 'dm', name: chat.name };
+        let displayName = chat.name;
+        if ((chat.type || 'dm') === 'dm') {
+          const otherMember = rawMembers.find((m: any) => {
+            const uid = typeof m === 'string' ? m : (m.userId ?? m?.user?.id);
+            return uid && uid !== currentUser.id;
+          });
+          const otherUsername = otherMember && typeof otherMember === 'object' && otherMember.user?.username
+            ? otherMember.user.username
+            : '';
+          displayName = otherUsername || chat.name || '';
+        }
+        chatInfoRef.current = { members: memberIds, type: chat.type || 'dm', name: displayName || chat.name };
         
         // Проверяем права пользователя
         if (chat.members && Array.isArray(chat.members)) {
@@ -1067,7 +1078,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 clearTimeout(existingTimer);
               }
               
-              const confirmed = window.confirm(`Входящий ${isVideo ? 'видео' : ''}звонок от ${users.get(fromUserId)?.username || fromUserId}. Принять?`);
+              const confirmed = window.confirm(`Входящий ${isVideo ? 'видео' : ''}звонок от ${users.get(fromUserId)?.username || 'Пользователь'}. Принять?`);
               if (confirmed) {
                 setInDMCall({ 
                   isVideo, 
@@ -2191,7 +2202,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 {chatInfoRef.current.type === 'dm' ? (() => {
                   const otherMemberId = chatInfoRef.current.members.find((id: string) => id !== currentUser.id);
                   const otherUser = otherMemberId ? users.get(otherMemberId) : null;
-                  const displayName = otherUser?.username || 'Личный чат';
+                  const displayName = otherUser?.username || chatInfoRef.current?.name || 'Пользователь';
                   const isOnline = otherUser?.status === 'online';
                   return (
                     <>
@@ -3577,7 +3588,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           );
         })}
         {typingUsers.size > 0 && (() => {
-          const names = Array.from(typingUsers).map((userId: string) => getUser(userId).username || userId);
+          const names = Array.from(typingUsers).map((userId: string) => getUser(userId).username || 'Пользователь');
           const text = names.length === 1
             ? `${names[0]} печатает...`
             : names.length === 2
@@ -3704,12 +3715,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           chatId={chatId}
           chatName={chatInfoRef.current?.type === 'dm' 
             ? (() => {
-                const otherMemberId = chatInfoRef.current?.members.find(id => id !== currentUser.id);
-                if (otherMemberId) {
-                  const otherUser = users.get(otherMemberId);
-                  return otherUser?.username || 'Личный чат';
-                }
-                return 'Личный чат';
+                const otherMemberId = chatInfoRef.current?.members?.find((id: string) => id !== currentUser.id);
+                const otherUser = otherMemberId ? users.get(otherMemberId) : null;
+                return otherUser?.username || chatInfoRef.current?.name || 'Пользователь';
               })()
             : (chatInfoRef.current?.name || 'Чат')}
           messages={messages}
@@ -3834,9 +3842,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           e.currentTarget.style.background = 'var(--bg-secondary, #1a1a1a)';
                         }}
                       >
-                        <div style={{ fontWeight: '600' }}>{chat.name}</div>
+                        <div style={{ fontWeight: '600' }}>{chat.name || (chat.type === 'dm' ? 'Пользователь' : 'Чат')}</div>
                         <div style={{ fontSize: '12px', color: 'var(--subtle, #888)', marginTop: '4px' }}>
-                          {chat.type === 'dm' ? 'Личный чат' : chat.type === 'group' ? 'Группа' : 'Канал'}
+                          {chat.type === 'dm' ? 'Диалог' : chat.type === 'group' ? 'Группа' : 'Канал'}
                         </div>
                       </button>
                     ))

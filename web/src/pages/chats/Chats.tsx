@@ -192,7 +192,7 @@ export default function Chats() {
             });
             
             const fromUser = users.get(fromUserId);
-            const username = fromUser?.username || fromUserId;
+            const username = fromUser?.username || 'Пользователь';
             const isVideo = offerData.video !== false;
             
             // Показываем уведомление
@@ -471,7 +471,7 @@ export default function Chats() {
         const otherUser = users.get(otherMemberId);
         if (otherUser) return otherUser.username;
       }
-      return 'Личный чат';
+      return 'Пользователь';
     }
     return chat.name || (chat.type === 'group' ? 'Группа' : 'Канал');
   };

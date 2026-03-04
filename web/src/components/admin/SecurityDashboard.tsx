@@ -130,7 +130,7 @@ export default function SecurityDashboard() {
             <div style={{ display: 'grid', gap: '8px' }}>
               {sessions.map((s: any, i: number) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                  <span>{s.username || s.userId || s.id}</span>
+                  <span>{s.username || 'Пользователь'}</span>
                   <span className="small" style={{ color: 'var(--subtle)' }}>{s.ip || s.userAgent || ''} • {s.lastActive ? new Date(s.lastActive).toLocaleString('ru-RU') : ''}</span>
                 </div>
               ))}

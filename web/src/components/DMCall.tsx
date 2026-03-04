@@ -720,7 +720,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     }
   }, [remoteStream]);
 
-  const otherDisplayName = (offerData as any)?.fromName || otherUserName || otherUserId;
+  const otherDisplayName = (offerData as any)?.fromName || otherUserName || 'Пользователь';
   const otherAvatar = (offerData as any)?.fromAvatar || otherUserAvatar;
 
   if (minimized && (isCalling || isConnected)) {

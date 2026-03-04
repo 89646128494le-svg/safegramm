@@ -688,6 +688,7 @@ function UsersTab({ currentUser }: { currentUser: any }) {
   const [historyList, setHistoryList] = useState<any[]>([]);
   const [recoveryUserId, setRecoveryUserId] = useState<string | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [showUserIds, setShowUserIds] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{open: boolean, action: string, userId: string, username: string}>({
     open: false,
     action: '',
@@ -875,7 +876,11 @@ function UsersTab({ currentUser }: { currentUser: any }) {
         <div style={{fontSize: '18px', fontWeight: '600'}}>
           Всего пользователей: {list.length} {filteredList.length !== list.length && `(отфильтровано: ${filteredList.length})`}
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+            <input type="checkbox" checked={showUserIds} onChange={e => setShowUserIds(e.target.checked)} />
+            Показать ID
+          </label>
           <button onClick={async () => { try { const base = getApiBaseUrl(); const token = localStorage.getItem('token'); const url = base + '/api/admin/users/export' + (filterPlan !== 'all' ? '?plan=' + filterPlan : ''); const r = await fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} }); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'users.csv'; a.click(); URL.revokeObjectURL(a.href); showToast('Файл сохранён', 'success'); } catch (e: any) { showToast(getErrorMessage(e, 'Не удалось экспортировать.'), 'error'); } }} style={{ padding: '10px 16px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--fg)', cursor: 'pointer', fontWeight: '500' }}>Экспорт CSV</button>
           <button onClick={load} style={{ padding: '10px 16px', background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>🔄 Обновить</button>
         </div>
@@ -1023,6 +1028,7 @@ function UsersTab({ currentUser }: { currentUser: any }) {
                     <div style={{flex: 1}}>
                     <div style={{fontWeight: '600', fontSize: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
                       {u.username} 
+                      {showUserIds && <code style={{ fontSize: '12px', background: 'var(--panel-2)', padding: '2px 8px', borderRadius: '6px', color: 'var(--subtle)', fontWeight: '400' }} title={u.id}>{u.id}</code>}
                       {systemOwner && <span title="Встроенный системный владелец" style={{ background: 'rgba(251,191,36,0.2)', color: '#fbbf24', padding: '2px 8px', borderRadius: '6px', fontSize: '12px' }}>Системный владелец</span>}
                       {uIsOwner && !systemOwner && <span title="Владелец">👑</span>}
                       {uIsSysadmin && !uIsOwner && <span title="Тех. Админ">⚙️</span>}
@@ -1052,6 +1058,7 @@ function UsersTab({ currentUser }: { currentUser: any }) {
                   </div>
                   </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(u.id); showToast('ID скопирован', 'success'); }} style={{ padding: '4px 10px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--fg)' }} title={u.id}>Копировать ID</button>
                   <button type="button" onClick={() => setHistoryUserId(u.id)} style={{ padding: '4px 10px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--fg)' }}>История</button>
                   <button type="button" onClick={() => setRecoveryUserId(u.id)} style={{ padding: '4px 10px', fontSize: '12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--fg)' }}>Коды</button>
                 </div>

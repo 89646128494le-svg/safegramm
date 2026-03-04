@@ -11,8 +11,8 @@ export interface VoiceParticipantProps {
 
 export default function VoiceParticipant({ participant, isCurrentUser }: VoiceParticipantProps) {
   const { userId, username, avatarUrl, isMuted, isSpeaking } = participant;
-  const displayName = username || (isCurrentUser ? 'Вы' : userId.slice(0, 8));
-  const initial = (username || userId).slice(0, 1).toUpperCase();
+  const displayName = username || (isCurrentUser ? 'Вы' : 'Участник');
+  const initial = (username || (isCurrentUser ? 'В' : 'У')).slice(0, 1).toUpperCase();
 
   return (
     <div

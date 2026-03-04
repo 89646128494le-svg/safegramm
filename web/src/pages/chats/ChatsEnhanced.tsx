@@ -94,8 +94,12 @@ export default function ChatsEnhanced() {
 
   const getChatName = (chat: Chat) => {
     if (chat.type === 'dm') {
-      // В реальности нужно получить имя собеседника
-      return 'Личный чат';
+      const members = (chat as any).members;
+      if (Array.isArray(members)) {
+        const other = members.find((m: any) => (m?.userId ?? m?.user?.id) !== currentUser?.id);
+        if (other?.user?.username) return other.user.username;
+      }
+      return (chat as any).name || 'Пользователь';
     }
     return chat.name || (chat.type === 'group' ? 'Группа' : 'Канал');
   };
