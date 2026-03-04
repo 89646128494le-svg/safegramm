@@ -24,15 +24,16 @@ const DEFAULT_API = normalizeBaseUrl(
 // Runtime config из /config.json (для деплоя на Vercel при API на своём ПК)
 let runtimeApiUrl: string | null = null;
 
-/** Загрузить config.json (apiUrl) — вызывать при старте приложения. */
+/** Загрузить config.json (apiUrl или apiHost) — вызывать при старте приложения. */
 export function loadApiConfig(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
   return fetch('/config.json')
     .then((r) => (r.ok ? r.json() : null))
-    .then((o: { apiUrl?: string } | null) => {
-      if (o && typeof o.apiUrl === 'string' && o.apiUrl.trim()) {
-        runtimeApiUrl = normalizeBaseUrl(o.apiUrl.trim());
-      }
+    .then((o: { apiUrl?: string; apiHost?: string } | null) => {
+      if (!o) return;
+      const url = typeof o.apiUrl === 'string' && o.apiUrl.trim() ? o.apiUrl.trim()
+        : typeof o.apiHost === 'string' && o.apiHost.trim() ? o.apiHost.trim() : '';
+      if (url) runtimeApiUrl = normalizeBaseUrl(url);
     })
     .catch(() => {});
 }
@@ -164,7 +165,7 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
       if (!rsp.ok) {
         let msg = 'Что-то пошло не так. Попробуйте ещё раз.';
         if (rsp.status === 404 && path.startsWith('/api/')) {
-          msg = 'Сервер API недоступен. Укажите адрес бэкенда в public/config.json (apiUrl) или задайте VITE_API_URL при сборке.';
+          msg = 'Сервер API недоступен. Укажите адрес бэкенда в public/config.json (apiUrl или apiHost) или задайте VITE_API_URL при сборке.';
         }
         if (rsp.status === 511) {
           msg = 'Сеть требует авторизации (каптив-портал). Откройте в браузере новую вкладку, войдите в Wi‑Fi или примите условия сети, затем обновите страницу.';
@@ -250,7 +251,7 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
       }
       let friendly = humanFriendlyMessage(error?.message || '');
       if (!error?.status && path.startsWith('/api/') && /json|unexpected token|parse/i.test(String(error?.message || ''))) {
-        friendly = 'Сервер API недоступен. Укажите адрес бэкенда в public/config.json (apiUrl) или VITE_API_URL при сборке.';
+        friendly = 'Сервер API недоступен. Укажите адрес бэкенда в public/config.json (apiUrl или apiHost) или VITE_API_URL при сборке.';
       }
       const err = new Error(friendly) as any;
       err.status = error?.status;

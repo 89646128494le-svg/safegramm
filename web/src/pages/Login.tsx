@@ -66,7 +66,7 @@ export default function Login({ onDone }: LoginProps) {
       const baseMsg = humanFriendlyMessage(e?.message) || 'Не удалось отправить код. Проверьте логин и попробуйте снова.';
       const isApiUnreachable = e?.status === 404 || /нет связи|network|failed to fetch|api недоступен/i.test(baseMsg);
       setErr(isApiUnreachable
-        ? 'Сервер API недоступен. Укажите адрес бэкенда в public/config.json (apiUrl) или VITE_API_URL при сборке.'
+        ? 'Сервер API недоступен. Укажите адрес бэкенда в public/config.json (apiUrl или apiHost) или VITE_API_URL при сборке.'
         : baseMsg);
     } finally {
       setSendingCode(false);
