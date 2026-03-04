@@ -49,8 +49,18 @@ export default function SecurityDashboard() {
       setBlockIpInput('');
       load();
     } catch (e: any) {
-      const msg = e?.status === 501 || e?.message?.includes('not_implemented') ? 'Блокировка IP пока не настроена на сервере' : (e?.message || 'Не удалось заблокировать');
+      const msg = e?.message?.includes('whitelisted') ? 'Этот IP в белом списке' : (e?.message || 'Не удалось заблокировать');
       showToast(msg, 'error');
+    }
+  };
+
+  const handleUnblockIp = async (ip: string) => {
+    try {
+      await api('/api/admin/security/unblock-ip', 'POST', { ip });
+      showToast(`IP ${ip} разблокирован`, 'success');
+      load();
+    } catch (e: any) {
+      showToast(e?.message || 'Не удалось разблокировать', 'error');
     }
   };
 
@@ -172,11 +182,20 @@ export default function SecurityDashboard() {
             </button>
           </div>
           {blockedIps.length === 0 ? (
-            <p className="small" style={{ color: 'var(--subtle)' }}>Список пуст. Эндпоинт: POST /api/admin/security/block-ip</p>
+            <p className="small" style={{ color: 'var(--subtle)' }}>Нет заблокированных IP. Добавьте вручную выше или они появятся после срабатывания лимитов.</p>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+            <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
               {blockedIps.map((ip, i) => (
-                <li key={i}>{ip}</li>
+                <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                  <span style={{ fontFamily: 'monospace' }}>{ip}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleUnblockIp(ip)}
+                    style={{ padding: '4px 12px', fontSize: 12, background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', border: '1px solid #22c55e', borderRadius: 6, cursor: 'pointer' }}
+                  >
+                    Разблокировать
+                  </button>
+                </li>
               ))}
             </ul>
           )}
