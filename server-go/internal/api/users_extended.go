@@ -57,9 +57,8 @@ func UpdateUser(db *gorm.DB) gin.HandlerFunc {
 			email := strings.TrimSpace(req.Email)
 			updates["email"] = &email
 		}
-		if req.About != "" {
-			updates["about"] = req.About
-		}
+		// Разрешаем и пустое био (очистка)
+		updates["about"] = req.About
 		if req.ProfileColor != "" {
 			updates["profile_color"] = req.ProfileColor
 		}

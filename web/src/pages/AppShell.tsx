@@ -278,7 +278,10 @@ export default function AppShell() {
             <Link to="/app/sessions" className="btn btn-ghost" style={{ textDecoration: 'none' }}>📱 Сессии</Link>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }}>⚙️</Link>
+            <Link to="/app/profile" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Профиль">👤</Link>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Настройки">⚙️</Link>
           </motion.div>
 
           {(() => {
