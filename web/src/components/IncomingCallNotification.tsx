@@ -110,7 +110,7 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         style={{
           position: 'fixed',
-          top: '20px',
+          top: 'max(20px, env(safe-area-inset-top, 20px))',
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 9999,

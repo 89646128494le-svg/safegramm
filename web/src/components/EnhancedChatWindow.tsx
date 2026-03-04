@@ -307,6 +307,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   const [oldestMessageId, setOldestMessageId] = useState<string | null>(null);
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [showAppearanceSettings, setShowAppearanceSettings] = useState(false);
+  const [messageIdWithActions, setMessageIdWithActions] = useState<string | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showStatistics, setShowStatistics] = useState(false);
   const [showBackupManager, setShowBackupManager] = useState(false);
@@ -720,6 +722,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       }
     }
   }, [messages.length, chatId, markChatAsRead, onMarkAsRead]);
+
+  // Закрыть меню действий по сообщению при клике вне сообщения
+  useEffect(() => {
+    if (!messageIdWithActions) return;
+    const close = () => setMessageIdWithActions(null);
+    document.addEventListener('click', close, true);
+    return () => document.removeEventListener('click', close, true);
+  }, [messageIdWithActions]);
 
   // Загрузка закрепленных сообщений
   const loadPinnedMessages = useCallback(async () => {
@@ -3059,9 +3069,28 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               )}
             <div 
               data-message-id={msg.id} 
-              className={`message-wrapper message ${isMe ? 'message-me me' : ''} ${msg.expiresAt && msg.expiresAt < Date.now() ? 'expired' : ''} ${msg.senderId === currentUser.id ? 'sending' : 'received'}`}
+              className={`message-wrapper message ${isMe ? 'message-me me' : ''} ${msg.expiresAt && msg.expiresAt < Date.now() ? 'expired' : ''} ${msg.senderId === currentUser.id ? 'sending' : 'received'} ${messageIdWithActions === msg.id ? 'show-actions' : ''}`}
               style={{ animationDelay: `${idx * 0.03}s` }}
               onDoubleClick={() => !msg.deletedAt && setReplyingTo(msg)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMessageIdWithActions(prev => prev === msg.id ? null : msg.id);
+              }}
+              onTouchStart={() => {
+                longPressTimerRef.current = setTimeout(() => setMessageIdWithActions(msg.id), 400);
+              }}
+              onTouchEnd={() => {
+                if (longPressTimerRef.current) {
+                  clearTimeout(longPressTimerRef.current);
+                  longPressTimerRef.current = null;
+                }
+              }}
+              onTouchCancel={() => {
+                if (longPressTimerRef.current) {
+                  clearTimeout(longPressTimerRef.current);
+                  longPressTimerRef.current = null;
+                }
+              }}
             >
               {!isMe && showAvatar && (
                 <div 

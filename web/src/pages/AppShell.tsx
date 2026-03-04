@@ -45,6 +45,13 @@ export default function AppShell() {
   const nav = useNavigate();
   const { toasts, removeToast } = useToast();
 
+  // Подключаем WebSocket сразу при монтировании (чтобы входящие звонки приходили в любом разделе)
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('token')) {
+      getSocket();
+    }
+  }, []);
+
   // WebSocket: входящие звонки и завершение звонка (чтобы не залипал экран)
   useEffect(() => {
     const socket = getSocket();
@@ -58,7 +65,7 @@ export default function AppShell() {
           try {
             const data = JSON.parse(msgText);
 
-            if (data.type === 'webrtc:offer' && user && data.from !== user.id) {
+            if (data.type === 'webrtc:offer' && data.from && (!user || data.from !== user.id)) {
               setIncomingCall({
                 callId: data.chatId || `call-${Date.now()}`,
                 from: data.from,

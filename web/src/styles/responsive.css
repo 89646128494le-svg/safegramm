@@ -278,9 +278,18 @@ html {
 
   .chat-input-container {
     flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
     padding: 10px 10px !important;
     padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
     touch-action: manipulation;
+    background: var(--bg-primary, rgba(17, 24, 39, 0.98));
+    border-top: 1px solid var(--border-color, #374151);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
   }
 
   .chat-input-container textarea,

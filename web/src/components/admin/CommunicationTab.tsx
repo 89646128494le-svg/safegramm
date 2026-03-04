@@ -140,7 +140,10 @@ export default function CommunicationTab() {
           {invites.length === 0 && !showInviteForm ? <div className="empty" style={{ padding: 48 }}>Нет ссылок</div> : (
             <div style={{ display: 'grid', gap: 8 }}>
               {invites.map((i) => {
-                const fullUrl = typeof window !== 'undefined' ? `${window.location.origin}/invite/${i.code}` : `/invite/${i.code}`;
+                const basePath = typeof import.meta.env?.BASE_URL === 'string' ? import.meta.env.BASE_URL.replace(/\/$/, '') : '';
+                const fullUrl = typeof window !== 'undefined'
+                  ? `${window.location.origin}${basePath}/invite/${encodeURIComponent(i.code)}`
+                  : `${basePath || ''}/invite/${i.code}`;
                 return (
                   <div key={i.id} style={{ padding: 12, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                     <div><code>{i.code}</code> · использовано {i.usedCount}{i.maxUses ? ` / ${i.maxUses}` : ''} · {i.active ? 'активна' : 'отозвана'}</div>

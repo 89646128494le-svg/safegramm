@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getApiBaseUrl } from '../services/api';
+import { getApiBaseUrl, loadApiConfig } from '../services/api';
 
 export default function InvitePage() {
-  const { code } = useParams<{ code: string }>();
+  const { code: rawCode } = useParams<{ code: string }>();
+  const code = rawCode ? decodeURIComponent(rawCode).trim() : '';
   const navigate = useNavigate();
   const [data, setData] = useState<{ inviterName?: string; questionnaire?: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -15,19 +16,33 @@ export default function InvitePage() {
       setLoading(false);
       return;
     }
-    const base = getApiBaseUrl().replace(/\/+$/, '');
-    const url = `${base}/api/invite/${code}`;
-    fetch(url)
+    let cancelled = false;
+    loadApiConfig()
+      .then(() => {
+        if (cancelled) return;
+        const base = getApiBaseUrl().replace(/\/+$/, '');
+        const url = `${base}/api/invite/${encodeURIComponent(code)}`;
+        return fetch(url);
+      })
       .then((r) => {
+        if (cancelled) return null;
         if (!r.ok) {
-          if (r.status === 404 || r.status === 410) throw new Error('Ссылка недействительна или истекла');
+          if (r.status === 404) throw new Error('Ссылка недействительна или отозвана');
+          if (r.status === 410) throw new Error('Ссылка истекла или достигнут лимит использований');
           throw new Error('Ошибка загрузки');
         }
         return r.json();
       })
-      .then(setData)
-      .catch((e) => setError(e.message || 'Ошибка'))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (!cancelled && data) setData(data);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message || 'Ошибка');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [code]);
 
   const goToRegister = () => {
@@ -44,8 +59,9 @@ export default function InvitePage() {
 
   if (error) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)', color: '#e2e8f0' }}>
-        <p style={{ marginBottom: 16, fontSize: 18 }}>{error}</p>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)', color: '#e2e8f0', textAlign: 'center' }}>
+        <p style={{ marginBottom: 8, fontSize: 18 }}>{error}</p>
+        <p style={{ marginBottom: 16, fontSize: 14, color: 'rgba(226,232,240,0.7)', maxWidth: 320 }}>Убедитесь, что открываете полную ссылку из админки (кнопка «Копировать») и что сервер API доступен.</p>
         <a href="/" style={{ color: 'var(--accent, #7c6cff)', textDecoration: 'underline' }}>На главную</a>
       </div>
     );
