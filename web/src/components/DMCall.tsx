@@ -40,7 +40,6 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
-  const disconnectedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const iceServersRef = useRef<RTCConfiguration['iceServers']>([]);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -189,7 +188,8 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   }, []);
 
   const createPeerConnection = (stream?: MediaStream) => {
-    const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
+    const iceServers = iceServersRef.current?.length ? iceServersRef.current : [{ urls: 'stun:stun.l.google.com:19302' }];
+    const pc = new RTCPeerConnection({ iceServers });
 
     // Добавляем локальный поток
     const streamToUse = stream || localStream;
@@ -219,26 +219,14 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       }
     };
 
-    // Обработка изменения состояния соединения: disconnected часто временный (сеть/ICE), не вешаем сразу; только failed — окончательный обрыв
+    // Не завершаем звонок по состоянию соединения — только по кнопке или webrtc:hangup. disconnected/failed часто временные или из-за сети; даём пользователю самому положить трубку.
     pc.onconnectionstatechange = () => {
-      if (disconnectedTimeoutRef.current) {
-        clearTimeout(disconnectedTimeoutRef.current);
-        disconnectedTimeoutRef.current = null;
-      }
       if (pc.connectionState === 'connected') {
         setIsConnected(true);
       } else if (pc.connectionState === 'disconnected') {
-        const t = setTimeout(() => {
-          disconnectedTimeoutRef.current = null;
-          if (peerConnectionRef.current?.connectionState === 'disconnected') {
-            showToast('Соединение потеряно', 'info');
-            handleHangup();
-          }
-        }, 15000);
-        disconnectedTimeoutRef.current = t;
+        showToast('Соединение нестабильно. Если звука нет — завершите звонок и перезвоните.', 'info');
       } else if (pc.connectionState === 'failed') {
-        showToast('Соединение прервано', 'info');
-        handleHangup();
+        showToast('Соединение прервано. Завершите звонок кнопкой ниже при необходимости.', 'info');
       }
     };
 
@@ -465,10 +453,6 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       screenStreamRef.current = null;
     }
 
-    if (disconnectedTimeoutRef.current) {
-      clearTimeout(disconnectedTimeoutRef.current);
-      disconnectedTimeoutRef.current = null;
-    }
     pendingIceCandidatesRef.current = [];
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
