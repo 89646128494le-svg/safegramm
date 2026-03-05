@@ -87,11 +87,27 @@ export default function Chats() {
   const [chatsHasMore, setChatsHasMore] = useState(false);
   const [loadingMoreChats, setLoadingMoreChats] = useState(false);
   const chatListRef = useRef<HTMLDivElement>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)').matches : false
+  );
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
-      setSidebarOpen(false);
+    if (typeof window === 'undefined') {
+      return;
     }
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const applyViewportState = (isMobile: boolean) => {
+      setIsMobileViewport(isMobile);
+      setSidebarOpen(!isMobile);
+    };
+
+    applyViewportState(mediaQuery.matches);
+    const handleViewportChange = (event: MediaQueryListEvent) => {
+      applyViewportState(event.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleViewportChange);
+    return () => mediaQuery.removeEventListener('change', handleViewportChange);
   }, [setSidebarOpen]);
 
   useEffect(() => {
@@ -597,7 +613,7 @@ export default function Chats() {
   return (
     <div className="container">
       <div className={`sidebar-overlay ${ui.sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} aria-hidden="true" />
-      <div className={`sidebar ${ui.sidebarOpen ? 'open' : ''}`} aria-hidden={!ui.sidebarOpen}>
+      <div className={`sidebar ${ui.sidebarOpen ? 'open' : ''}`} aria-hidden={isMobileViewport ? !ui.sidebarOpen : false}>
         <button type="button" className="sidebar-close-btn-mobile" onClick={() => setSidebarOpen(false)} aria-label="Закрыть">✕</button>
         {/* Профиль пользователя */}
         <div className="user-profile-card" style={{
@@ -733,7 +749,7 @@ export default function Chats() {
                     isSelected={selectedChatId === chat.id}
                     onClick={() => {
                       setSelectedChatId(chat.id);
-                      if (typeof window !== 'undefined' && window.innerWidth <= 768) setSidebarOpen(false);
+                      if (isMobileViewport) setSidebarOpen(false);
                     }}
                     onArchive={() => {
                       if (chat.archivedAt) {
