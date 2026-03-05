@@ -731,18 +731,6 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     };
   }, []);
 
-  // Авто-завершение, если долго нет соединения (чтобы не залипал экран «Звонок»)
-  useEffect(() => {
-    if (!(isCalling || isRinging) || isConnected) return;
-    const t = setTimeout(() => {
-      if (!isConnected) {
-        showToast('Звонок не отвечает. Завершение.', 'info');
-        handleHangup();
-      }
-    }, 90000);
-    return () => clearTimeout(t);
-  }, [isCalling, isRinging, isConnected]);
-
   // Обновляем remote video и audio (для голосовых — звук через audio, иначе через video)
   useEffect(() => {
     if (remoteStream) {

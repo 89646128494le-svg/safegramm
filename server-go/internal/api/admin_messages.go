@@ -26,7 +26,7 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetString("userID")
 		var user models.User
-		if err := db.First(&user, userID).Error; err != nil {
+		if err := db.Where("id = ?", userID).First(&user).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
 		}
@@ -45,7 +45,7 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		var targetUser models.User
-		if err := db.First(&targetUser, req.UserID).Error; err != nil {
+		if err := db.Where("id = ?", req.UserID).First(&targetUser).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Target user not found"})
 			return
 		}
@@ -63,7 +63,7 @@ func BroadcastPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetString("userID")
 		var user models.User
-		if err := db.First(&user, userID).Error; err != nil {
+		if err := db.Where("id = ?", userID).First(&user).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
 		}
@@ -84,7 +84,7 @@ func BroadcastPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 		msg, atext, alink := req.Message, req.ActionText, req.ActionLink
 		for _, targetUserID := range req.UserIDs {
 			var targetUser models.User
-			if err := db.First(&targetUser, targetUserID).Error; err != nil {
+			if err := db.Where("id = ?", targetUserID).First(&targetUser).Error; err != nil {
 				continue
 			}
 			if targetUser.Email == nil {
@@ -101,7 +101,7 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetString("userID")
 		var user models.User
-		if err := db.First(&user, userID).Error; err != nil {
+		if err := db.Where("id = ?", userID).First(&user).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
 		}
@@ -165,7 +165,7 @@ func DisableMaintenance(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetString("userID")
 		var user models.User
-		if err := db.First(&user, userID).Error; err != nil {
+		if err := db.Where("id = ?", userID).First(&user).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
 		}
