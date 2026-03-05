@@ -181,122 +181,103 @@ export default function IncomingCallNotification({ call, onAccept, onDecline }: 
             )}
           </motion.div>
 
-          {/* Сообщение: ответить или сбросить */}
-          <div style={{
-            textAlign: 'center',
-            color: '#e9ecf5',
-          }}>
+          {/* Заголовок */}
+          <div style={{ textAlign: 'center', width: '100%' }}>
             <p style={{
               margin: 0,
-              fontSize: '14px',
-              color: 'rgba(233, 236, 245, 0.9)',
-              marginBottom: '6px',
+              fontSize: '13px',
+              color: 'rgba(233, 236, 245, 0.8)',
+              marginBottom: '4px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
             }}>
-              Вам звонят — ответить или сбросить?
+              Входящий {call.isVideo ? 'видео' : ''}звонок
             </p>
             <h3 style={{
               margin: 0,
-              fontSize: '20px',
-              fontWeight: 600,
-              marginBottom: '8px',
+              fontSize: '22px',
+              fontWeight: 700,
+              color: '#fff',
             }}>
               {call.fromName || 'Пользователь'}
             </h3>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              color: 'rgba(233, 236, 245, 0.7)',
-            }}>
-              {call.isVideo ? (
-                <>
-                  <Video size={16} />
-                  Входящий видеозвонок
-                </>
-              ) : (
-                <>
-                  <Phone size={16} />
-                  Входящий звонок
-                </>
-              )}
-            </div>
           </div>
 
-          {/* Кнопки */}
+          {/* Подсказка: как принять */}
+          <p style={{
+            margin: 0,
+            fontSize: '14px',
+            color: 'rgba(233, 236, 245, 0.85)',
+            textAlign: 'center',
+            maxWidth: '320px',
+          }}>
+            Нажмите зелёную кнопку <strong style={{ color: '#22c55e' }}>«Ответить»</strong>, чтобы принять звонок
+          </p>
+
+          {/* Кнопки: сначала Ответить (главная), потом Сбросить */}
           <div style={{
             display: 'flex',
-            gap: '16px',
+            flexDirection: 'column',
+            gap: '12px',
             width: '100%',
-            justifyContent: 'center',
+            maxWidth: '280px',
           }}>
-            {/* Кнопка "Сбросить" */}
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleDecline}
-              style={{
-                flex: 1,
-                maxWidth: '140px',
-                padding: '14px 24px',
-                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                border: 'none',
-                borderRadius: '12px',
-                color: 'white',
-                fontSize: '16px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)',
-                transition: 'all 0.2s',
-              }}
-            >
-              <PhoneOff size={20} />
-              Сбросить
-            </motion.button>
-
-            {/* Кнопка "Ответить" */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={handleAccept}
               animate={{
                 boxShadow: isRinging
                   ? [
-                      '0 4px 12px rgba(34, 197, 94, 0.4)',
-                      '0 4px 20px rgba(34, 197, 94, 0.6)',
-                      '0 4px 12px rgba(34, 197, 94, 0.4)',
+                      '0 4px 16px rgba(34, 197, 94, 0.45)',
+                      '0 6px 24px rgba(34, 197, 94, 0.6)',
+                      '0 4px 16px rgba(34, 197, 94, 0.45)',
                     ]
-                  : '0 4px 12px rgba(34, 197, 94, 0.4)',
+                  : '0 4px 16px rgba(34, 197, 94, 0.45)',
               }}
-              transition={{
-                duration: 1,
-                repeat: isRinging ? Infinity : 0,
-              }}
+              transition={{ duration: 1, repeat: isRinging ? Infinity : 0 }}
               style={{
-                flex: 1,
-                maxWidth: '140px',
-                padding: '14px 24px',
+                width: '100%',
+                padding: '16px 28px',
                 background: 'linear-gradient(135deg, #22c55e, #16a34a)',
                 border: 'none',
-                borderRadius: '12px',
+                borderRadius: '14px',
                 color: 'white',
-                fontSize: '16px',
-                fontWeight: 600,
+                fontSize: '18px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                transition: 'all 0.2s',
+              }}
+            >
+              <Phone size={22} />
+              Ответить
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleDecline}
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '12px',
+                color: 'rgba(233, 236, 245, 0.9)',
+                fontSize: '15px',
+                fontWeight: 500,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                transition: 'all 0.2s',
               }}
             >
-              <Phone size={20} />
-              Ответить
+              <PhoneOff size={18} />
+              Отклонить
             </motion.button>
           </div>
 

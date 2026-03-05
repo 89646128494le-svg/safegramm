@@ -786,11 +786,16 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
               animate={{ opacity: 1 }}
               style={{
                 position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', zIndex: 5,
+                alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', zIndex: 5,
               }}
             >
-              <div style={{ fontSize: 48, marginBottom: 16 }}>🔔</div>
-              <div style={{ color: '#fff', fontSize: 18 }}>{isCalling ? 'Звонок...' : 'Входящий звонок'}</div>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>📞</div>
+              <div style={{ color: '#fff', fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
+                {!isIncoming ? 'Ожидание ответа...' : 'Подключение...'}
+              </div>
+              <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 15 }}>
+                {!isIncoming ? `Звонок ${otherDisplayName} — дождитесь ответа на другом устройстве` : 'Принятие звонка...'}
+              </div>
             </motion.div>
           )}
 
