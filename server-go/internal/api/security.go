@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultMaxBodyBytes     = 10 << 20  // 10 MB для обычных запросов
-	defaultDDoSReqPerMin    = 2000      // глобальный лимит запросов/мин с одного IP (не баним по 429)
+	defaultDDoSReqPerMin    = 5000      // глобальный лимит запросов/мин с одного IP (не баним по 429)
 	defaultViolationsToBan  = 9999      // по умолчанию не банить по счётчику (только ручной бан в админке)
 	defaultBanDurationMin   = 30        // минуты бана при ручном бане
 	defaultWSConnsPerIP     = 10        // макс WebSocket соединений с одного IP

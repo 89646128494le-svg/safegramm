@@ -3,7 +3,22 @@ package websocket
 import (
 	"encoding/json"
 	"log"
+	"strconv"
 )
+
+// getStringFromAny извлекает user ID из msg["to"] (JSON может прислать string или number).
+func getStringFromAny(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	if n, ok := v.(float64); ok {
+		return strconv.FormatFloat(n, 'f', 0, 64)
+	}
+	return ""
+}
 
 // HandleWebRTCMessage обрабатывает WebRTC signaling сообщения
 func (c *Client) HandleWebRTCMessage(msg map[string]interface{}) {
@@ -15,7 +30,7 @@ func (c *Client) HandleWebRTCMessage(msg map[string]interface{}) {
 	// Добавляем информацию об отправителе
 	msg["from"] = c.userID
 	chatID, _ := msg["chatId"].(string)
-	toUserID, _ := msg["to"].(string)
+	toUserID := getStringFromAny(msg["to"])
 
 	payload := c.marshalMessage(msg)
 	if payload == nil {
@@ -24,9 +39,12 @@ func (c *Client) HandleWebRTCMessage(msg map[string]interface{}) {
 
 	switch msgType {
 	case "webrtc:offer":
+		sent := false
 		if toUserID != "" {
 			c.hub.SendToUser(toUserID, payload)
-		} else if chatID != "" {
+			sent = true
+		}
+		if !sent && chatID != "" {
 			c.hub.SendToChatPeers(chatID, c.userID, payload)
 		}
 

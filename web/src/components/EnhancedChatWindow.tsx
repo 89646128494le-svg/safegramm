@@ -1259,7 +1259,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   // Опрос новых сообщений каждые 4 с (fallback, если WebSocket не доставил)
   useEffect(() => {
     if (!chatId || selectedThreadId) return;
-    const t = setInterval(pollNewMessages, 4000);
+    const t = setInterval(pollNewMessages, 12000);
     return () => clearInterval(t);
   }, [chatId, selectedThreadId, pollNewMessages]);
 

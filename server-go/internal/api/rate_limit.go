@@ -32,7 +32,7 @@ func envRateLimit(defaultRate int) int {
 
 var limiter = &rateLimiter{
 	visitors: make(map[string]*visitor),
-	rate:     envRateLimit(800),
+	rate:     envRateLimit(2500),
 	window:   time.Minute,
 }
 

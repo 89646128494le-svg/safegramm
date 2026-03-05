@@ -28,7 +28,7 @@ import OnboardingE2EE from '../components/OnboardingE2EE';
 import IncomingCallNotification from '../components/IncomingCallNotification';
 import DMCall from '../components/DMCall';
 import ServerStrip from '../components/ServerStrip';
-import { getSocket, sendWebSocketMessage } from '../services/websocket';
+import { getSocket, sendWebSocketMessage, subscribeToMessages } from '../services/websocket';
 import { isModerator } from '../utils/roles';
 
 export default function AppShell() {
@@ -54,20 +54,19 @@ export default function AppShell() {
     }
   }, []);
 
-  // WebSocket: входящие звонки и завершение звонка (чтобы не залипал экран)
+  // Подписка на сообщения WebSocket (работает и после переподключения — входящие звонки не теряются)
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
+    if (typeof localStorage !== 'undefined' && !localStorage.getItem('token')) return;
+    getSocket();
 
     const handleMessage = (event: MessageEvent) => {
       try {
-        const messages = event.data.split('\n').filter((m: string) => m.trim());
+        const messages = String(event.data).split('\n').filter((m: string) => m.trim());
         for (const msgText of messages) {
           if (!msgText.trim()) continue;
           try {
             const data = JSON.parse(msgText);
 
-            // Показываем входящий звонок при любом оффере (user может ещё не загрузиться — не ждём)
             if (data.type === 'webrtc:offer') {
               setIncomingCall({
                 callId: data.chatId || `call-${Date.now()}`,
@@ -94,8 +93,8 @@ export default function AppShell() {
       }
     };
 
-    socket.addEventListener('message', handleMessage);
-    return () => socket.removeEventListener('message', handleMessage);
+    const unsubscribe = subscribeToMessages(handleMessage);
+    return unsubscribe;
   }, []);
 
   useEffect(() => {

@@ -261,10 +261,10 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Отправляем offer через WebSocket с информацией о звонящем
+      // Отправляем offer через WebSocket (to — строка, иначе бэкенд может не доставить)
       sendWebSocketMessage('webrtc:offer', {
         chatId,
-        to: otherUserId,
+        to: String(otherUserId),
         from: currentUserId,
         fromName: currentUserName,
         fromAvatar: currentUserAvatar,

@@ -9,6 +9,21 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 type QueuedMessage = { type: string; data: Record<string, unknown> };
 const messageQueue: QueuedMessage[] = [];
 
+type MessageHandler = (event: MessageEvent) => void;
+const messageSubscribers = new Set<MessageHandler>();
+
+function attachMessageForwarder(socket: WebSocket) {
+  socket.onmessage = (event: MessageEvent) => {
+    messageSubscribers.forEach((fn) => {
+      try {
+        fn(event);
+      } catch (e) {
+        console.warn('WebSocket message subscriber error:', e);
+      }
+    });
+  };
+}
+
 function flushMessageQueue() {
   if (!ws || ws.readyState !== WebSocket.OPEN || messageQueue.length === 0) return;
   while (messageQueue.length > 0) {
@@ -38,6 +53,7 @@ export function getSocket(): WebSocket | null {
 
   try {
     ws = new WebSocket(wsUrl);
+    attachMessageForwarder(ws);
 
     ws.onopen = () => {
       console.log('WebSocket connected');
@@ -91,6 +107,11 @@ export function closeSocket() {
     ws = null;
   }
   reconnectAttempts = 0;
+}
+
+export function subscribeToMessages(handler: MessageHandler): () => void {
+  messageSubscribers.add(handler);
+  return () => messageSubscribers.delete(handler);
 }
 
 export function sendWebSocketMessage(type: string, data: Record<string, unknown>) {

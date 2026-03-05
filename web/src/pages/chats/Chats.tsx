@@ -261,10 +261,10 @@ export default function Chats() {
       
       socket.addEventListener('message', handleMessage);
       
-      // Обновляем чаты каждые 30 секунд для синхронизации счетчиков
+      // Обновляем чаты раз в минуту (реже = меньше 429 при лимитах)
       const interval = setInterval(() => {
         loadChats();
-      }, 30000);
+      }, 60000);
       
       return () => {
         socket.removeEventListener('message', handleMessage);
