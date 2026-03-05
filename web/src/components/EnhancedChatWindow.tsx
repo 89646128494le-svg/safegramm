@@ -47,6 +47,8 @@ import { getChatBackground, getChatColor } from '../services/appearance';
 import AppearanceSettings from './AppearanceSettings';
 import { UsernameWithRole } from './RoleBadge';
 
+const MAX_MESSAGE_LENGTH = 4096;
+
 interface Message {
   id: string;
   chatId: string;
@@ -1347,6 +1349,10 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     // Проверяем, что есть хотя бы текст, вложение или стикер
     const finalText = messageText !== undefined ? messageText : text.trim();
     if (!finalText && !attachmentUrl && !stickerId) return;
+    if (finalText.length > MAX_MESSAGE_LENGTH) {
+      showToast(`Сообщение не должно превышать ${MAX_MESSAGE_LENGTH} символов (сейчас ${finalText.length})`, 'error');
+      return;
+    }
 
     try {
       const payload: any = {
@@ -1485,6 +1491,10 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   const editMessage = async (messageId: string, newText: string) => {
     if (!newText.trim()) {
       showToast('Сообщение не может быть пустым', 'warning');
+      return;
+    }
+    if (newText.length > MAX_MESSAGE_LENGTH) {
+      showToast(`Сообщение не должно превышать ${MAX_MESSAGE_LENGTH} символов`, 'error');
       return;
     }
     try {

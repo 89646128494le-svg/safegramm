@@ -10,6 +10,13 @@ export interface FloatingCallBarProps {
   onExpand: () => void;
   onHangup: () => void;
   avatarUrl?: string | null;
+  durationSec?: number;
+}
+
+function formatDuration(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
 export default function FloatingCallBar({
@@ -20,6 +27,7 @@ export default function FloatingCallBar({
   onExpand,
   onHangup,
   avatarUrl,
+  durationSec,
 }: FloatingCallBarProps) {
   return (
     <motion.div
@@ -36,12 +44,12 @@ export default function FloatingCallBar({
         zIndex: 9998,
         display: 'flex',
         alignItems: 'center',
-        gap: 16,
-        padding: '12px 20px 12px 16px',
-        borderRadius: 20,
-        background: 'rgba(15, 20, 35, 0.92)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(124, 108, 255, 0.15)',
+        gap: 18,
+        padding: '14px 22px 14px 18px',
+        borderRadius: 22,
+        background: 'rgba(15, 20, 35, 0.94)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.45), 0 0 0 1px rgba(124, 108, 255, 0.12)',
         backdropFilter: 'blur(24px)',
       }}
     >
@@ -49,38 +57,42 @@ export default function FloatingCallBar({
         type="button"
         onClick={onExpand}
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 12,
+          width: 48,
+          height: 48,
+          borderRadius: 14,
           border: 'none',
-          background: avatarUrl ? `url(${avatarUrl}) center/cover` : 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+          background: avatarUrl ? `url(${avatarUrl}) center/cover` : 'linear-gradient(135deg, #4f46e5, #7c3aed)',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: '#fff',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          boxShadow: '0 4px 16px rgba(99,102,241,0.35)',
         }}
       >
-        {isVideo ? <Video size={22} /> : <Phone size={22} />}
+        {isVideo ? <Video size={24} /> : <Phone size={24} />}
       </button>
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {title}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>
+          {durationSec !== undefined && (
+            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{formatDuration(durationSec)}</span>
+          )}
           {isMuted && <MicOff size={12} />}
           {isVideo && !isVideoEnabled && <VideoOff size={12} />}
-          <span>Звонок идёт</span>
+          {durationSec === undefined && <span>Звонок идёт</span>}
         </div>
       </div>
       <button
         type="button"
         onClick={onExpand}
+        title="Развернуть"
         style={{
-          width: 40,
-          height: 40,
-          borderRadius: 10,
+          width: 42,
+          height: 42,
+          borderRadius: 12,
           border: 'none',
           background: 'rgba(255,255,255,0.1)',
           color: '#fff',
@@ -92,13 +104,16 @@ export default function FloatingCallBar({
       >
         <Maximize2 size={20} />
       </button>
-      <button
+      <motion.button
         type="button"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={onHangup}
+        title="Завершить"
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 12,
+          width: 46,
+          height: 46,
+          borderRadius: 14,
           border: 'none',
           background: 'linear-gradient(135deg, #ef4444, #dc2626)',
           color: '#fff',
@@ -106,11 +121,11 @@ export default function FloatingCallBar({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 4px 16px rgba(239,68,68,0.4)',
+          boxShadow: '0 4px 20px rgba(239,68,68,0.4)',
         }}
       >
         <Phone size={20} style={{ transform: 'rotate(135deg)' }} />
-      </button>
+      </motion.button>
     </motion.div>
   );
 }

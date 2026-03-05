@@ -3,6 +3,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  onRetry?: () => void;
 }
 
 interface State {
@@ -24,6 +25,11 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError && this.state.error) {
       if (this.props.fallback) return this.props.fallback;
+      const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+      const handleRetry = () => {
+        if (isDesktop && this.props.onRetry) this.props.onRetry();
+        else window.location.reload();
+      };
       return (
         <div
           style={{
@@ -40,22 +46,10 @@ export default class ErrorBoundary extends Component<Props, State> {
         >
           <h1 style={{ fontSize: 20, marginBottom: 12 }}>Что-то пошло не так</h1>
           <p style={{ color: 'var(--text-secondary, #94a3b8)', marginBottom: 24, textAlign: 'center' }}>
-            Обновите страницу или вернитесь назад.
+            {isDesktop ? 'Вернитесь на экран входа.' : 'Обновите страницу или вернитесь назад.'}
           </p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '10px 20px',
-              background: 'var(--accent, #3b82f6)',
-              border: 'none',
-              borderRadius: 8,
-              color: '#fff',
-              cursor: 'pointer',
-              fontSize: 14,
-            }}
-          >
-            Обновить страницу
+          <button type="button" onClick={handleRetry} style={{ padding: '10px 20px', background: 'var(--accent, #3b82f6)', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 14 }}>
+            {isDesktop ? 'На экран входа' : 'Обновить страницу'}
           </button>
         </div>
       );

@@ -53,6 +53,21 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   const [remoteSpeaking, setRemoteSpeaking] = useState(false);
   const [localReaction, setLocalReaction] = useState<string | null>(null);
   const [remoteReaction, setRemoteReaction] = useState<string | null>(null);
+  const [callDurationSec, setCallDurationSec] = useState(0);
+
+  const formatDuration = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    if (!isConnected || !callStartTimeRef.current) return;
+    const t = setInterval(() => {
+      setCallDurationSec(Math.floor((Date.now() - (callStartTimeRef.current || 0)) / 1000));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [isConnected]);
 
   const { level: localSpeakingLevel, isSpeaking: localSpeaking } = useSpeakingDetection(localStream, !isMuted);
   useEffect(() => {
@@ -261,15 +276,14 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Отправляем offer через WebSocket (to — строка, иначе бэкенд может не доставить)
+      // Отправляем offer через WebSocket. Не кладём type в корень — иначе перезатрёт type сообщения и сервер не распознает webrtc:offer
       sendWebSocketMessage('webrtc:offer', {
         chatId,
         to: String(otherUserId),
         from: currentUserId,
         fromName: currentUserName,
         fromAvatar: currentUserAvatar,
-        sdp: offer.sdp,
-        type: offer.type,
+        data: { type: offer.type, sdp: offer.sdp },
         video: isVideo,
       });
 
@@ -325,11 +339,13 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       // Создаем peer connection с потоком
       const pc = createPeerConnection(stream);
 
-      // Устанавливаем remote description из offer
-      const offerSDP = offerData.sdp || offerData.data?.sdp || offerData;
+      // Устанавливаем remote description из offer (SDP может быть в data после фикса типа сообщения)
+      const sdpPayload = offerData.data || offerData;
+      const offerSDP = sdpPayload.sdp ?? offerData.sdp;
+      const sdpType = sdpPayload.type || 'offer';
       await pc.setRemoteDescription(new RTCSessionDescription({
-        type: 'offer',
-        sdp: typeof offerSDP === 'string' ? offerSDP : offerSDP.sdp,
+        type: sdpType,
+        sdp: typeof offerSDP === 'string' ? offerSDP : (offerSDP?.sdp ?? ''),
       }));
 
       // Создаем answer
@@ -340,8 +356,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       sendWebSocketMessage('webrtc:answer', {
         chatId,
         to: otherUserId,
-        sdp: answer.sdp,
-        type: answer.type,
+        data: { type: answer.type, sdp: answer.sdp },
       });
       
       callStartTimeRef.current = Date.now();
@@ -733,6 +748,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         onExpand={() => setMinimized(false)}
         onHangup={handleHangup}
         avatarUrl={(offerData as any)?.fromAvatar || otherUserAvatar}
+        durationSec={isConnected ? callDurationSec : undefined}
       />
     );
   }
@@ -740,37 +756,62 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   return (
     <div className="dm-call-overlay" style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'linear-gradient(180deg, #0a0e1a 0%, #111827 50%, #0f172a 100%)',
+      background: 'linear-gradient(145deg, #0b0f1a 0%, #0f1629 35%, #131c2e 70%, #0d1321 100%)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Скрытый audio для голосового звонка — без него удалённый звук не воспроизводится */}
+      {/* Декоративная сетка/шум для глубины */}
+      <div style={{
+        position: 'absolute', inset: 0, opacity: 0.03, pointerEvents: 'none',
+        backgroundImage: 'radial-gradient(circle at 50% 50%, rgba(124,108,255,0.15) 0%, transparent 50%)',
+      }} />
       {!isVideo && <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />}
       <div className="dm-call-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0 }}>
         <div className="dm-call-header" style={{
           position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 24px', background: 'linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 100%)',
+          padding: '18px 28px',
+          background: 'linear-gradient(180deg, rgba(15,20,35,0.92) 0%, rgba(15,20,35,0.4) 70%, transparent 100%)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          backdropFilter: 'blur(16px)',
         }}>
-          <h3 style={{ margin: 0, color: '#fff', fontSize: 18, fontWeight: 600 }}>
-            {isVideo ? 'Видеозвонок' : 'Звонок'} {isConnected && ` · ${otherDisplayName}`}
-          </h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <h3 style={{ margin: 0, color: '#fff', fontSize: 17, fontWeight: 600, letterSpacing: '-0.02em' }}>
+              {isVideo ? 'Видеозвонок' : 'Звонок'} {isConnected && ` · ${otherDisplayName}`}
+            </h3>
+            {isConnected && (
+              <span style={{
+                fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.7)',
+                fontVariantNumeric: 'tabular-nums',
+                padding: '4px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.08)',
+              }}>
+                {formatDuration(callDurationSec)}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {isRecording && (
-              <span style={{ fontSize: 12, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1s infinite' }} />
+              <span style={{
+                fontSize: 12, color: '#fca5a5', display: 'flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px', borderRadius: 10, background: 'rgba(239,68,68,0.15)', fontWeight: 500,
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1.2s ease-in-out infinite' }} />
                 Запись
               </span>
             )}
-            <button
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={handleHangup}
               className="close-call-btn"
               style={{
-                width: 40, height: 40, borderRadius: 12, border: 'none',
-                background: 'rgba(255,255,255,0.15)', color: '#fff', cursor: 'pointer', fontSize: 18,
+                width: 42, height: 42, borderRadius: 12, border: 'none',
+                background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: 18,
+                boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
               }}
             >
               ✕
-            </button>
+            </motion.button>
           </div>
         </div>
 
@@ -784,17 +825,35 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
+              transition={{ duration: 0.25 }}
               style={{
                 position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', zIndex: 5,
+                alignItems: 'center', justifyContent: 'center',
+                background: 'linear-gradient(180deg, rgba(15,20,35,0.85) 0%, rgba(10,14,26,0.95) 100%)',
+                backdropFilter: 'blur(20px)',
+                zIndex: 5,
+                border: '1px solid rgba(255,255,255,0.06)',
               }}
             >
-              <div style={{ fontSize: 48, marginBottom: 16 }}>📞</div>
-              <div style={{ color: '#fff', fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
+              <motion.div
+                animate={{ scale: [1, 1.08, 1] }}
+                transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                style={{
+                  width: 120, height: 120, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, rgba(124,108,255,0.25) 0%, rgba(59,130,246,0.2) 100%)',
+                  border: '2px solid rgba(124,108,255,0.4)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 52, marginBottom: 24,
+                  boxShadow: '0 0 60px rgba(124,108,255,0.2), inset 0 0 40px rgba(124,108,255,0.05)',
+                }}
+              >
+                {isVideo ? '📹' : '📞'}
+              </motion.div>
+              <div style={{ color: '#fff', fontSize: 22, fontWeight: 600, marginBottom: 8, letterSpacing: '-0.02em' }}>
                 {!isIncoming ? 'Ожидание ответа...' : 'Подключение...'}
               </div>
-              <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 15 }}>
-                {!isIncoming ? `Звонок ${otherDisplayName} — дождитесь ответа на другом устройстве` : 'Принятие звонка...'}
+              <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 15, maxWidth: 320, textAlign: 'center' }}>
+                {!isIncoming ? `Звонок ${otherDisplayName}` : 'Принятие звонка...'}
               </div>
             </motion.div>
           )}
@@ -827,36 +886,54 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
               />
             </>
           ) : (
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: 24, background: 'rgba(15,20,35,0.6)', borderRadius: 20, padding: 48,
-            }}>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 28,
+                background: 'rgba(15,20,35,0.5)',
+                borderRadius: 24,
+                padding: 56,
+                border: '1px solid rgba(255,255,255,0.06)',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)',
+              }}
+            >
               <div style={{
                 width: 160, height: 160, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                background: 'linear-gradient(145deg, #4f46e5 0%, #7c3aed 50%, #6366f1 100%)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 72, boxShadow: '0 0 60px rgba(59, 130, 246, 0.3)',
+                fontSize: 72,
+                boxShadow: '0 0 80px rgba(99,102,241,0.35), 0 20px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2)',
               }}>
                 📞
               </div>
-              <div style={{ color: '#fff', fontSize: 20, fontWeight: 600 }}>{otherDisplayName}</div>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Голосовой звонок</div>
-            </div>
+              <div style={{ color: '#fff', fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>{otherDisplayName}</div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Голосовой звонок · {formatDuration(callDurationSec)}</div>
+            </motion.div>
           )}
 
           {isVideo && isConnected && (
-            <div style={{
-              position: 'absolute', top: 72, right: 16, zIndex: 10,
-              background: 'rgba(0,0,0,0.6)', borderRadius: 12, padding: 12,
-              display: 'flex', flexDirection: 'column', gap: 8, backdropFilter: 'blur(12px)',
-            }}>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>Фильтры</div>
+            <motion.div
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              style={{
+                position: 'absolute', top: 72, right: 16, zIndex: 10,
+                background: 'rgba(15,20,35,0.88)', borderRadius: 14, padding: 14,
+                display: 'flex', flexDirection: 'column', gap: 10,
+                backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>Фильтры</div>
               <select
                 value={videoFilter}
                 onChange={(e) => applyVideoFilter(e.target.value)}
                 style={{
-                  padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.1)',
-                  color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: 12,
+                  padding: '8px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.1)',
+                  color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 13,
+                  cursor: 'pointer',
                 }}
               >
                 <option value="none">Нет</option>
@@ -864,7 +941,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
                 <option value="grayscale">Ч/Б</option>
                 <option value="sepia">Сепия</option>
               </select>
-            </div>
+            </motion.div>
           )}
         </div>
 

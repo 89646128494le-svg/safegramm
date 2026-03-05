@@ -335,6 +335,12 @@ func corsMiddleware() gin.HandlerFunc {
 			}
 		}
 
+		// Electron/десктоп приложение при app:// или file:// присылает Origin: null
+		if !allowed && (origin == "null" || origin == "") {
+			c.Header("Access-Control-Allow-Origin", "null")
+			allowed = true
+		}
+
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Accept-Language, X-Requested-With")

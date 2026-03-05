@@ -2,19 +2,19 @@
   "name": "safegram-desktop",
   "version": "1.0.0",
   "description": "SafeGram Desktop — самостоятельное ПК-приложение, подключается к тому же серверу и БД",
+  "author": "SafeGram",
   "main": "main/main.js",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
-    "dev:renderer": "cd renderer && npm run dev",
+    "dev": "concurrently \"npm run dev:web\" \"npm run dev:electron\"",
+    "dev:web": "cd ../web && npm run dev",
     "dev:electron": "node scripts/wait-and-run.js",
-    "dev:main": "node scripts/wait-and-run.js",
-    "build": "npm run build:renderer && npm run build:assets && npm run build:electron",
-    "build:renderer": "cd renderer && npm run build",
+    "build": "npm run build:web && npm run build:assets && npm run build:electron",
+    "build:web": "cd ../web && npm run build && node ../desktop/scripts/copy-web-dist.js",
     "build:assets": "node scripts/generate-installer-assets.js",
-    "build:electron": "electron-builder",
+    "clean": "node scripts/clean-dist.js",
+    "build:electron": "node scripts/build-electron.js",
     "build:installer": "npm run build",
-    "build:native": "node-gyp rebuild",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
@@ -49,9 +49,6 @@
       "displayLanguageSelector": true,
       "allowElevation": true,
       "runAfterFinish": true,
-      "installerSidebar": "build/installerSidebar.bmp",
-      "installerHeader": "build/installerHeader.bmp",
-      "include": "build/installer.nsh",
       "license": "build/license_ru.txt"
     }
   }

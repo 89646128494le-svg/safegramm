@@ -178,6 +178,18 @@ export async function showNotification(
   if (playSound) {
     playNotificationSound(soundVolume, soundType);
   }
+
+  const w = typeof window !== 'undefined' ? window : null;
+  const electronAPI = w && (w as any).electronAPI;
+  if (electronAPI?.showNotification) {
+    electronAPI.showNotification({
+      title: options.title,
+      body: options.body,
+      icon: options.icon || undefined,
+      silent: options.silent || false,
+    }).catch(() => {});
+    return null;
+  }
   
   // Создаём уведомление
   const notificationOptions: any = {

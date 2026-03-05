@@ -78,11 +78,11 @@ export default function CallControlBar({
       whileTap={{ scale: 0.95 }}
       onClick={onClick}
       title={title}
+      aria-label={title}
       style={{
-        width: 52,
-        height: 52,
+        width: 54,
+        height: 54,
         borderRadius: '50%',
-        border: 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -90,11 +90,16 @@ export default function CallControlBar({
         background: danger
           ? 'linear-gradient(135deg, #ef4444, #dc2626)'
           : active
-          ? 'rgba(255,255,255,0.35)'
-          : 'rgba(255,255,255,0.12)',
+          ? 'rgba(255,255,255,0.28)'
+          : 'rgba(255,255,255,0.1)',
         color: '#fff',
-        boxShadow: danger ? '0 4px 20px rgba(239,68,68,0.4)' : '0 4px 16px rgba(0,0,0,0.2)',
-        backdropFilter: 'blur(12px)',
+        boxShadow: danger
+          ? '0 6px 24px rgba(239,68,68,0.45), inset 0 1px 0 rgba(255,255,255,0.15)'
+          : active
+          ? '0 0 0 2px rgba(124,108,255,0.4), 0 6px 20px rgba(0,0,0,0.25)'
+          : '0 6px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(16px)',
+        border: danger ? 'none' : `1px solid ${active ? 'rgba(124,108,255,0.3)' : 'rgba(255,255,255,0.08)'}`,
       }}
     >
       {icon}
@@ -108,13 +113,13 @@ export default function CallControlBar({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 12,
-        padding: '16px 24px',
-        borderRadius: 28,
-        background: 'rgba(15, 20, 35, 0.85)',
+        gap: 14,
+        padding: '18px 28px',
+        borderRadius: 32,
+        background: 'rgba(15, 20, 35, 0.9)',
         border: '1px solid rgba(255,255,255,0.08)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-        backdropFilter: 'blur(20px)',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(124,108,255,0.06)',
+        backdropFilter: 'blur(24px)',
       }}
     >
       {btn(
@@ -159,17 +164,18 @@ export default function CallControlBar({
                   bottom: '100%',
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  marginBottom: 12,
-                  padding: '10px 14px',
-                  borderRadius: 16,
-                  background: 'rgba(20, 25, 45, 0.95)',
+                  marginBottom: 14,
+                  padding: '12px 16px',
+                  borderRadius: 18,
+                  background: 'rgba(18, 22, 40, 0.97)',
                   border: '1px solid rgba(255,255,255,0.1)',
-                  boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+                  boxShadow: '0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,108,255,0.08)',
                   display: 'flex',
-                  gap: 8,
+                  gap: 10,
                   flexWrap: 'wrap',
-                  maxWidth: 220,
+                  maxWidth: 240,
                   justifyContent: 'center',
+                  backdropFilter: 'blur(20px)',
                 }}
               >
                 {QUICK_REACTIONS.map((emoji) => (

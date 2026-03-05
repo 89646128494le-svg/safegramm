@@ -24,9 +24,26 @@ const DEFAULT_API = normalizeBaseUrl(
 // Runtime config из /config.json (для деплоя на Vercel при API на своём ПК)
 let runtimeApiUrl: string | null = null;
 
-/** Загрузить config.json (apiUrl или apiHost) — вызывать при старте приложения. */
+declare global {
+  interface Window {
+    electronAPI?: {
+      getConfig: () => Promise<{ serverUrl?: string; [k: string]: unknown }>;
+      showNotification: (opts: { title: string; body: string; icon?: string; silent?: boolean }) => Promise<unknown>;
+      openExternal?: (url: string) => Promise<void>;
+    };
+  }
+}
+
+/** Загрузить config.json (apiUrl или apiHost) и, в десктопе, serverUrl из Electron store. Десктоп не зависит от config.json — сразу берёт URL из store. */
 export function loadApiConfig(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
+  const isDesktop = !!(window as any).electronAPI;
+  if (isDesktop) {
+    return (window as any).electronAPI.getConfig().then((c: { serverUrl?: string }) => {
+      if (c?.serverUrl && String(c.serverUrl).trim()) runtimeApiUrl = normalizeBaseUrl(String(c.serverUrl).trim());
+      else runtimeApiUrl = SAFEGRAM_API_SERVER;
+    }).catch(() => { runtimeApiUrl = SAFEGRAM_API_SERVER; });
+  }
   return fetch('/config.json')
     .then((r) => (r.ok ? r.json() : null))
     .then((o: { apiUrl?: string; apiHost?: string } | null) => {
@@ -40,7 +57,10 @@ export function loadApiConfig(): Promise<void> {
 
 /** Базовый URL для запросов. Всегда возвращает валидный http(s) URL с хостом. */
 export function getApiBaseUrl(): string {
-  const proxy = typeof window !== 'undefined' ? (localStorage.getItem('safegram_proxy_url') || '').trim() : '';
+  const w = typeof window !== 'undefined' ? window : null;
+  const isDesktop = w && (w as any).electronAPI;
+  if (isDesktop && runtimeApiUrl == null) return SAFEGRAM_API_SERVER;
+  const proxy = w ? (localStorage.getItem('safegram_proxy_url') || '').trim() : '';
   return normalizeBaseUrl(runtimeApiUrl || proxy || DEFAULT_API);
 }
 
@@ -152,6 +172,13 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
         return null; // Возвращаем null вместо ошибки
       }
 
+      // 5xx: повтор с экспоненциальной задержкой (до 2 раз), затем показываем пользователю
+      if (rsp.status >= 500 && rsp.status < 600 && attempt < retries) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+        await delay(delayMs);
+        return makeRequest(attempt + 1);
+      }
+
       // 429: не ретраим при блокировке IP; при лимите — не более 1 повтора, чтобы не усугублять
       if (rsp.status === 429) {
         const raw429 = await rsp.text();
@@ -181,7 +208,9 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
 
       if (!rsp.ok) {
         let msg = 'Что-то пошло не так. Попробуйте ещё раз.';
-        if (rsp.status === 404 && path.startsWith('/api/')) {
+        if (rsp.status >= 500 && rsp.status < 600) {
+          msg = 'Временная ошибка сервера. Попробуйте через минуту.';
+        } else if (rsp.status === 404 && path.startsWith('/api/')) {
           msg = 'Сервер API недоступен. Укажите адрес бэкенда в public/config.json (apiUrl или apiHost) или задайте VITE_API_URL при сборке.';
         }
         if (rsp.status === 511) {

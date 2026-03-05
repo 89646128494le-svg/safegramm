@@ -7,14 +7,14 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const options = {
-  resources: ['http://localhost:5174'],
+  resources: ['http://localhost:5173'],
   delay: 1000,
   interval: 500,
   timeout: 30000,
   window: 1000
 };
 
-console.log('Ожидание запуска Vite dev server на http://localhost:5174...');
+console.log('Ожидание запуска web dev server на http://localhost:5173...');
 
 waitOn(options)
   .then(() => {
@@ -23,8 +23,9 @@ waitOn(options)
     // Используем npx для запуска Electron (самый надежный способ)
     const electron = spawn('npx', ['electron', '.'], {
       stdio: 'inherit',
-      shell: true, // Важно для Windows
-      cwd: path.resolve(__dirname, '..')
+      shell: true,
+      cwd: path.resolve(__dirname, '..'),
+      env: { ...process.env, USE_WEB_DEV: '1' }
     });
 
     electron.on('error', (err) => {

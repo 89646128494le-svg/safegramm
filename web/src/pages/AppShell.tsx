@@ -235,21 +235,23 @@ export default function AppShell() {
         <nav style={{ display: 'flex', gap: 'var(--spacing-md)', flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Основная навигация */}
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/chats" className="btn btn-ghost" style={{ textDecoration: 'none' }}>💬 Чаты</Link>
+            <Link to="/app/chats" className="btn btn-ghost" style={{ textDecoration: 'none' }} aria-label="Чаты">💬 Чаты</Link>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/servers" className="btn btn-ghost" style={{ textDecoration: 'none' }}>🖥️ Серверы</Link>
+            <Link to="/app/servers" className="btn btn-ghost" style={{ textDecoration: 'none' }} aria-label="Серверы">🖥️ Серверы</Link>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/contacts" className="btn btn-ghost" style={{ textDecoration: 'none' }}>👥 Контакты</Link>
+            <Link to="/app/contacts" className="btn btn-ghost" style={{ textDecoration: 'none' }} aria-label="Контакты">👥 Контакты</Link>
           </motion.div>
           
           <div style={{ flex: 1 }} /> {/* Распорка */}
 
           {/* Кнопка Safety AI */}
           <motion.button
+            type="button"
             onClick={() => setShowSafety(true)}
             className="btn btn-ghost"
+            aria-label="Safety AI — защита и модерация"
             style={{ 
               textDecoration: 'none', 
               border: '1px solid var(--primary-color)', 
@@ -267,8 +269,10 @@ export default function AppShell() {
           </motion.button>
 
           <motion.button
+            type="button"
             onClick={() => setShowStories(true)}
             className="btn btn-ghost"
+            aria-label="Истории"
             style={{ textDecoration: 'none', border: 'none', background: 'transparent', cursor: 'pointer' }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -278,13 +282,13 @@ export default function AppShell() {
 
           {/* Остальные кнопки */}
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/sessions" className="btn btn-ghost" style={{ textDecoration: 'none' }}>📱 Сессии</Link>
+            <Link to="/app/sessions" className="btn btn-ghost" style={{ textDecoration: 'none' }} aria-label="Сессии">📱 Сессии</Link>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/profile" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Профиль">👤</Link>
+            <Link to="/app/profile" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Профиль" aria-label="Профиль">👤</Link>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Настройки">⚙️</Link>
+            <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Настройки" aria-label="Настройки">⚙️</Link>
           </motion.div>
 
           {(() => {

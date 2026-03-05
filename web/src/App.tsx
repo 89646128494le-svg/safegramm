@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState, Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { api } from './services/api';
 import { useStore } from './store/useStore';
 import ErrorBoundary from './components/ErrorBoundary';
 import MaintenanceBanner from './components/MaintenanceBanner';
+import DesktopTitlebar, { DESKTOP_TITLEBAR_HEIGHT } from './components/DesktopTitlebar';
 import Landing from './pages/Landing';
 import AppShell from './pages/AppShell';
 
@@ -22,6 +23,8 @@ const LOAD_TIMEOUT_MS = 12000;
 
 function PageFallback() {
   const [timedOut, setTimedOut] = useState(false);
+  const navigate = useNavigate();
+  const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
   useEffect(() => {
     const t = setTimeout(() => setTimedOut(true), LOAD_TIMEOUT_MS);
     return () => clearTimeout(t);
@@ -30,8 +33,8 @@ function PageFallback() {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)', color: '#e2e8f0', fontFamily: 'system-ui' }}>
         <p style={{ margin: 0, textAlign: 'center' }}>Загрузка занимает больше обычного.</p>
-        <p style={{ margin: 0, fontSize: 14, color: '#94a3b8' }}>Проверьте интернет и обновите страницу.</p>
-        <button type="button" onClick={() => window.location.reload()} style={{ padding: '10px 20px', background: '#7c6cff', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 14 }}>Обновить</button>
+        <p style={{ margin: 0, fontSize: 14, color: '#94a3b8' }}>Проверьте интернет.</p>
+        <button type="button" onClick={() => isDesktop ? navigate('/login') : window.location.reload()} style={{ padding: '10px 20px', background: '#7c6cff', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 14 }}>{isDesktop ? 'На экран входа' : 'Обновить'}</button>
       </div>
     );
   }
@@ -43,6 +46,12 @@ function PageFallback() {
 }
 
 export default function App() {
+  const navigate = useNavigate();
+  const [errorBoundaryKey, setErrorBoundaryKey] = useState(0);
+  const handleErrorRetry = () => {
+    setErrorBoundaryKey((k) => k + 1);
+    navigate('/login');
+  };
   const { token, setToken, setUser, user } = useStore();
   const authChecked = useRef(false);
   const hasStoredToken = !!(token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null));
@@ -58,7 +67,8 @@ export default function App() {
       return;
     }
     authChecked.current = true;
-    const AUTH_TIMEOUT_MS = 12000;
+    const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+    const AUTH_TIMEOUT_MS = isDesktop ? 6000 : 12000;
     const timeoutId = setTimeout(() => {
       setAuthCheckDone(true);
       setToken(null);
@@ -107,8 +117,44 @@ export default function App() {
     );
   }
 
+  const isDesktop = typeof window !== 'undefined' && !!(window as any).electronAPI;
+
+  // Десктоп: только мессенджер — вход/регистрация → чаты/админка, без лендинга
+  if (isDesktop) {
+    return (
+      <ErrorBoundary key={errorBoundaryKey} onRetry={handleErrorRetry}>
+        <DesktopTitlebar />
+        <div style={{ paddingTop: DESKTOP_TITLEBAR_HEIGHT, minHeight: '100vh' }}>
+          <MaintenanceBanner />
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/" element={
+                isAuthenticated ? <Navigate to="/app/chats" replace /> : <Navigate to="/login" replace />
+              } />
+              <Route path="/app/*" element={
+                isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
+              } />
+              <Route path="/login" element={
+                isAuthenticated ? <Navigate to="/app/chats" replace /> : <Login onDone={handleAuthSuccess} />
+              } />
+              <Route path="/register" element={
+                isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
+              } />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/premium-apply" element={isAuthenticated ? <PremiumApply /> : <Navigate to="/login" replace />} />
+              <Route path="/join" element={isAuthenticated ? <JoinRecruit /> : <Navigate to="/login" replace />} />
+              <Route path="/invite/:code" element={<InvitePage />} />
+              <Route path="*" element={<Navigate to={isAuthenticated ? '/app/chats' : '/login'} replace />} />
+            </Routes>
+          </Suspense>
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
   return (
-    <ErrorBoundary>
+    <ErrorBoundary key={errorBoundaryKey} onRetry={handleErrorRetry}>
       <MaintenanceBanner />
       <Suspense fallback={<PageFallback />}>
         <Routes>
