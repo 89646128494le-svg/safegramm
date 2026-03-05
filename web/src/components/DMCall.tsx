@@ -372,11 +372,12 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   };
 
   const handleAnswer = async (answerData: any) => {
-    if (!peerConnectionRef.current) return;
-
+    const pc = peerConnectionRef.current;
+    if (!pc) return;
+    if (pc.signalingState !== 'have-local-offer') return;
     try {
       const answerSDP = answerData.sdp || answerData.data?.sdp || answerData;
-      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription({
+      await pc.setRemoteDescription(new RTCSessionDescription({
         type: 'answer',
         sdp: typeof answerSDP === 'string' ? answerSDP : answerSDP.sdp,
       }));
@@ -711,17 +712,22 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     return () => window.removeEventListener('keydown', onKey);
   }, [isVideo]);
 
-  // Начинаем звонок при монтировании
+  const callStartedRef = useRef(false);
   useEffect(() => {
+    if (callStartedRef.current) return;
+    callStartedRef.current = true;
     if (isIncoming && offerData) {
       handleAcceptCall(offerData);
     } else if (!isIncoming) {
       startCall();
     }
+  }, [isIncoming, offerData]);
+
+  useEffect(() => {
     return () => {
       handleHangup();
     };
-  }, [isIncoming, offerData]);
+  }, []);
 
   // Авто-завершение, если долго нет соединения (чтобы не залипал экран «Звонок»)
   useEffect(() => {
