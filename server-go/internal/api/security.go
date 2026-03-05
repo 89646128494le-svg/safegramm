@@ -19,7 +19,7 @@ const (
 	defaultWSConnsPerIP     = 10        // макс WebSocket соединений с одного IP
 )
 
-// ipBlocklist — временный бан IP после повторных нарушений (rate limit, auth fail).
+// ipBlocklist — только ручной бан через админку (BlockManual). Авто-бан по нарушениям отключён.
 type ipBlocklist struct {
 	mu       sync.RWMutex
 	banned   map[string]time.Time
@@ -67,24 +67,7 @@ func (b *ipBlocklist) isBanned(ip string) bool {
 }
 
 func (b *ipBlocklist) recordViolation(ip string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	v, ok := b.violations[ip]
-	if !ok {
-		b.violations[ip] = &violationCount{count: 1, seen: time.Now()}
-		return
-	}
-	if time.Since(v.seen) > 5*time.Minute {
-		v.count = 1
-		v.seen = time.Now()
-		return
-	}
-	v.count++
-	v.seen = time.Now()
-	if v.count >= b.toBan {
-		b.banned[ip] = time.Now().Add(b.banDur)
-		delete(b.violations, ip)
-	}
+	// Авто-бан отключён: не добавляем IP в бан по счётчику нарушений
 }
 
 func (b *ipBlocklist) isWhitelisted(ip string) bool {
@@ -180,7 +163,7 @@ func (g *globalDDoS) allow(ip string) bool {
 }
 
 func (g *globalDDoS) recordReject(ip string) {
-	globalBlocklist.recordViolation(ip)
+	// Авто-блокировка отключена: не добавляем IP в блоклист
 }
 
 // SecurityMiddleware — порядок: 1) блоклист, 2) глобальный rate limit, 3) лимит тела.
@@ -260,10 +243,9 @@ func (w *wsConnLimit) acquire(ip string) (release func()) {
 	}
 }
 
-// RecordSecurityViolation вызывается при явном нарушении (например 429) для учёта в блоклисте.
-func RecordSecurityViolation(ip string) {
-	globalBlocklist.recordViolation(ip)
-}
+// RecordSecurityViolation больше не используется — авто-блокировка IP отключена.
+// Блокировка только через админку (BlockManual / Unblock).
+func RecordSecurityViolation(ip string) {}
 
 // IsDDoSDisabled возвращает true, если защита отключена (для тестов).
 func IsDDoSDisabled() bool {
