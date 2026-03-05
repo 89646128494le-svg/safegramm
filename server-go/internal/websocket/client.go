@@ -30,12 +30,26 @@ var upgrader = websocket.Upgrader{
 
 // Client представляет одно WebSocket подключение
 type Client struct {
-	hub    *Hub
-	conn   *websocket.Conn
-	send   chan []byte
-	userID string
-	chats  map[string]bool // Подписки на чаты
-	onClose func()        // вызывается при отключении (например, для снятия лимита по IP)
+	hub     *Hub
+	conn    *websocket.Conn
+	send    chan []byte
+	userID  string
+	chats   map[string]bool // Подписки на чаты
+	onClose func()          // вызывается при отключении (например, для снятия лимита по IP)
+}
+
+func (c *Client) keepPresenceAlive(stop <-chan struct{}) {
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			// Обновляем TTL онлайн-статуса, пока соединение живо.
+			_ = redis.SetOnline(c.userID, 5*time.Minute)
+		case <-stop:
+			return
+		}
+	}
 }
 
 // SetOnClose задаёт callback при отключении клиента (Hub вызовет при unregister).
@@ -71,28 +85,15 @@ func (c *Client) isSubscribedToChat(chatID string) bool {
 
 // ReadPump читает сообщения из WebSocket соединения
 func (c *Client) ReadPump() {
+	presenceStop := make(chan struct{})
 	defer func() {
+		close(presenceStop)
 		c.hub.unregister <- c
 		c.conn.Close()
 	}()
-	
-	// Обновляем онлайн статус каждые 2 минуты
-	go func() {
-		ticker := time.NewTicker(2 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				// Обновляем TTL онлайн статуса
-				redis.SetOnline(c.userID, 5*time.Minute)
-			case _, ok := <-c.send:
-				// Если канал закрыт, выходим
-				if !ok {
-					return
-				}
-			}
-		}
-	}()
+
+	// Обновляем online TTL, но не читаем c.send (иначе теряются исходящие сообщения).
+	go c.keepPresenceAlive(presenceStop)
 
 	c.conn.SetReadDeadline(time.Now().Add(pongWait * time.Second))
 	c.conn.SetReadLimit(maxMessageSize)
@@ -147,13 +148,27 @@ func (c *Client) WritePump() {
 			if err != nil {
 				return
 			}
-			w.Write(message)
+			if _, err := w.Write(message); err != nil {
+				_ = w.Close()
+				return
+			}
 
 			// Отправляем все сообщения из очереди
 			n := len(c.send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.send)
+				if _, err := w.Write([]byte{'\n'}); err != nil {
+					_ = w.Close()
+					return
+				}
+				next, ok := <-c.send
+				if !ok {
+					_ = w.Close()
+					return
+				}
+				if _, err := w.Write(next); err != nil {
+					_ = w.Close()
+					return
+				}
 			}
 
 			if err := w.Close(); err != nil {
@@ -175,33 +190,33 @@ func (c *Client) handleMessage(msg map[string]interface{}) {
 		return
 	}
 
-		switch msgType {
-		case "subscribe":
-			if chatID, ok := msg["chatId"].(string); ok {
-				c.SubscribeToChat(chatID)
-			}
-		case "unsubscribe":
-			if chatID, ok := msg["chatId"].(string); ok {
-				c.UnsubscribeFromChat(chatID)
-			}
-		case "typing":
-			c.HandleTyping(msg)
-		case "voice:join":
-			if chatID, ok := msg["chatId"].(string); ok {
-				c.hub.HandleVoiceRoom(chatID, c.userID, c, true)
-			}
-		case "voice:leave":
-			if chatID, ok := msg["chatId"].(string); ok {
-				c.hub.HandleVoiceRoom(chatID, c.userID, c, false)
-			}
-		case "voice:mute", "voice:speaking":
-			if chatID, ok := msg["chatId"].(string); ok && chatID != "" {
-				msg["from"] = c.userID
-				if data, err := json.Marshal(msg); err == nil {
-					c.hub.BroadcastToChat(chatID, data)
-				}
+	switch msgType {
+	case "subscribe":
+		if chatID, ok := msg["chatId"].(string); ok {
+			c.SubscribeToChat(chatID)
+		}
+	case "unsubscribe":
+		if chatID, ok := msg["chatId"].(string); ok {
+			c.UnsubscribeFromChat(chatID)
+		}
+	case "typing":
+		c.HandleTyping(msg)
+	case "voice:join":
+		if chatID, ok := msg["chatId"].(string); ok {
+			c.hub.HandleVoiceRoom(chatID, c.userID, c, true)
+		}
+	case "voice:leave":
+		if chatID, ok := msg["chatId"].(string); ok {
+			c.hub.HandleVoiceRoom(chatID, c.userID, c, false)
+		}
+	case "voice:mute", "voice:speaking":
+		if chatID, ok := msg["chatId"].(string); ok && chatID != "" {
+			msg["from"] = c.userID
+			if data, err := json.Marshal(msg); err == nil {
+				c.hub.BroadcastToChat(chatID, data)
 			}
 		}
+	}
 }
 
 // HandleTyping обрабатывает индикатор печати через WebSocket
@@ -219,4 +234,3 @@ func (c *Client) HandleTyping(msg map[string]interface{}) {
 		c.hub.BroadcastToChat(chatID, typingJSON)
 	}
 }
-

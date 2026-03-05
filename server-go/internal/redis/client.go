@@ -29,22 +29,34 @@ func Init(redisURL string) error {
 
 // SetOnline устанавливает пользователя как онлайн
 func SetOnline(userID string, ttl time.Duration) error {
+	if client == nil {
+		return nil
+	}
 	return client.Set(ctx, "online:"+userID, "1", ttl).Err()
 }
 
 // SetOffline устанавливает пользователя как оффлайн
 func SetOffline(userID string) error {
+	if client == nil {
+		return nil
+	}
 	return client.Del(ctx, "online:"+userID).Err()
 }
 
 // IsOnline проверяет, онлайн ли пользователь
 func IsOnline(userID string) (bool, error) {
+	if client == nil {
+		return false, nil
+	}
 	val, err := client.Exists(ctx, "online:"+userID).Result()
 	return val > 0, err
 }
 
 // GetOnlineUsers возвращает список онлайн пользователей
 func GetOnlineUsers() ([]string, error) {
+	if client == nil {
+		return nil, nil
+	}
 	keys, err := client.Keys(ctx, "online:*").Result()
 	if err != nil {
 		return nil, err
@@ -59,11 +71,17 @@ func GetOnlineUsers() ([]string, error) {
 
 // SetUserStatus устанавливает статус пользователя
 func SetUserStatus(userID, status string, ttl time.Duration) error {
+	if client == nil {
+		return nil
+	}
 	return client.Set(ctx, "status:"+userID, status, ttl).Err()
 }
 
 // GetUserStatus возвращает статус пользователя
 func GetUserStatus(userID string) (string, error) {
+	if client == nil {
+		return "", nil
+	}
 	return client.Get(ctx, "status:"+userID).Result()
 }
 
@@ -107,4 +125,3 @@ func Close() error {
 	}
 	return nil
 }
-

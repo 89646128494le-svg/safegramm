@@ -40,6 +40,7 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
   const [reactions, setReactions] = useState<Map<string, string>>(new Map());
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -63,103 +64,106 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
     // Обработчик сообщений WebSocket
     const handleMessage = async (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'voice:participants') {
-          const members = data.members || [];
-          // Создаем соединения с участниками, с которыми еще нет
-          for (const userId of members) {
-            if (userId !== currentUserId && !peersRef.current.has(userId)) {
+        const raw = typeof event.data === 'string' ? event.data : '';
+        const chunks = raw.split('\n').filter((m) => m.trim());
+        for (const chunk of chunks) {
+          const data = JSON.parse(chunk);
+          
+          if (data.type === 'voice:participants') {
+            const members = data.members || [];
+            // Создаем соединения с участниками, с которыми еще нет
+            for (const userId of members) {
+              if (userId !== currentUserId && !peersRef.current.has(userId)) {
+                await createPeerConnection(userId, true);
+              }
+            }
+            
+            // Удаляем соединения с теми, кого нет в списке
+            Array.from(peersRef.current.keys()).forEach((userId: string) => {
+              if (!members.includes(userId)) {
+                const pc = peersRef.current.get(userId);
+                if (pc) {
+                  pc.close();
+                  peersRef.current.delete(userId);
+                }
+                setParticipants(prev => {
+                  const newMap = new Map(prev);
+                  newMap.delete(userId);
+                  return newMap;
+                });
+              }
+            });
+          } else if (data.type === 'voice:peer-join') {
+            const userId = data.userId;
+            if (userId !== currentUserId) {
               await createPeerConnection(userId, true);
             }
-          }
-          
-          // Удаляем соединения с теми, кого нет в списке
-          Array.from(peersRef.current.keys()).forEach((userId: string) => {
-            if (!members.includes(userId)) {
-              const pc = peersRef.current.get(userId);
-              if (pc) {
-                pc.close();
+          } else if (data.type === 'voice:peer-leave') {
+            const userId = data.userId;
+            if (userId) {
+              const peer = peersRef.current.get(userId);
+              if (peer) {
+                peer.close();
                 peersRef.current.delete(userId);
               }
-              setParticipants(prev => {
-                const newMap = new Map(prev);
-                newMap.delete(userId);
-                return newMap;
-              });
             }
-          });
-        } else if (data.type === 'voice:peer-join') {
-          const userId = data.userId;
-          if (userId !== currentUserId) {
-            await createPeerConnection(userId, true);
-          }
-        } else if (data.type === 'voice:peer-leave') {
-          const userId = data.userId;
-          const peer = Array.from(peersRef.current.entries()).find(([_, pc]) => {
-            // Находим peer connection по userId
-            return true; // Упрощенно - в реальности нужно хранить маппинг
-          });
-          if (peer) {
-            peer[1].close();
-            peersRef.current.delete(peer[0]);
-          }
-          setParticipants(prev => {
-            const newMap = new Map<string, Participant>(prev);
-            Array.from(newMap.entries()).forEach(([key, value]: [string, Participant]) => {
-              if (value.userId === userId) newMap.delete(key);
+            setParticipants(prev => {
+              const newMap = new Map<string, Participant>(prev);
+              Array.from(newMap.entries()).forEach(([key, value]: [string, Participant]) => {
+                if (value.userId === userId) newMap.delete(key);
+              });
+              return newMap;
             });
-            return newMap;
-          });
-        } else if (data.type === 'voice:signal') {
-          const fromUserId = data.from;
-          const signalData = data.data;
-          if (!fromUserId || fromUserId === currentUserId || !signalData) return;
-          let pc = peersRef.current.get(fromUserId);
-          if (!pc) {
-            await createPeerConnection(fromUserId, false);
-            pc = peersRef.current.get(fromUserId);
-          }
-          if (pc) {
-            await handleSignal(pc, signalData, fromUserId);
-          }
-        } else if (data.type === 'call:recording:request') {
-          // Запрос на запись от участника
-          const consent = confirm('Участник хочет записать звонок. Разрешить?');
-          sendWebSocketMessage('call:recording:response', {
-            chatId,
-            to: data.from,
-            allowed: consent,
-          });
-          setRecordingConsents(prev => {
-            const newMap = new Map(prev);
-            newMap.set(data.from, consent);
-            return newMap;
-          });
-        } else if (data.type === 'call:recording:response') {
-          setRecordingConsents(prev => {
-            const newMap = new Map(prev);
-            newMap.set(data.from, data.allowed);
-            return newMap;
-          });
-          if (!data.allowed && isRecording) {
-            showToast('Участник запретил запись', 'warning');
-            stopRecording();
-          }
-        } else if (data.type === 'call:reaction' && data.from) {
-          const emoji = data.emoji || '👍';
-          setReactions(prev => {
-            const next = new Map(prev);
-            next.set(data.from, emoji);
-            return next;
-          });
-          setTimeout(() => {
+          } else if (data.type === 'voice:signal') {
+            const fromUserId = data.from;
+            const signalData = data.data;
+            if (!fromUserId || fromUserId === currentUserId || !signalData) return;
+            let pc = peersRef.current.get(fromUserId);
+            if (!pc) {
+              await createPeerConnection(fromUserId, false);
+              pc = peersRef.current.get(fromUserId);
+            }
+            if (pc) {
+              await handleSignal(pc, signalData, fromUserId);
+            }
+          } else if (data.type === 'call:recording:request') {
+            // Запрос на запись от участника
+            const consent = confirm('Участник хочет записать звонок. Разрешить?');
+            sendWebSocketMessage('call:recording:response', {
+              chatId,
+              to: data.from,
+              allowed: consent,
+            });
+            setRecordingConsents(prev => {
+              const newMap = new Map(prev);
+              newMap.set(data.from, consent);
+              return newMap;
+            });
+          } else if (data.type === 'call:recording:response') {
+            setRecordingConsents(prev => {
+              const newMap = new Map(prev);
+              newMap.set(data.from, data.allowed);
+              return newMap;
+            });
+            if (!data.allowed && isRecording) {
+              showToast('Участник запретил запись', 'warning');
+              stopRecording();
+            }
+          } else if (data.type === 'call:reaction' && data.from) {
+            const emoji = data.emoji || '👍';
             setReactions(prev => {
               const next = new Map(prev);
-              next.delete(data.from);
+              next.set(data.from, emoji);
               return next;
             });
-          }, 2500);
+            setTimeout(() => {
+              setReactions(prev => {
+                const next = new Map(prev);
+                next.delete(data.from);
+                return next;
+              });
+            }, 2500);
+          }
         }
       } catch (e) {
         console.error('Failed to parse WebSocket message:', e);
@@ -189,6 +193,7 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
         stream.getVideoTracks().forEach(t => t.enabled = false);
       }
       setLocalStream(stream);
+      localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
@@ -242,9 +247,10 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
       const pc = new RTCPeerConnection({ iceServers: iceServersConfig });
 
       // Добавляем локальные треки
-      if (localStream) {
-        localStream.getTracks().forEach(track => {
-          pc.addTrack(track, localStream);
+      const stream = localStreamRef.current;
+      if (stream) {
+        stream.getTracks().forEach(track => {
+          pc.addTrack(track, stream);
         });
       }
 
@@ -338,8 +344,9 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
   };
 
   const toggleMute = () => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
+    const stream = localStreamRef.current;
+    if (stream) {
+      stream.getAudioTracks().forEach(track => {
         track.enabled = isMuted;
       });
       setIsMuted(!isMuted);
@@ -347,8 +354,9 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
   };
 
   const toggleVideo = () => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach(track => {
+    const stream = localStreamRef.current;
+    if (stream) {
+      stream.getVideoTracks().forEach(track => {
         track.enabled = !isVideoEnabled;
       });
       setIsVideoEnabled(!isVideoEnabled);
@@ -390,15 +398,16 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
     }
 
     // Возвращаем камеру
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+    const stream = localStreamRef.current;
+    if (stream) {
+      const videoTrack = stream.getVideoTracks()[0];
       peersRef.current.forEach(pc => {
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
         if (sender && videoTrack) sender.replaceTrack(videoTrack);
       });
 
       if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.srcObject = stream;
       }
     }
 
@@ -656,6 +665,7 @@ export default function GroupVideoCall({ chatId, currentUserId, onClose, startWi
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
+    localStreamRef.current = null;
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach(track => track.stop());
     }

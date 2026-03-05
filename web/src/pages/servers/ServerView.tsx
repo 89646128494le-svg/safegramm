@@ -74,6 +74,12 @@ export default function ServerView() {
   });
   const [voiceState, setVoiceState] = useState<Record<string, string[]>>({});
   const [showSettings, setShowSettings] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)').matches : false
+  );
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' ? !window.matchMedia('(max-width: 768px)').matches : true
+  );
 
   useEffect(() => {
     if (id) {
@@ -83,6 +89,26 @@ export default function ServerView() {
       loadMembers();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const applyViewportState = (isMobile: boolean) => {
+      setIsMobileViewport(isMobile);
+      setIsSidebarOpen(!isMobile);
+    };
+
+    applyViewportState(mediaQuery.matches);
+    const handleViewportChange = (event: MediaQueryListEvent) => applyViewportState(event.matches);
+    mediaQuery.addEventListener('change', handleViewportChange);
+    return () => mediaQuery.removeEventListener('change', handleViewportChange);
+  }, []);
+
+  useEffect(() => {
+    if (isMobileViewport && selectedChannelId) {
+      setIsSidebarOpen(false);
+    }
+  }, [isMobileViewport, selectedChannelId]);
 
   const loadVoiceState = async () => {
     if (!id) return;
@@ -223,6 +249,13 @@ export default function ServerView() {
     }
   };
 
+  const handleSelectChannel = (channelId: string) => {
+    setSelectedChannelId(channelId);
+    if (isMobileViewport) {
+      setIsSidebarOpen(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="container">
@@ -262,7 +295,7 @@ export default function ServerView() {
   const currentUserRole = members.find(m => m.id === user?.id)?.role || 'member';
 
   return (
-    <div className="container">
+    <div className="container server-view">
       {showSettings && server && id && (
         <ServerSettingsModal
           serverId={id}
@@ -272,7 +305,24 @@ export default function ServerView() {
           onSaved={() => { loadServer(); setShowSettings(false); }}
         />
       )}
-      <div className="sidebar" style={{width: '260px'}}>
+      <div
+        className={`sidebar-overlay server-view-overlay ${isSidebarOpen ? 'open' : ''}`}
+        onClick={() => setIsSidebarOpen(false)}
+        aria-hidden="true"
+      />
+      <div
+        className={`sidebar server-view-sidebar ${isSidebarOpen ? 'open' : ''}`}
+        style={{ width: '260px' }}
+        aria-hidden={isMobileViewport ? !isSidebarOpen : false}
+      >
+        <button
+          type="button"
+          className="server-view-sidebar-close"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-label="Закрыть список каналов"
+        >
+          ✕
+        </button>
         <div style={{marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--border, #374151)'}}>
           <div style={{fontSize: '20px', fontWeight: '700', marginBottom: '4px'}}>{server.name}</div>
           {server.description && (
@@ -374,7 +424,7 @@ export default function ServerView() {
                     {catChannels.map(channel => (
                       <div
                         key={channel.id}
-                        onClick={() => setSelectedChannelId(channel.id)}
+                        onClick={() => handleSelectChannel(channel.id)}
                         style={{
                           padding: '8px 12px',
                           borderRadius: '6px',
@@ -403,7 +453,7 @@ export default function ServerView() {
                   {uncategorized.map(channel => (
                     <div
                       key={channel.id}
-                      onClick={() => setSelectedChannelId(channel.id)}
+                      onClick={() => handleSelectChannel(channel.id)}
                       style={{
                         padding: '8px 12px',
                         borderRadius: '6px',
@@ -430,7 +480,7 @@ export default function ServerView() {
             channels={voiceChannels}
             selectedChannelId={selectedChannelId}
             voiceState={voiceState}
-            onSelectChannel={(ch) => setSelectedChannelId(ch.id)}
+            onSelectChannel={(ch) => handleSelectChannel(ch.id)}
           />
         </div>
 
@@ -490,9 +540,25 @@ export default function ServerView() {
         </div>
       </div>
 
-      <div className="main" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div className="main server-view-main" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {selectedChannelId ? (
-          <div style={{
+          <>
+            {isMobileViewport && (
+              <div className="server-view-mobile-bar">
+                <button
+                  type="button"
+                  className="server-view-mobile-menu-btn"
+                  onClick={() => setIsSidebarOpen(true)}
+                  aria-label="Открыть список каналов"
+                >
+                  <span aria-hidden>☰</span>
+                </button>
+                <span className="server-view-mobile-title">
+                  #{channels.find(c => c.id === selectedChannelId)?.name || 'Канал'}
+                </span>
+              </div>
+            )}
+            <div className="server-view-main-panel" style={{
             padding: '24px',
             background: 'var(--panel, rgba(31, 41, 55, 0.6))',
             borderRadius: '12px',
@@ -538,19 +604,36 @@ export default function ServerView() {
                     chatId={ch.chatId}
                     currentUser={{ id: user.id, username: user.username, avatarUrl: user.avatarUrl, status: user.status } as any}
                     serverMemberRoles={serverMemberRoles}
+                    onBack={isMobileViewport ? () => setIsSidebarOpen(true) : undefined}
                   />
                 </div>
               );
             })()}
-          </div>
-        ) : (
-          <div className="empty" style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px'}}>
-            <div style={{fontSize: '64px'}}>📢</div>
-            <div style={{fontSize: '24px', fontWeight: 'bold'}}>Выберите канал</div>
-            <div style={{color: 'var(--subtle, #9ca3af)', fontSize: '16px'}}>
-              Выберите канал из списка слева или создайте новый
             </div>
-          </div>
+          </>
+        ) : (
+          <>
+            {isMobileViewport && (
+              <div className="server-view-mobile-bar">
+                <button
+                  type="button"
+                  className="server-view-mobile-menu-btn"
+                  onClick={() => setIsSidebarOpen(true)}
+                  aria-label="Открыть список каналов"
+                >
+                  <span aria-hidden>☰</span>
+                </button>
+                <span className="server-view-mobile-title">{server.name}</span>
+              </div>
+            )}
+            <div className="empty server-view-main-panel server-view-main-panel--empty" style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px'}}>
+              <div style={{fontSize: '64px'}}>📢</div>
+              <div style={{fontSize: '24px', fontWeight: 'bold'}}>Выберите канал</div>
+              <div style={{color: 'var(--subtle, #9ca3af)', fontSize: '16px'}}>
+                Выберите канал из списка слева или создайте новый
+              </div>
+            </div>
+          </>
         )}
       </div>
 

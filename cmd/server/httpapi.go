@@ -173,10 +173,10 @@ func allowedOrigins() map[string]struct{} {
 func handleRegister(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Username         string `json:"username"`
-			Password         string `json:"password"`
-			Email            string `json:"email"`
-			Phone            string `json:"phone"`
+			Username          string `json:"username"`
+			Password          string `json:"password"`
+			Email             string `json:"email"`
+			Phone             string `json:"phone"`
 			IdentityPublicKey string `json:"identity_public_key"` // base64 Ed25519 32 bytes — wallet-style; опционально
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -237,10 +237,6 @@ func handleRegister(s *store.Store) http.HandlerFunc {
 func handleLogin(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := getClientIP(r)
-		if s.IsIPBlocked(ip) {
-			jsonError(w, "Too many failed attempts. Try again in 15 minutes.", http.StatusTooManyRequests)
-			return
-		}
 		var req struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
@@ -252,7 +248,6 @@ func handleLogin(s *store.Store) http.HandlerFunc {
 		}
 		u := s.GetUserByUsername(strings.TrimSpace(req.Username))
 		if u == nil {
-			s.RecordFailedLogin(ip)
 			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
@@ -261,11 +256,9 @@ func handleLogin(s *store.Store) http.HandlerFunc {
 			return
 		}
 		if err := engine.VerifyPassword(u.PassHash, req.Password); err != nil {
-			s.RecordFailedLogin(ip)
 			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
-		s.ResetFailedLogin(ip)
 		// Session Pinning: привязка сессии к устройству (X-Device-ID). Если не передан — генерируем и вернём в ответе.
 		deviceID := strings.TrimSpace(req.DeviceID)
 		if deviceID == "" {
@@ -383,8 +376,8 @@ func handleVerifySMS(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			TempToken string `json:"tempToken"`
-			Code     string `json:"code"`
-			DeviceID string `json:"deviceId"`
+			Code      string `json:"code"`
+			DeviceID  string `json:"deviceId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonError(w, "Invalid request", http.StatusBadRequest)
@@ -466,8 +459,8 @@ func handleVerifyEmail(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			TempToken string `json:"tempToken"`
-			Code     string `json:"code"`
-			DeviceID string `json:"deviceId"`
+			Code      string `json:"code"`
+			DeviceID  string `json:"deviceId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonError(w, "Invalid request", http.StatusBadRequest)
@@ -513,9 +506,9 @@ func handleVerifyEmail(s *store.Store) http.HandlerFunc {
 func handle2FA(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			TempToken    string `json:"tempToken"`
+			TempToken     string `json:"tempToken"`
 			CloudPassword string `json:"cloudPassword"`
-			DeviceID     string `json:"deviceId"`
+			DeviceID      string `json:"deviceId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			jsonError(w, "Invalid request", http.StatusBadRequest)
@@ -775,8 +768,8 @@ func handleLiveStats(s *store.Store) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"goroutines": st.Goroutines,
 			"memoryMB":   st.MemoryMB,
-			"sessions":  st.Sessions,
-			"at":        st.At.UnixMilli(),
+			"sessions":   st.Sessions,
+			"at":         st.At.UnixMilli(),
 		})
 	}
 }
@@ -942,7 +935,7 @@ func handleProtection(s *store.Store) func(http.ResponseWriter, *http.Request, *
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"protectionPercent": score,
-			"hasPassword": u.PassHash != "", "emailVerified": u.EmailVerified,
+			"hasPassword":       u.PassHash != "", "emailVerified": u.EmailVerified,
 			"hasCloudPassword": u.CloudPasswordHash != "", "hasPhone": u.Phone != "",
 		})
 	}
@@ -955,7 +948,7 @@ func handleTrustScore(s *store.Store) func(http.ResponseWriter, *http.Request, *
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"trustScore":        map[string]interface{}{"identityVerified": identityVerified, "sessionVerified": true},
 			"identityVerified":  identityVerified,
-			"sessionVerified":  true,
+			"sessionVerified":   true,
 			"hasIdentityPubKey": identityVerified,
 		})
 	}
@@ -1020,10 +1013,10 @@ func handleMaintenanceStatus(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"isActive":   maintenanceActive,
-			"message":    maintenanceMessage,
-			"timestamp":  maintenanceTimestamp,
-			"id":         maintenanceID,
+			"isActive":  maintenanceActive,
+			"message":   maintenanceMessage,
+			"timestamp": maintenanceTimestamp,
+			"id":        maintenanceID,
 		})
 	}
 }
@@ -1202,9 +1195,14 @@ func handleAdminBlockUser(s *store.Store) http.HandlerFunc {
 				AdminName:  caller.Username,
 				ActionType: store.AdminActionBan,
 				TargetID:   id,
-				TargetName: func() string { if target != nil { return target.Username }; return "" }(),
-				Reason:     reason,
-				Severity:   store.SeverityModeration,
+				TargetName: func() string {
+					if target != nil {
+						return target.Username
+					}
+					return ""
+				}(),
+				Reason:   reason,
+				Severity: store.SeverityModeration,
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -1243,7 +1241,7 @@ func handleAdminStats(s *store.Store, g *transport.Guard) http.HandlerFunc {
 		// HTTP sessions count: no direct method, approximate from store
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"usersCount":   len(users),
+			"usersCount":      len(users),
 			"blockedIpsCount": len(banned),
 		})
 	}
@@ -1544,8 +1542,8 @@ func newSafetyAI(s *store.Store) *engine.SafetyAI {
 		baseDir, _ = os.Getwd()
 	}
 	return &engine.SafetyAI{
-		APIKey:       key,
-		Store:        s,
+		APIKey:        key,
+		Store:         s,
 		KnowledgeBase: engine.IndexKnowledge(baseDir),
 		SendAlert:     alerts.SendAdminAlert,
 		GetStats: func() (goroutines int, memoryMB float64, users int) {
@@ -1590,7 +1588,7 @@ func handleSafetyAsk(s *store.Store, ai *engine.SafetyAI) func(http.ResponseWrit
 
 const (
 	defaultContextForLev = "Меня создал Lev — я знаю его проекты: SafeGram (E2EE мессенджер, C++/Qt, Go ядро), Minecraft серверы. Расписание и планы хранятся в контексте пользователя. Могу помогать с кодом, расписанием и безопасностью."
-	safetyIntro           = "Я Safety, персональный ИИ-помощник SafeGram. Создан Lev'ом. Режим: %s."
+	safetyIntro          = "Я Safety, персональный ИИ-помощник SafeGram. Создан Lev'ом. Режим: %s."
 )
 
 // buildSafetyReply формирует ответ Safety AI с учётом контекста, расписания и активных предупреждений о входах.
@@ -1742,4 +1740,3 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
-

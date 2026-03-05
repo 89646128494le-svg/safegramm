@@ -185,9 +185,9 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			// Если код email не предоставлен — 200 с флагом, чтобы не было 401 в сети
 			if req.EmailCode == "" {
 				c.JSON(http.StatusOK, gin.H{
-					"error":       "email_verification_required",
-					"message":     "Требуется подтверждение email",
-					"hasEmail":    true,
+					"error":        "email_verification_required",
+					"message":      "Требуется подтверждение email",
+					"hasEmail":     true,
 					"hasCloudCode": user.PinHash != "",
 				})
 				return
@@ -209,8 +209,8 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				cloudCode := strings.TrimSpace(req.CloudCode)
 				if cloudCode == "" {
 					c.JSON(http.StatusOK, gin.H{
-						"error":       "cloud_code_required",
-						"message":     "Требуется облачный код",
+						"error":        "cloud_code_required",
+						"message":      "Требуется облачный код",
 						"hasCloudCode": true,
 					})
 					return
@@ -226,8 +226,8 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				cloudCode := strings.TrimSpace(req.CloudCode)
 				if cloudCode == "" {
 					c.JSON(http.StatusOK, gin.H{
-						"error":       "cloud_code_required",
-						"message":     "Требуется облачный код",
+						"error":        "cloud_code_required",
+						"message":      "Требуется облачный код",
 						"hasCloudCode": true,
 					})
 					return
@@ -239,7 +239,8 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			}
 		}
 
-		// Владелец (RoleOwner): вход только с разрешённого IP; иначе блокируем и алерт.
+		// Владелец (RoleOwner): вход не блокируем по IP.
+		// Если IP новый, только фиксируем/алертим и добавляем в список.
 		roles := user.ParseRoles()
 		isOwner := false
 		for _, r := range roles {
@@ -254,8 +255,6 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				if audit.OnOwnerLoginFromNewIP != nil {
 					audit.OnOwnerLoginFromNewIP(ip, user.Username)
 				}
-				c.JSON(http.StatusForbidden, gin.H{"error": "owner_ip_blocked", "message": "Вход с этого IP для владельца заблокирован."})
-				return
 			}
 			audit.OwnerIPAdd(ip)
 		}
@@ -294,4 +293,3 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		c.JSON(http.StatusOK, resp)
 	}
 }
-
