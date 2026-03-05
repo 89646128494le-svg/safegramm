@@ -68,6 +68,11 @@ export default function AppShell() {
             const data = JSON.parse(msgText);
 
             if (data.type === 'webrtc:offer') {
+              const cur = activeCallRef.current;
+              if (cur && cur.chatId === data.chatId && !cur.isIncoming) {
+                sendWebSocketMessage('webrtc:hangup', { chatId: data.chatId, to: data.from });
+                setActiveCall(null);
+              }
               setIncomingCall({
                 callId: data.chatId || `call-${Date.now()}`,
                 from: data.from,

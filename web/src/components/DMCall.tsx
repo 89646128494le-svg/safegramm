@@ -230,40 +230,33 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     return pc;
   };
 
+  const getMediaStream = useCallback(async (wantVideo: boolean): Promise<{ stream: MediaStream; videoFallback: boolean }> => {
+    const gum = (opts: { audio: boolean; video: boolean }) => {
+      if (navigator.mediaDevices?.getUserMedia) return navigator.mediaDevices.getUserMedia(opts);
+      const legacy = (navigator as any).getUserMedia || (navigator as any).webkitGetUserMedia || (navigator as any).mozGetUserMedia;
+      if (!legacy) return Promise.reject(new Error('getUserMedia не поддерживается. Используйте HTTPS и современный браузер.'));
+      return new Promise<MediaStream>((resolve, reject) => legacy.call(navigator, opts, resolve, reject));
+    };
+    if (!wantVideo) return gum({ audio: true, video: false }).then((s) => ({ stream: s, videoFallback: false }));
+    try {
+      const stream = await gum({ audio: true, video: true });
+      return { stream, videoFallback: false };
+    } catch (e: any) {
+      const name = e?.name || '';
+      if (name === 'NotReadableError' || name === 'OverconstrainedError' || name === 'NotFoundError') {
+        showToast('Камера недоступна или занята. Звонок только по аудио.', 'info');
+        const stream = await gum({ audio: true, video: false });
+        return { stream, videoFallback: true };
+      }
+      throw e;
+    }
+  }, []);
+
   const startCall = async () => {
     try {
       setIsCalling(true);
-      
-      // Получаем медиа поток с поддержкой старых браузеров
-      let stream: MediaStream;
-      
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        // Современный API
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: isVideo,
-        });
-      } else {
-        // Fallback для старых браузеров
-        const getUserMedia = (navigator as any).getUserMedia || 
-                            (navigator as any).webkitGetUserMedia || 
-                            (navigator as any).mozGetUserMedia;
-        
-        if (!getUserMedia) {
-          throw new Error('getUserMedia не поддерживается в этом браузере. Пожалуйста, используйте современный браузер или включите HTTPS.');
-        }
-        
-        // Используем старый API с Promise
-        stream = await new Promise<MediaStream>((resolve, reject) => {
-          getUserMedia.call(navigator, {
-            audio: true,
-            video: isVideo,
-          }, resolve, reject);
-        });
-        
-        showToast('Используется устаревший API. Рекомендуется использовать HTTPS.', 'warning');
-      }
-      
+      const { stream, videoFallback } = await getMediaStream(isVideo);
+      if (videoFallback) setIsVideoEnabled(false);
       setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -300,37 +293,8 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     try {
       setIsRinging(false);
       setIsCalling(true);
-
-      // Получаем медиа поток с поддержкой старых браузеров
-      let stream: MediaStream;
-      
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        // Современный API
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: isVideo,
-        });
-      } else {
-        // Fallback для старых браузеров
-        const getUserMedia = (navigator as any).getUserMedia || 
-                            (navigator as any).webkitGetUserMedia || 
-                            (navigator as any).mozGetUserMedia;
-        
-        if (!getUserMedia) {
-          throw new Error('getUserMedia не поддерживается в этом браузере. Пожалуйста, используйте современный браузер или включите HTTPS.');
-        }
-        
-        // Используем старый API с Promise
-        stream = await new Promise<MediaStream>((resolve, reject) => {
-          getUserMedia.call(navigator, {
-            audio: true,
-            video: isVideo,
-          }, resolve, reject);
-        });
-        
-        showToast('Используется устаревший API. Рекомендуется использовать HTTPS.', 'warning');
-      }
-      
+      const { stream, videoFallback } = await getMediaStream(isVideo);
+      if (videoFallback) setIsVideoEnabled(false);
       setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -362,7 +326,12 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       callStartTimeRef.current = Date.now();
     } catch (e: any) {
       console.error('Failed to accept call:', e);
-      showToast('Ошибка принятия звонка: ' + e.message, 'error');
+      const msg = (e?.message || '').toLowerCase();
+      const name = e?.name || '';
+      const friendly = name === 'NotReadableError' || msg.includes('video source') || msg.includes('could not start')
+        ? 'Камера или микрофон заняты другим приложением. Закройте другие программы, использующие камеру, или попробуйте голосовой звонок.'
+        : (e?.message || 'Ошибка принятия звонка.');
+      showToast(friendly, 'error');
       saveCallHistory('declined');
       handleHangup();
     }
