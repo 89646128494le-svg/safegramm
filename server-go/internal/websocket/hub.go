@@ -14,16 +14,16 @@ type ChatPeerResolver func(chatID string, excludeUserID string) []string
 
 // Hub поддерживает множество активных подключений и рассылает сообщения
 type Hub struct {
-	clients       map[*Client]bool
-	clientsMu     sync.RWMutex
-	register      chan *Client
-	unregister    chan *Client
-	broadcast     chan []byte
-	sendToChat    chan *ChatMessage
-	voiceRooms    map[string]map[string]bool
-	voiceRoomsMu  sync.RWMutex
-	voiceAction   chan *VoiceRoomAction
-	quit          chan struct{}
+	clients          map[*Client]bool
+	clientsMu        sync.RWMutex
+	register         chan *Client
+	unregister       chan *Client
+	broadcast        chan []byte
+	sendToChat       chan *ChatMessage
+	voiceRooms       map[string]map[string]bool
+	voiceRoomsMu     sync.RWMutex
+	voiceAction      chan *VoiceRoomAction
+	quit             chan struct{}
 	chatPeerResolver ChatPeerResolver
 }
 
@@ -44,7 +44,7 @@ func NewHub() *Hub {
 	return &Hub{
 		clients:     make(map[*Client]bool),
 		register:    make(chan *Client),
-		unregister: make(chan *Client),
+		unregister:  make(chan *Client),
 		broadcast:   make(chan []byte, 256),
 		sendToChat:  make(chan *ChatMessage, 256),
 		voiceRooms:  make(map[string]map[string]bool),
@@ -104,10 +104,10 @@ func (h *Hub) Run() {
 			h.clients[client] = true
 			h.clientsMu.Unlock()
 			log.Printf("Client connected: %s", client.userID)
-			
+
 			// Устанавливаем пользователя как онлайн в Redis
 			redis.SetOnline(client.userID, 5*time.Minute)
-			
+
 			// Отправляем событие presence всем клиентам
 			onlineUsers, _ := redis.GetOnlineUsers()
 			presenceJSON, _ := json.Marshal(map[string]interface{}{
@@ -161,7 +161,6 @@ func (h *Hub) Run() {
 								h.clientsMu.RUnlock()
 							}
 						}
-						break
 					}
 				}
 				h.voiceRoomsMu.Unlock()
@@ -176,11 +175,11 @@ func (h *Hub) Run() {
 					}
 				}
 				h.clientsMu.RUnlock()
-				
+
 				// Если нет других подключений, устанавливаем офлайн
 				if !hasOtherConnections {
 					redis.SetOffline(client.userID)
-					
+
 					// Отправляем событие presence
 					onlineUsers, _ := redis.GetOnlineUsers()
 					presenceJSON, _ := json.Marshal(map[string]interface{}{
@@ -196,7 +195,7 @@ func (h *Hub) Run() {
 			}
 
 		case message := <-h.broadcast:
-			h.clientsMu.RLock()
+			h.clientsMu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
@@ -205,10 +204,10 @@ func (h *Hub) Run() {
 					delete(h.clients, client)
 				}
 			}
-			h.clientsMu.RUnlock()
+			h.clientsMu.Unlock()
 
 		case chatMsg := <-h.sendToChat:
-			h.clientsMu.RLock()
+			h.clientsMu.Lock()
 			for client := range h.clients {
 				if client.isSubscribedToChat(chatMsg.ChatID) {
 					select {
@@ -219,7 +218,7 @@ func (h *Hub) Run() {
 					}
 				}
 			}
-			h.clientsMu.RUnlock()
+			h.clientsMu.Unlock()
 
 		case act := <-h.voiceAction:
 			h.voiceRoomsMu.Lock()
@@ -235,10 +234,14 @@ func (h *Hub) Run() {
 				}
 				participantsJSON, _ := json.Marshal(map[string]interface{}{
 					"type":    "voice:participants",
-					"chatId": act.ChatID,
+					"chatId":  act.ChatID,
 					"members": members,
 				})
-				act.Client.send <- participantsJSON
+				select {
+				case act.Client.send <- participantsJSON:
+				default:
+					// Не блокируем hub при перегруженном клиенте.
+				}
 				for uid := range h.voiceRooms[act.ChatID] {
 					if uid == act.UserID {
 						continue
@@ -316,14 +319,25 @@ func (h *Hub) BroadcastToChat(chatID string, message []byte) {
 
 // SendToUser отправляет сообщение конкретному пользователю
 func (h *Hub) SendToUser(userID string, message []byte) {
+	h.clientsMu.RLock()
+	slowClients := make([]*Client, 0, 1)
 	for client := range h.clients {
-		if client.userID == userID {
-			select {
-			case client.send <- message:
-			default:
-				close(client.send)
-				delete(h.clients, client)
-			}
+		if client.userID != userID {
+			continue
+		}
+		select {
+		case client.send <- message:
+		default:
+			slowClients = append(slowClients, client)
+		}
+	}
+	h.clientsMu.RUnlock()
+
+	for _, client := range slowClients {
+		// Медленный клиент: принудительно закрываем через unregister-path.
+		select {
+		case h.unregister <- client:
+		default:
 		}
 	}
 }

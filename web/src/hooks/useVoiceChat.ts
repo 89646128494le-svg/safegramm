@@ -25,12 +25,16 @@ export function useVoiceChat({
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const remoteAudioStreamsRef = useRef<Map<string, MediaStream>>(new Map());
   const iceServersRef = useRef<RTCConfiguration['iceServers']>(ICE_SERVERS_FALLBACK);
   const speakingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const analyserRef = useRef<{ analyser: AnalyserNode; ctx: AudioContext } | null>(null);
+  const isDeafenedRef = useRef(false);
 
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
+  isDeafenedRef.current = isDeafened;
 
   const addOrUpdateParticipant = useCallback((userId: string, patch: Partial<VoiceParticipantInfo>) => {
     setParticipants((prev) => {
@@ -46,6 +50,47 @@ export function useVoiceChat({
 
   const removeParticipant = useCallback((userId: string) => {
     setParticipants((prev) => prev.filter((p) => p.userId !== userId));
+  }, []);
+
+  const cleanupRemoteAudio = useCallback((userId: string) => {
+    const audio = remoteAudioElementsRef.current.get(userId);
+    if (audio) {
+      try {
+        audio.pause();
+      } catch (_) {}
+      audio.srcObject = null;
+      remoteAudioElementsRef.current.delete(userId);
+    }
+    remoteAudioStreamsRef.current.delete(userId);
+  }, []);
+
+  const cleanupAllRemoteAudio = useCallback(() => {
+    remoteAudioElementsRef.current.forEach((audio) => {
+      try {
+        audio.pause();
+      } catch (_) {}
+      audio.srcObject = null;
+    });
+    remoteAudioElementsRef.current.clear();
+    remoteAudioStreamsRef.current.clear();
+  }, []);
+
+  const attachRemoteAudio = useCallback((userId: string, remoteStream: MediaStream) => {
+    if (!remoteStream.getAudioTracks().length) return;
+    remoteAudioStreamsRef.current.set(userId, remoteStream);
+    let audio = remoteAudioElementsRef.current.get(userId);
+    if (!audio) {
+      audio = new Audio();
+      audio.autoplay = true;
+      audio.playsInline = true;
+      remoteAudioElementsRef.current.set(userId, audio);
+    }
+    audio.muted = isDeafenedRef.current;
+    audio.srcObject = remoteStream;
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {});
+    }
   }, []);
 
   const closeAllPeers = useCallback(() => {
@@ -80,6 +125,7 @@ export function useVoiceChat({
               });
             };
           } else {
+            attachRemoteAudio(userId, remoteStream);
             addOrUpdateParticipant(userId, {});
           }
         };
@@ -87,6 +133,7 @@ export function useVoiceChat({
         pc.onconnectionstatechange = () => {
           if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
             removeParticipant(userId);
+            cleanupRemoteAudio(userId);
             peersRef.current.delete(userId);
             setRemoteScreenStreams((prev) => {
               const next = { ...prev };
@@ -120,7 +167,7 @@ export function useVoiceChat({
         console.error('createPeerConnection', err);
       }
     },
-    [currentUserId, addOrUpdateParticipant, removeParticipant]
+    [currentUserId, addOrUpdateParticipant, removeParticipant, attachRemoteAudio, cleanupRemoteAudio]
   );
 
   const handleSignal = useCallback(
@@ -198,12 +245,13 @@ export function useVoiceChat({
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     screenStreamRef.current = null;
     closeAllPeers();
+    cleanupAllRemoteAudio();
     setParticipants([]);
     setRemoteScreenStreams({});
     setIsConnected(false);
     setIsMuted(false);
     setIsDeafened(false);
-  }, [closeAllPeers]);
+  }, [closeAllPeers, cleanupAllRemoteAudio]);
 
   const setScreenStream = useCallback(async (stream: MediaStream | null) => {
     screenStreamRef.current = stream;
@@ -248,6 +296,9 @@ export function useVoiceChat({
 
   const setDeafened = useCallback((deafened: boolean) => {
     setIsDeafened(deafened);
+    remoteAudioElementsRef.current.forEach((audio) => {
+      audio.muted = deafened;
+    });
   }, []);
 
   useEffect(() => {
@@ -267,6 +318,10 @@ export function useVoiceChat({
 
         if (type === 'voice:participants' && Array.isArray(data.members)) {
           const members = data.members as string[];
+          const memberSet = new Set(members);
+          Array.from(remoteAudioStreamsRef.current.keys()).forEach((userId) => {
+            if (!memberSet.has(userId)) cleanupRemoteAudio(userId);
+          });
           setParticipants((prev) => {
             const byId = new Map(prev.map((p) => [p.userId, p]));
             members.forEach((id) => {
@@ -288,6 +343,12 @@ export function useVoiceChat({
           if (userId) {
             peersRef.current.get(userId)?.close();
             peersRef.current.delete(userId);
+            cleanupRemoteAudio(userId);
+            setRemoteScreenStreams((prev) => {
+              const next = { ...prev };
+              delete next[userId];
+              return next;
+            });
             removeParticipant(userId);
           }
         } else if (type === 'voice:signal' && data.from && data.data) {
@@ -303,7 +364,7 @@ export function useVoiceChat({
 
     socket.addEventListener('message', onMessage);
     return () => socket.removeEventListener('message', onMessage);
-  }, [chatId, currentUserId, addOrUpdateParticipant, removeParticipant, createPeerConnection, handleSignal]);
+  }, [chatId, currentUserId, addOrUpdateParticipant, removeParticipant, createPeerConnection, handleSignal, cleanupRemoteAudio]);
 
   useEffect(() => {
     if (!isConnected || !localStreamRef.current) return;
