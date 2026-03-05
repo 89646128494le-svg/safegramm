@@ -39,6 +39,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
   const iceServersRef = useRef<RTCConfiguration['iceServers']>([]);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -237,12 +238,26 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       if (!legacy) return Promise.reject(new Error('getUserMedia не поддерживается. Используйте HTTPS и современный браузер.'));
       return new Promise<MediaStream>((resolve, reject) => legacy.call(navigator, opts, resolve, reject));
     };
-    if (!wantVideo) return gum({ audio: true, video: false }).then((s) => ({ stream: s, videoFallback: false }));
+    if (!wantVideo) {
+      try {
+        const s = await gum({ audio: true, video: false });
+        return { stream: s, videoFallback: false };
+      } catch (e: any) {
+        if (e?.name === 'NotAllowedError') {
+          showToast('Доступ к микрофону отклонён. Разрешите в настройках браузера и обновите страницу.', 'error');
+        }
+        throw e;
+      }
+    }
     try {
       const stream = await gum({ audio: true, video: true });
       return { stream, videoFallback: false };
     } catch (e: any) {
       const name = e?.name || '';
+      if (name === 'NotAllowedError') {
+        showToast('Доступ к микрофону/камере отклонён. Разрешите в настройках браузера и обновите страницу.', 'error');
+        throw e;
+      }
       if (name === 'NotReadableError' || name === 'OverconstrainedError' || name === 'NotFoundError') {
         showToast('Камера недоступна или занята. Звонок только по аудио.', 'info');
         const stream = await gum({ audio: true, video: false });
@@ -254,6 +269,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
 
   const startCall = async () => {
     try {
+      pendingIceCandidatesRef.current = [];
       setIsCalling(true);
       const { stream, videoFallback } = await getMediaStream(isVideo);
       if (videoFallback) setIsVideoEnabled(false);
@@ -289,8 +305,23 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
     }
   };
 
+  const flushPendingIceCandidates = useCallback(async () => {
+    const pc = peerConnectionRef.current;
+    const pending = pendingIceCandidatesRef.current;
+    if (!pc || pending.length === 0) return;
+    pendingIceCandidatesRef.current = [];
+    for (const c of pending) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(c));
+      } catch (e) {
+        console.warn('Failed to add queued ICE candidate:', e);
+      }
+    }
+  }, []);
+
   const handleAcceptCall = async (offerData: any) => {
     try {
+      pendingIceCandidatesRef.current = [];
       setIsRinging(false);
       setIsCalling(true);
       const { stream, videoFallback } = await getMediaStream(isVideo);
@@ -311,6 +342,7 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         type: sdpType,
         sdp: typeof offerSDP === 'string' ? offerSDP : (offerSDP?.sdp ?? ''),
       }));
+      await flushPendingIceCandidates();
 
       // Создаем answer
       const answer = await pc.createAnswer();
@@ -328,7 +360,9 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       console.error('Failed to accept call:', e);
       const msg = (e?.message || '').toLowerCase();
       const name = e?.name || '';
-      const friendly = name === 'NotReadableError' || msg.includes('video source') || msg.includes('could not start')
+      const friendly = name === 'NotAllowedError'
+        ? 'Доступ к микрофону/камере отклонён. Разрешите в настройках браузера и обновите страницу.'
+        : name === 'NotReadableError' || msg.includes('video source') || msg.includes('could not start')
         ? 'Камера или микрофон заняты другим приложением. Закройте другие программы, использующие камеру, или попробуйте голосовой звонок.'
         : (e?.message || 'Ошибка принятия звонка.');
       showToast(friendly, 'error');
@@ -347,19 +381,29 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         sdp: typeof answerSDP === 'string' ? answerSDP : answerSDP.sdp,
       }));
       setIsRinging(false);
+      await flushPendingIceCandidates();
     } catch (e) {
       console.error('Failed to handle answer:', e);
     }
   };
 
   const handleICE = async (iceData: any) => {
-    if (!peerConnectionRef.current) return;
+    const pc = peerConnectionRef.current;
+    if (!pc) return;
 
+    const candidate = iceData.candidate || iceData.data?.candidate || iceData;
+    const init: RTCIceCandidateInit = typeof candidate === 'object' && candidate !== null && 'candidate' in candidate
+      ? candidate
+      : { candidate: candidate as string };
+
+    if (!pc.remoteDescription) {
+      pendingIceCandidatesRef.current.push(init);
+      return;
+    }
     try {
-      const candidate = iceData.candidate || iceData.data?.candidate || iceData;
-      await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      await pc.addIceCandidate(new RTCIceCandidate(init));
     } catch (e) {
-      console.error('Failed to handle ICE candidate:', e);
+      console.warn('Failed to handle ICE candidate:', e);
     }
   };
 
@@ -405,7 +449,8 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       screenStreamRef.current = null;
     }
 
-    // Закрываем peer connection
+    // Закрываем peer connection и очищаем очередь ICE
+    pendingIceCandidatesRef.current = [];
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;

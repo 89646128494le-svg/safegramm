@@ -42,6 +42,7 @@ func (c *Client) HandleWebRTCMessage(msg map[string]interface{}) {
 		sent := false
 		if toUserID != "" {
 			c.hub.SendToUser(toUserID, payload)
+			log.Printf("[webrtc] offer from %s to user %s (chatId=%s)", c.userID, toUserID, chatID)
 			sent = true
 		}
 		if !sent && chatID != "" {

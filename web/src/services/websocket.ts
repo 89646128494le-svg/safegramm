@@ -15,11 +15,13 @@ const messageSubscribers = new Set<MessageHandler>();
 function attachMessageForwarder(socket: WebSocket) {
   socket.onmessage = (event: MessageEvent) => {
     messageSubscribers.forEach((fn) => {
-      try {
-        fn(event);
-      } catch (e) {
-        console.warn('WebSocket message subscriber error:', e);
-      }
+      queueMicrotask(() => {
+        try {
+          fn(event);
+        } catch (e) {
+          console.warn('WebSocket message subscriber error:', e);
+        }
+      });
     });
   };
 }
