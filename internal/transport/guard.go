@@ -93,8 +93,8 @@ func (g *Guard) ReadPowSolution(conn net.Conn, challenge []byte, ip string) (boo
 	return true, nil
 }
 
-
-// RecordPacketViolation увеличивает счётчик нарушений пакета для ip; при 3+ — бан на 10 мин.
+// RecordPacketViolation отключён: авто-блокировка IP запрещена.
+// Блокировка IP выполняется только вручную из админки.
 func (g *Guard) RecordPacketViolation(ip string) {
 	g.Blacklist.RecordPacketViolation(ip)
 }
@@ -106,4 +106,3 @@ func IsPacketStructureError(err error) bool {
 	}
 	return errors.Is(err, ErrPacketTooShort) || errors.Is(err, ErrChecksum)
 }
-

@@ -31,15 +31,10 @@ func NewBlacklist() *Blacklist {
 	return b
 }
 
-// RecordPacketViolation увеличивает счётчик нарушений для ip. После 3 раз добавляет в бан.
+// RecordPacketViolation отключён: авто-блокировка IP запрещена.
+// Блокировать IP можно только вручную через админку (BanIP).
 func (b *Blacklist) RecordPacketViolation(ip string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.violations[ip]++
-	if b.violations[ip] >= PacketViolationsBeforeBan {
-		b.banned[ip] = ban{until: time.Now().Add(BlacklistDuration)}
-		delete(b.violations, ip)
-	}
+	_ = ip
 }
 
 // BanIP вручную добавляет IP в бан на BlacklistDuration (для админ-панели).

@@ -29,23 +29,23 @@ const SystemOwnerUsername = "lev"
 
 // Действия для проверки прав (HasPermission).
 const (
-	ActionRestartServer   = "restart_server"
-	ActionEditDB          = "edit_db"
-	ActionManageServices  = "manage_services"
-	ActionManageUsers     = "manage_users"
-	ActionBlockUser       = "block_user"
-	ActionSetUserPlan     = "set_user_plan"
-	ActionSetUserRole     = "set_user_role"
-	ActionDeleteUser      = "delete_user"
-	ActionViewLogs        = "view_logs"
-	ActionViewTraffic     = "view_traffic"
-	ActionBanIP           = "ban_ip"
-	ActionViewSessions    = "view_sessions"
-	ActionModerateChats   = "moderate_chats"
-	ActionViewReports     = "view_reports"
-	ActionViewTickets     = "view_tickets"
-	ActionReplyTickets    = "reply_tickets"
-	ActionMaintenance     = "maintenance" // вкл/выкл техработы
+	ActionRestartServer  = "restart_server"
+	ActionEditDB         = "edit_db"
+	ActionManageServices = "manage_services"
+	ActionManageUsers    = "manage_users"
+	ActionBlockUser      = "block_user"
+	ActionSetUserPlan    = "set_user_plan"
+	ActionSetUserRole    = "set_user_role"
+	ActionDeleteUser     = "delete_user"
+	ActionViewLogs       = "view_logs"
+	ActionViewTraffic    = "view_traffic"
+	ActionBanIP          = "ban_ip"
+	ActionViewSessions   = "view_sessions"
+	ActionModerateChats  = "moderate_chats"
+	ActionViewReports    = "view_reports"
+	ActionViewTickets    = "view_tickets"
+	ActionReplyTickets   = "reply_tickets"
+	ActionMaintenance    = "maintenance" // вкл/выкл техработы
 )
 
 // level возвращает числовой уровень роли (больше = выше).
@@ -131,23 +131,23 @@ func HasPermission(roles string, ownerID, ownerUsername string, action string) b
 // ——— Невозможный лог админки (Append-only). Даже админ не может удалить запись. ———
 
 const (
-	AdminActionBan           = "Ban"
-	AdminActionMute          = "Mute"
-	AdminActionConfigChange  = "ConfigChange"
-	AdminActionServerRestart = "ServerRestart"
-	AdminActionRoleChange    = "RoleChange"
-	AdminActionChannelDelete = "ChannelDelete"
+	AdminActionBan              = "Ban"
+	AdminActionMute             = "Mute"
+	AdminActionConfigChange     = "ConfigChange"
+	AdminActionServerRestart    = "ServerRestart"
+	AdminActionRoleChange       = "RoleChange"
+	AdminActionChannelDelete    = "ChannelDelete"
 	AdminActionFailedAdminLogin = "FailedAdminLogin"
-	AdminActionAntiDDoS      = "AntiDDoS"
-	AdminActionRegistration  = "Registration"
-	AdminActionHandshake     = "Handshake"
+	AdminActionAntiDDoS         = "AntiDDoS"
+	AdminActionRegistration     = "Registration"
+	AdminActionHandshake        = "Handshake"
 )
 
 // Severity для цветовой индикации в Intelligence Center.
 const (
-	SeverityCritical = "critical" // красный
+	SeverityCritical   = "critical"   // красный
 	SeverityModeration = "moderation" // оранжевый
-	SeverityInfo      = "info"    // синий
+	SeverityInfo       = "info"       // синий
 )
 
 // AdminLog — одна запись лога. Неизменяемая после записи.
@@ -172,11 +172,11 @@ type User struct {
 	Email             string
 	Phone             string
 	PassHash          string
-	CloudPasswordHash string   // 2FA: bcrypt/argon2
-	IdentityPublicKey []byte   // Ed25519 public 32 bytes — для верификации подписей (wallet-style)
+	CloudPasswordHash string // 2FA: bcrypt/argon2
+	IdentityPublicKey []byte // Ed25519 public 32 bytes — для верификации подписей (wallet-style)
 	Salt              string
-	Roles             string   // JSON или "role1,role2" для совместимости
-	Role              string   // одна роль: owner|admin|guardian|moderator|support|user (enforcement)
+	Roles             string // JSON или "role1,role2" для совместимости
+	Role              string // одна роль: owner|admin|guardian|moderator|support|user (enforcement)
 	Plan              string
 	AvatarURL         string
 	About             string
@@ -213,22 +213,22 @@ type LoginEvent struct {
 
 // SessionState — состояние сессии после ECDH handshake. Self-destruct: TTL и привязка к устройству.
 type SessionState struct {
-	SessionID   uint64
-	Key         []byte
-	UserID      string
-	ConnAddr    string
-	DeviceID    string
-	ExpiresAt   time.Time
+	SessionID    uint64
+	Key          []byte
+	UserID       string
+	ConnAddr     string
+	DeviceID     string
+	ExpiresAt    time.Time
 	LastActivity time.Time
-	CreatedAt   time.Time
+	CreatedAt    time.Time
 }
 
 // Room — группа или канал. Сообщения шифруются общим ключом комнаты (RoomKey).
 type Room struct {
 	ID        string
 	Name      string
-	Type      string   // "group" | "channel"
-	RoomKey   []byte   // общий ключ для E2EE в комнате
+	Type      string // "group" | "channel"
+	RoomKey   []byte // общий ключ для E2EE в комнате
 	MemberIDs []string
 	OwnerID   string
 	CreatedAt time.Time
@@ -236,19 +236,19 @@ type Room struct {
 
 // tempAuth — временный токен многоэтапного входа (SMS → email → 2FA).
 type tempAuth struct {
-	UserID   string
+	UserID    string
 	ExpiresAt time.Time
 }
 
 // smsCode — код SMS с истечением.
 type smsCode struct {
-	Code     string
+	Code      string
 	ExpiresAt time.Time
 }
 
 // emailCode — код email с истечением.
 type emailCode struct {
-	Code     string
+	Code      string
 	ExpiresAt time.Time
 }
 
@@ -267,9 +267,9 @@ type Store struct {
 	Rooms          map[string]*Room
 	UserContext    map[string]string
 	TempAuth       map[string]*tempAuth
-	SMSCodes       map[string]*smsCode   // key: userID
-	EmailCodes     map[string]*emailCode // key: userID
-	FailedAttempts map[string]*failRecord // key: IP
+	SMSCodes       map[string]*smsCode     // key: userID
+	EmailCodes     map[string]*emailCode   // key: userID
+	FailedAttempts map[string]*failRecord  // key: IP
 	LoginEvents    map[string][]LoginEvent // key: userID, последние N
 	nextID         uint64
 	nextUserID     uint64
@@ -628,34 +628,19 @@ func (s *Store) VerifyEmailCode(userID, code string) bool {
 // ——— Антибрутфорс ———
 
 func (s *Store) RecordFailedLogin(ip string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.FailedAttempts[ip] == nil {
-		s.FailedAttempts[ip] = &failRecord{}
-	}
-	s.FailedAttempts[ip].Count++
-	if s.FailedAttempts[ip].Count >= 5 {
-		s.FailedAttempts[ip].Until = time.Now().Add(15 * time.Minute)
-	}
+	// Авто-блокировка IP отключена: блокировать IP можно только вручную из админки.
+	_ = ip
 }
 
 func (s *Store) IsIPBlocked(ip string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	f := s.FailedAttempts[ip]
-	if f == nil {
-		return false
-	}
-	if f.Count < 5 {
-		return false
-	}
-	return time.Now().Before(f.Until)
+	// Авто-блокировка IP отключена: блокировать IP можно только вручную из админки.
+	_ = ip
+	return false
 }
 
 func (s *Store) ResetFailedLogin(ip string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.FailedAttempts, ip)
+	// Авто-блокировка IP отключена: метод оставлен для обратной совместимости.
+	_ = ip
 }
 
 // ——— События входа (Safety AI уведомления) ———
