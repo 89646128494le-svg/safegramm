@@ -42,6 +42,8 @@ export default function AppShell() {
   const [activeCall, setActiveCall] = useState<any>(null);
   const activeCallRef = React.useRef<any>(null);
   activeCallRef.current = activeCall;
+  const userRef = React.useRef<any>(null);
+  userRef.current = user;
   const nav = useNavigate();
   const { toasts, removeToast } = useToast();
 
@@ -65,7 +67,8 @@ export default function AppShell() {
           try {
             const data = JSON.parse(msgText);
 
-            if (data.type === 'webrtc:offer' && data.from && (!user || data.from !== user.id)) {
+            // Показываем входящий звонок при любом оффере (user может ещё не загрузиться — не ждём)
+            if (data.type === 'webrtc:offer') {
               setIncomingCall({
                 callId: data.chatId || `call-${Date.now()}`,
                 from: data.from,
@@ -93,7 +96,7 @@ export default function AppShell() {
 
     socket.addEventListener('message', handleMessage);
     return () => socket.removeEventListener('message', handleMessage);
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', ui.theme);
@@ -186,12 +189,13 @@ export default function AppShell() {
   };
 
   const handleAcceptCall = (call: any) => {
+    const u = userRef.current || user;
     setActiveCall({
       chatId: call.chatId,
       otherUserId: call.from,
-      currentUserId: user?.id,
-      currentUserName: user?.username,
-      currentUserAvatar: (user as any)?.avatarUrl || (user as any)?.avatar,
+      currentUserId: u?.id,
+      currentUserName: u?.username,
+      currentUserAvatar: (u as any)?.avatarUrl || (u as any)?.avatar,
       isVideo: call.isVideo,
       isIncoming: true,
       offerData: call.offer,

@@ -61,6 +61,19 @@ export function getSocket(): WebSocket | null {
       }
     };
 
+    if (typeof document !== 'undefined') {
+      const onVisible = () => {
+        if (document.visibilityState === 'visible' && (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING)) {
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+          reconnectAttempts = 0;
+          getSocket();
+        }
+      };
+      document.addEventListener('visibilitychange', onVisible);
+      ws.addEventListener('close', () => document.removeEventListener('visibilitychange', onVisible), { once: true });
+    }
+
     return ws;
   } catch (error) {
     console.error('Failed to create WebSocket:', error);
