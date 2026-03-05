@@ -1,7 +1,8 @@
 /**
- * Shim: only named exports to avoid zustand's "Default export is deprecated" warning.
- * Use: import { create } from 'zustand'
+ * Единая точка входа для zustand: только named exports, default = create (для совместимости).
+ * Так не подключается оригинальный пакет с deprecated default.
  */
 import { create, useStore } from 'zustand-original';
 
 export { create, useStore };
+export default create;
