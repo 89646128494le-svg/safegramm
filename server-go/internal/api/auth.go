@@ -239,27 +239,6 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			}
 		}
 
-		// Владелец (RoleOwner): вход только с разрешённого IP; иначе блокируем и алерт.
-		roles := user.ParseRoles()
-		isOwner := false
-		for _, r := range roles {
-			if r == "owner" {
-				isOwner = true
-				break
-			}
-		}
-		if isOwner {
-			ip := c.ClientIP()
-			if !audit.OwnerIPAllowed(ip) {
-				if audit.OnOwnerLoginFromNewIP != nil {
-					audit.OnOwnerLoginFromNewIP(ip, user.Username)
-				}
-				c.JSON(http.StatusForbidden, gin.H{"error": "owner_ip_blocked", "message": "Вход с этого IP для владельца заблокирован."})
-				return
-			}
-			audit.OwnerIPAdd(ip)
-		}
-
 		// Генерация JWT токена
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 			"sub":      user.ID,
@@ -279,6 +258,7 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
+		roles := user.ParseRoles()
 		resp := gin.H{
 			"token": tokenString,
 			"user": gin.H{
