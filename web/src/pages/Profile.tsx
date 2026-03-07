@@ -12,7 +12,6 @@ const STATUSES = [
   { value: 'away', label: 'Отошёл', color: '#f59e0b' },
   { value: 'busy', label: 'Занят', color: '#ef4444' },
   { value: 'invisible', label: 'Невидимый', color: '#6b7280' },
-  { value: 'offline', label: 'Офлайн', color: '#6b7280' },
 ];
 
 const PROFILE_COLORS = ['#7c6cff', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#84cc16'];

@@ -12,6 +12,7 @@ import TodoIntegration from '../components/TodoIntegration';
 import LanguageSelector from '../components/LanguageSelector';
 import { useTranslation } from '../i18n';
 import { useStore } from '../store/useStore';
+import SafetyAssistant from '../components/SafetyAssistant';
 import '../styles/settings.css';
 
 interface NotificationSettings {
@@ -62,7 +63,7 @@ interface SecuritySettings {
 }
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'appearance' | 'connection' | 'tools'>('notifications');
+  const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'appearance' | 'safety' | 'tools'>('notifications');
   const { ui, setProxyUrl } = useStore();
   const [proxyInput, setProxyInput] = useState('');
   const [showBackupManager, setShowBackupManager] = useState(false);
@@ -128,9 +129,12 @@ export default function Settings() {
     loadUser();
   }, []);
 
+  // Поддержка старых настроек прокси: если когда‑то было сохранено — просто читаем и применяем, но отдельную вкладку больше не показываем.
   useEffect(() => {
-    if (activeTab === 'connection') setProxyInput(ui.proxyUrl || '');
-  }, [activeTab, ui.proxyUrl]);
+    if (ui.proxyUrl) {
+      setProxyInput(ui.proxyUrl);
+    }
+  }, [ui.proxyUrl]);
 
   const loadUser = async () => {
     try {
@@ -428,10 +432,10 @@ export default function Settings() {
           🖼️ Внешний вид
         </button>
         <button
-          className={`settings-tab ${activeTab === 'connection' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('connection'); setProxyInput(ui.proxyUrl || ''); }}
+          className={`settings-tab ${activeTab === 'safety' ? 'active' : ''}`}
+          onClick={() => setActiveTab('safety')}
         >
-          🌐 Подключение
+          🧠 Safety&nbsp;AI
         </button>
         <button
           className={`settings-tab ${activeTab === 'tools' ? 'active' : ''}`}
@@ -1113,37 +1117,14 @@ export default function Settings() {
           </div>
         )}
 
-        {activeTab === 'connection' && (
+        {activeTab === 'safety' && (
           <div className="settings-section">
-            <h2>Подключение (как в Telegram)</h2>
+            <h2>Safety AI</h2>
             <p className="settings-description">
-              Прокси для API и WebSocket. Укажите полный URL сервера, через который идут запросы (например https://proxy.example.com). Оставьте пустым для прямого подключения.
+              Интеллектуальный ассистент для аудита безопасности, идей и подсказок прямо внутри SafeGram.
             </p>
-            <div className="settings-group">
-              <h3>Прокси / базовый URL</h3>
-              <div className="settings-item">
-                <div className="settings-item-label">
-                  <span>URL прокси или API</span>
-                  <span className="settings-item-description">
-                    Все запросы и WebSocket будут идти через этот адрес. После изменения перезагрузите страницу.
-                  </span>
-                </div>
-                <input
-                  type="url"
-                  value={proxyInput}
-                  onChange={e => setProxyInput(e.target.value)}
-                  onBlur={() => setProxyUrl(proxyInput.trim())}
-                  placeholder="https://api.example.com или оставьте пустым"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', marginTop: 8 }}
-                />
-                <button
-                  onClick={() => { setProxyUrl(proxyInput.trim()); setSaveStatus('success'); setTimeout(() => setSaveStatus(null), 2000); }}
-                  className="settings-save-button"
-                  style={{ marginTop: 12 }}
-                >
-                  Сохранить
-                </button>
-              </div>
+            <div style={{ marginTop: 16 }}>
+              <SafetyAssistant onClose={() => setActiveTab('notifications')} />
             </div>
           </div>
         )}

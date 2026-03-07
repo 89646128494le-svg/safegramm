@@ -3,6 +3,7 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { getSocket, sendWebSocketMessage } from '../services/websocket';
+import { api } from '../services/api';
 
 interface VoiceChannelPanelProps {
   chatId: string;
@@ -19,12 +20,47 @@ export default function VoiceChannelPanel({
 }: VoiceChannelPanelProps) {
   const [joined, setJoined] = useState(autoJoin);
   const [participantIds, setParticipantIds] = useState<string[]>([]);
+  const userCacheRef = useRef<Record<string, { username?: string; avatarUrl?: string }>>({});
+  const [, bump] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const joinedRef = useRef(false);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   joinedRef.current = joined;
+
+  useEffect(() => {
+    if (!participantIds.length) return;
+    const missing = participantIds.filter((id) => id !== currentUserId && !userCacheRef.current[id]);
+    if (!missing.length) return;
+    // mark as requested to avoid duplicate fetches
+    for (const id of missing) userCacheRef.current[id] = { username: undefined, avatarUrl: undefined };
+    let cancelled = false;
+    Promise.all(
+      missing.slice(0, 50).map(async (id) => {
+        try {
+          const data = await api(`/api/users/${id}`);
+          const u = (data as any)?.user ?? data;
+          return { id, username: u?.username as string | undefined, avatarUrl: (u?.avatarUrl || u?.avatar) as string | undefined };
+        } catch {
+          return { id, username: undefined, avatarUrl: undefined };
+        }
+      })
+    ).then((rows) => {
+      if (cancelled) return;
+      let changed = false;
+      for (const r of rows) {
+        const prev = userCacheRef.current[r.id] || {};
+        const next = { username: r.username || prev.username, avatarUrl: r.avatarUrl || prev.avatarUrl };
+        userCacheRef.current[r.id] = next;
+        if (prev.username !== next.username || prev.avatarUrl !== next.avatarUrl) changed = true;
+      }
+      if (changed) bump((x) => x + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, participantIds.join('|')]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -152,12 +188,19 @@ export default function VoiceChannelPanel({
                   <li style={{ padding: 12, color: 'var(--subtle)', fontStyle: 'italic', fontSize: 13 }}>Нет участников в канале</li>
                 ) : (
                   participantIds.map((id) => (
+                    (() => {
+                      const cached = userCacheRef.current[id];
+                      const name = id === currentUserId ? 'Вы' : (cached?.username || 'Пользователь');
+                      const initial = name?.[0]?.toUpperCase?.() || '?';
+                      return (
                     <li key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', marginBottom: 4 }}>
                       <span style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
-                        {id === currentUserId ? 'Вы' : id.slice(0, 2).toUpperCase()}
+                        {id === currentUserId ? 'Вы' : initial}
                       </span>
-                      <span style={{ fontSize: 14 }}>{id === currentUserId ? 'Вы' : id}</span>
+                      <span style={{ fontSize: 14 }}>{name}</span>
                     </li>
+                      );
+                    })()
                   ))
                 )}
               </ul>

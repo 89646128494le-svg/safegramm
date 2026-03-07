@@ -32,9 +32,23 @@ export default function Chats() {
     return () => { s.off('message', handler); };
   }, [chatId]);
 
+  const resolveUserId = async (input: string): Promise<string> => {
+    const q = (input || '').trim();
+    if (!q) throw new Error('empty');
+    const looksLikeUUID = q.length >= 32 && q.includes('-');
+    if (looksLikeUUID) return q;
+    const rsp = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    const users = (rsp as any)?.users || [];
+    const exact = users.find((u: any) => String(u.username || '').toLowerCase() === q.toLowerCase());
+    if (exact?.id) return exact.id;
+    if (users[0]?.id) return users[0].id;
+    throw new Error('not_found');
+  };
+
   const createDM = async () => {
-    const memberId = prompt('Введи ID собеседника:');
-    if (!memberId) return;
+    const target = prompt('Введи ник собеседника (или ID):');
+    if (!target) return;
+    const memberId = await resolveUserId(target);
     const r = await api('/api/chats', 'POST', { type: 'dm', memberId });
     setChats(prev => {
       const has = prev.find(c => c.id === r.id);
@@ -81,7 +95,6 @@ export default function Chats() {
         {chats.map(c => (
           <div className="list-item" key={c.id} onClick={()=>setChatId(c.id)}>
             <div>{c.type.toUpperCase()} — {c.title || '(без названия)'}</div>
-            <div className="small">id: {c.id}</div>
             {c.type==='channel' && c.requiresReview && !c.approved && <div className="small">⏳ На модерации</div>}
           </div>
         ))}

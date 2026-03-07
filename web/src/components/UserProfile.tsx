@@ -24,7 +24,7 @@ export default function UserProfile({ userId, currentUserId, onClose }: UserProf
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editBio, setEditBio] = useState('');
-  const [editStatus, setEditStatus] = useState<'online' | 'offline' | 'away' | 'busy' | 'invisible'>('online');
+  const [editStatus, setEditStatus] = useState<'online' | 'away' | 'busy' | 'invisible'>('online');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isOwnProfile = userId === currentUserId;
@@ -40,7 +40,8 @@ export default function UserProfile({ userId, currentUserId, onClose }: UserProf
       setUser(data.user);
       if (data.user && isOwnProfile) {
         setEditBio(data.user.bio || '');
-        setEditStatus(data.user.status || 'online');
+        const s = (data.user.status || 'online') as any;
+        setEditStatus(s === 'offline' ? 'invisible' : s);
       }
     } catch (e) {
       console.error('Failed to load user:', e);

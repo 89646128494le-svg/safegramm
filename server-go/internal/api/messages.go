@@ -101,6 +101,18 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			return
 		}
 
+		// Проверяем, не забанен ли пользователь глобально (статус banned)
+		var user models.User
+		if err := db.Select("status").First(&user, "id = ?", userIDStr).Error; err == nil {
+			if strings.EqualFold(strings.TrimSpace(user.Status), "banned") {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":   "user_banned",
+					"message": "Ваш аккаунт заблокирован администрацией.",
+				})
+				return
+			}
+		}
+
 		// Проверяем доступ к чату (в т.ч. для чатов каналов — по членству в сервере)
 		member, ok := ensureChatAccess(db, req.ChatID, userIDStr)
 		if !ok || member == nil {
@@ -114,7 +126,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем активный бан в чате
+		// Проверяем активный бан/мут в чате
 		now := time.Now()
 		var activeBan models.ChatBan
 		if err := db.Where("chat_id = ? AND user_id = ? AND (expires_at IS NULL OR expires_at > ?)", req.ChatID, userIDStr, now).
@@ -122,6 +134,18 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":     "banned",
 				"expiresAt": activeBan.ExpiresAt,
+			})
+			return
+		}
+
+		// Админ‑мут (admin_mutes) поверх обычных банов
+		var adminMute models.AdminMute
+		if err := db.Where("chat_id = ? AND user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+			req.ChatID, userIDStr, now).
+			First(&adminMute).Error; err == nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":     "muted",
+				"expiresAt": adminMute.ExpiresAt,
 			})
 			return
 		}

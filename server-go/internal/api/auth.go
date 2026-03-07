@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-	"safegram-server/internal/audit"
 	"safegram-server/internal/config"
 	"safegram-server/internal/crypto"
 	"safegram-server/internal/models"
@@ -237,6 +236,15 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 					return
 				}
 			}
+		}
+
+		// Блокируем вход для забаненных аккаунтов
+		if strings.EqualFold(strings.TrimSpace(user.Status), "banned") {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "user_banned",
+				"message": "Ваш аккаунт заблокирован администрацией.",
+			})
+			return
 		}
 
 		// Генерация JWT токена

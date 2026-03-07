@@ -260,7 +260,7 @@ export default function Search() {
                       {user.plan === 'premium' && <span style={{marginLeft: '8px', color: '#f59e0b'}}>⭐</span>}
                     </div>
                     <div style={{fontSize: '12px', color: 'var(--text-secondary)'}}>
-                      {user.status === 'online' ? '🟢 Онлайн' : '⚫ Оффлайн'}
+                      {user.status === 'online' ? '🟢 В сети' : '⚪ Не в сети'}
                     </div>
                   </div>
                 </div>

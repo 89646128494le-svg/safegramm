@@ -145,7 +145,7 @@ export default function Contacts() {
                       <div style={{fontWeight: '600'}}>{u.username}</div>
                       {u.status && (
                         <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
-                          Статус: {u.status}
+                          Статус: {u.status === 'online' ? '🟢 В сети' : '⚪ Не в сети'}
                         </div>
                       )}
                     </div>
@@ -223,7 +223,7 @@ export default function Contacts() {
                   <div style={{fontWeight: '600'}}>{u.username}</div>
                   {u.status && (
                     <div className="small" style={{color: 'var(--subtle, #9ca3af)'}}>
-                      Статус: {u.status}
+                      Статус: {u.status === 'online' ? '🟢 В сети' : '⚪ Не в сети'}
                     </div>
                   )}
                 </div>

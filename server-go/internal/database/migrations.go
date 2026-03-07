@@ -24,6 +24,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Contact{}, &models.Feedback{}, &models.RecruitApplication{},
 		&models.UserBot{},
 		&models.AdminAuditLog{}, &models.RoleBanHistory{}, &models.BannedWord{},
+		&models.AdminBan{}, &models.AdminMute{},
 		&models.EmailTemplate{}, &models.ScheduledBroadcast{}, &models.DomainAllowBlock{},
 		&models.SystemLimit{}, &models.FeatureFlag{}, &models.SecurityPolicy{},
 		&models.SafetyAlert{}, &models.SuspiciousActivity{}, &models.GlobalInviteLink{},

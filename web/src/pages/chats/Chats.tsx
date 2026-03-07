@@ -633,7 +633,7 @@ export default function Chats() {
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: '600', fontSize: '14px' }}>{currentUser.username}</div>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                {currentUser.status === 'online' ? '🟢 В сети' : '⚫ Офлайн'}
+                {currentUser.status === 'online' ? '🟢 В сети' : '⚪ Не в сети'}
               </div>
             </div>
           </div>

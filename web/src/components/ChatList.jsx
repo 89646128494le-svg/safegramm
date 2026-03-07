@@ -40,13 +40,12 @@ export default function ChatList() {
       {chats.map(c => (
         <div className="list-item" key={c.id}>
           <div>{c.type.toUpperCase()} — {c.title || '(без названия)'}</div>
-          <div className="small">id: {c.id}</div>
           {c.type==='channel' && c.requiresReview && !c.approved && <div className="small">⏳ На модерации</div>}
         </div>
       ))}
       <hr/>
       <div className="row">
-        <input placeholder="ID второго пользователя для DM" value={createTarget} onChange={e=>setCreateTarget(e.target.value)} />
+        <input placeholder="Ник (или ID) второго пользователя для DM" value={createTarget} onChange={e=>setCreateTarget(e.target.value)} />
         <button onClick={createDM}>DM</button>
       </div>
       <div style={{marginTop: 8}}>

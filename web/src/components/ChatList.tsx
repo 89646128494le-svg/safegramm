@@ -39,10 +39,26 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
     }
   };
 
+  const resolveUserId = async (input: string): Promise<string> => {
+    const q = input.trim();
+    if (!q) throw new Error('empty');
+    // UUID-like: allow direct ID entry.
+    const looksLikeUUID = q.length >= 32 && q.includes('-');
+    if (looksLikeUUID) return q;
+
+    const rsp = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    const users = (rsp as any)?.users || [];
+    const exact = users.find((u: any) => String(u.username || '').toLowerCase() === q.toLowerCase());
+    if (exact?.id) return exact.id;
+    if (users[0]?.id) return users[0].id;
+    throw new Error('not_found');
+  };
+
   const createDM = async () => {
     if (!createTarget.trim()) return;
     try {
-      const r = await api('/api/chats', 'POST', { type: 'dm', memberId: createTarget });
+      const memberId = await resolveUserId(createTarget);
+      const r = await api('/api/chats', 'POST', { type: 'dm', memberId });
       setChats(prev => {
         const has = prev.find(c => c.id === r.id);
         return has ? prev : [r, ...prev];
@@ -53,7 +69,8 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
       }
     } catch (e: any) {
       console.error('Failed to create DM:', e);
-      alert('Ошибка создания DM: ' + (e.message || 'Неизвестная ошибка'));
+      const msg = (e?.message === 'not_found' || e?.message?.includes('not_found')) ? 'Пользователь не найден' : (e.message || 'Неизвестная ошибка');
+      alert('Ошибка создания DM: ' + msg);
     }
   };
 
@@ -110,9 +127,9 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
           onClick={() => {
             const type = prompt('Тип чата (dm/group/channel):');
             if (type === 'dm') {
-              const memberId = prompt('ID пользователя:');
-              if (memberId) {
-                setCreateTarget(memberId);
+              const target = prompt('Ник пользователя (или ID):');
+              if (target) {
+                setCreateTarget(target);
                 createDM();
               }
             } else if (type === 'channel') {
@@ -139,9 +156,9 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
         <motion.button
           className="chat-action-btn"
           onClick={() => {
-            const memberId = prompt('ID пользователя для DM:');
-            if (memberId) {
-              setCreateTarget(memberId);
+            const target = prompt('Ник пользователя для DM (или ID):');
+            if (target) {
+              setCreateTarget(target);
               createDM();
             }
           }}
@@ -212,7 +229,6 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
                     )}
                   </div>
                   <div className="chat-list-item-name">{getChatName(chat)}</div>
-                  <div className="chat-list-item-id">id: {chat.id}</div>
                 </div>
               </motion.div>
             ))}
