@@ -27,10 +27,11 @@ type RegisterRequest struct {
 
 // LoginRequest структура запроса входа
 type LoginRequest struct {
-	Username  string `json:"username" binding:"required"`
-	Password  string `json:"password" binding:"required"`
-	EmailCode string `json:"emailCode"` // Код подтверждения email
-	CloudCode string `json:"cloudCode"` // Облачный код (PIN)
+	UsernameOrEmail string `json:"usernameOrEmail"` // Поддержка старого SPA/Next
+	Username        string `json:"username"`        // Предпочтительное поле (новый фронт)
+	Password        string `json:"password" binding:"required"`
+	EmailCode       string `json:"emailCode"` // Код подтверждения email
+	CloudCode       string `json:"cloudCode"` // Облачный код (PIN)
 }
 
 // Register обрабатывает регистрацию пользователя
@@ -166,9 +167,27 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// Поиск пользователя
+		// Поиск пользователя по логину или email
 		var user models.User
-		if err := db.Where("LOWER(username) = LOWER(?)", req.Username).First(&user).Error; err != nil {
+		login := strings.TrimSpace(req.Username)
+		if login == "" {
+			login = strings.TrimSpace(req.UsernameOrEmail)
+		}
+		if login == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_creds"})
+			return
+		}
+
+		q := db
+		if strings.Contains(login, "@") {
+			// Введён email
+			q = q.Where("LOWER(email) = LOWER(?)", login)
+		} else {
+			// Введён логин
+			q = q.Where("LOWER(username) = LOWER(?)", login)
+		}
+
+		if err := q.First(&user).Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_creds"})
 			return
 		}

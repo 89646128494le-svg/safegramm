@@ -35,7 +35,7 @@ export default function ChatList() {
   return (
     <div>
       <div className="title">Мои чаты</div>
-      <div className="small">Выбери chatId и открой справа</div>
+      <div className="small">Выбери чат и открой справа</div>
       <hr/>
       {chats.map(c => (
         <div className="list-item" key={c.id}>
@@ -45,7 +45,7 @@ export default function ChatList() {
       ))}
       <hr/>
       <div className="row">
-        <input placeholder="Ник (или ID) второго пользователя для DM" value={createTarget} onChange={e=>setCreateTarget(e.target.value)} />
+        <input placeholder="Ник второго пользователя для DM" value={createTarget} onChange={e=>setCreateTarget(e.target.value)} />
         <button onClick={createDM}>DM</button>
       </div>
       <div style={{marginTop: 8}}>
