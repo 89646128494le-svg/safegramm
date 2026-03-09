@@ -33,7 +33,8 @@
     "appId": "com.safegram.desktop",
     "productName": "SafeGram",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "**/*",
@@ -44,6 +45,8 @@
       "!electron-builder.yml"
     ],
     "win": {
+      "icon": "build/icon.png",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
