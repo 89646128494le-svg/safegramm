@@ -13,6 +13,8 @@ import LanguageSelector from '../components/LanguageSelector';
 import { useTranslation } from '../i18n';
 import { useStore } from '../store/useStore';
 import SafetyAssistant from '../components/SafetyAssistant';
+import { clearLocalPin, hasLocalPin, setLocalPin } from '../services/pinLock';
+import { downloadAndDecryptVaultRecord, listVaultRecords, removeVaultRecord, VaultRecord } from '../services/vault';
 import '../styles/settings.css';
 
 interface NotificationSettings {
@@ -64,7 +66,7 @@ interface SecuritySettings {
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'appearance' | 'safety' | 'tools'>('notifications');
-  const { ui, setProxyUrl } = useStore();
+  const { ui, setProxyUrl, setStealthMode } = useStore();
   const [proxyInput, setProxyInput] = useState('');
   const [showBackupManager, setShowBackupManager] = useState(false);
   const [notifications, setNotifications] = useState<NotificationSettings>({
@@ -104,7 +106,7 @@ export default function Settings() {
   });
   const [security, setSecurity] = useState<SecuritySettings>({
     twoFactorEnabled: false,
-    pinEnabled: false,
+    pinEnabled: hasLocalPin(),
     activeSessions: []
   });
   const [show2FASetup, setShow2FASetup] = useState(false);
@@ -117,6 +119,7 @@ export default function Settings() {
   const [showBotManager, setShowBotManager] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showTodos, setShowTodos] = useState(false);
+  const [vaultRecords, setVaultRecords] = useState<VaultRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -127,7 +130,14 @@ export default function Settings() {
   useEffect(() => {
     loadSettings();
     loadUser();
+    setVaultRecords(listVaultRecords());
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'tools') {
+      setVaultRecords(listVaultRecords());
+    }
+  }, [activeTab]);
 
   // Поддержка старых настроек прокси: если когда‑то было сохранено — просто читаем и применяем, но отдельную вкладку больше не показываем.
   useEffect(() => {
@@ -140,6 +150,11 @@ export default function Settings() {
     try {
       const u = await api('/api/users/me');
       setUser(u);
+      setSecurity(prev => ({
+        ...prev,
+        twoFactorEnabled: !!u.twoFactorEnabled,
+        pinEnabled: hasLocalPin() || !!u.pinEnabled,
+      }));
     } catch (e) {
       console.error('Failed to load user:', e);
     }
@@ -259,13 +274,74 @@ export default function Settings() {
     }
   };
 
+  const togglePinLock = async () => {
+    if (security.pinEnabled) {
+      if (!confirm('Отключить локальный PIN-замок приложения?')) return;
+      clearLocalPin();
+      setSecurity(prev => ({ ...prev, pinEnabled: false }));
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus(null), 2000);
+      return;
+    }
+
+    const pin = (prompt('Введите новый PIN (4-12 символов):') || '').trim();
+    if (!pin) return;
+    if (pin.length < 4 || pin.length > 12) {
+      alert('PIN должен быть длиной от 4 до 12 символов.');
+      return;
+    }
+    const pinConfirm = (prompt('Повторите PIN:') || '').trim();
+    if (pin !== pinConfirm) {
+      alert('PIN-коды не совпадают.');
+      return;
+    }
+
+    try {
+      await setLocalPin(pin);
+      // Серверный PIN для cloud-login: опционально, если пользователь введёт пароль
+      const accountPassword = (prompt('Введите пароль аккаунта для установки облачного PIN (или оставьте пустым, чтобы пропустить):') || '').trim();
+      if (accountPassword) {
+        await api('/api/users/me/pin', 'POST', { password: accountPassword, pin });
+      }
+      setSecurity(prev => ({ ...prev, pinEnabled: true }));
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus(null), 2000);
+    } catch (e: any) {
+      alert(getErrorMessage(e, 'Не удалось сохранить PIN.'));
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(null), 2000);
+    }
+  };
+
+  const refreshVaultRecords = () => {
+    setVaultRecords(listVaultRecords());
+  };
+
+  const handleVaultDownload = async (record: VaultRecord) => {
+    try {
+      await downloadAndDecryptVaultRecord(record);
+    } catch (e: any) {
+      alert(getErrorMessage(e, 'Не удалось скачать или расшифровать файл Vault.'));
+    }
+  };
+
+  const handleVaultRemove = (id: string) => {
+    removeVaultRecord(id);
+    refreshVaultRecords();
+  };
+
   const confirm2FAEnable = async () => {
-    if (!twoFASecretData || twoFACodeInput.trim().length !== 6) return;
+    if (!twoFASecretData) return;
+    const code = twoFACodeInput.trim();
+    if (!/^\d{6}$/.test(code)) {
+      alert('Код 2FA должен состоять из 6 цифр.');
+      return;
+    }
     setTwoFAEnabling(true);
     try {
       await api('/api/users/me/2fa/enable', 'POST', {
         secret: twoFASecretData.secret,
-        code: twoFACodeInput.trim()
+        code
       });
       setSecurity(prev => ({ ...prev, twoFactorEnabled: true }));
       setShow2FASetup(false);
@@ -274,6 +350,7 @@ export default function Settings() {
       setSaveStatus('success');
       setTimeout(() => setSaveStatus(null), 2000);
     } catch (e: any) {
+      alert(getErrorMessage(e, 'Неверный OTP-код. Проверьте время на устройстве и попробуйте снова.'));
       setSaveStatus('error');
       setTimeout(() => setSaveStatus(null), 2000);
     } finally {
@@ -895,6 +972,24 @@ export default function Settings() {
             </div>
 
             <div className="settings-group">
+              <h3>Stealth Mode</h3>
+              <label className="settings-item">
+                <div className="settings-item-label">
+                  <span>Скрытый режим 🥷</span>
+                  <span className="settings-item-description">
+                    Скрывает превью сообщений в уведомлениях и в списке чатов.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={ui.stealthMode}
+                  onChange={e => setStealthMode(e.target.checked)}
+                  className="settings-toggle"
+                />
+              </label>
+            </div>
+
+            <div className="settings-group">
               <h3>Группы и каналы</h3>
               <label className="settings-item">
                 <div className="settings-item-label">
@@ -997,7 +1092,7 @@ export default function Settings() {
                   </span>
                 </div>
                 <button
-                  onClick={() => alert('Настройка PIN будет доступна в следующих версиях')}
+                  onClick={togglePinLock}
                   className={`settings-button ${security.pinEnabled ? 'danger' : 'primary'}`}
                 >
                   {security.pinEnabled ? 'Отключить' : 'Включить'}
@@ -1048,6 +1143,66 @@ export default function Settings() {
                 >
                   💾 Управление резервными копиями
                 </button>
+              </div>
+            </div>
+
+            <div className="settings-group">
+              <h3>Vault (шифрованные файлы)</h3>
+              <div className="settings-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
+                <div className="settings-item-label">
+                  <span>Управление шифрованными вложениями</span>
+                  <span className="settings-item-description">
+                    Файлы шифруются на клиенте (AES-256-GCM) перед загрузкой.
+                  </span>
+                </div>
+                {vaultRecords.length === 0 ? (
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                    В Vault пока нет файлов.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {vaultRecords.slice(0, 20).map((record) => (
+                      <div
+                        key={record.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                          padding: '10px 12px',
+                          border: '1px solid var(--border, rgba(255,255,255,0.12))',
+                          borderRadius: 10,
+                          background: 'var(--panel-2, rgba(255,255,255,0.03))',
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {record.envelope.name}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                            {new Date(record.createdAt).toLocaleString('ru-RU')}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            type="button"
+                            className="settings-button primary"
+                            onClick={() => handleVaultDownload(record)}
+                          >
+                            Скачать
+                          </button>
+                          <button
+                            type="button"
+                            className="settings-button danger"
+                            onClick={() => handleVaultRemove(record.id)}
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

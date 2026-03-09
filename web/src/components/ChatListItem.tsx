@@ -21,6 +21,8 @@ interface ChatListItemProps {
   getChatName: (chat: any) => string;
   getChatPreview: (chat: any) => string;
   getChatUser?: (chat: any) => { id?: string; username?: string; roles?: string[] | string } | null;
+  hidePreview?: boolean;
+  density?: 'comfortable' | 'compact';
 }
 
 export default function ChatListItem({
@@ -34,6 +36,8 @@ export default function ChatListItem({
   getChatName,
   getChatPreview,
   getChatUser,
+  hidePreview = false,
+  density = 'comfortable',
 }: ChatListItemProps) {
   const displayUser = getChatUser?.(chat);
   const nameNode = displayUser ? (
@@ -79,11 +83,12 @@ export default function ChatListItem({
         position: 'relative',
         transform: `translateX(${swipeOffset}px)`,
         transition: swipeOffset === 0 ? 'transform 0.3s ease-out' : 'none',
+        padding: density === 'compact' ? '8px 10px' : '12px 14px',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', width: '100%' }}>
         {/* Иконка типа чата */}
-        <div style={{ fontSize: '20px', flexShrink: 0 }}>
+        <div style={{ fontSize: density === 'compact' ? '17px' : '20px', flexShrink: 0 }}>
           {chat.type === 'dm' ? '💬' : chat.type === 'group' ? '👥' : '📢'}
         </div>
 
@@ -96,7 +101,7 @@ export default function ChatListItem({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ 
             fontWeight: isSelected ? 'bold' : 'normal',
-            fontSize: '14px',
+            fontSize: density === 'compact' ? '13px' : '14px',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -121,13 +126,13 @@ export default function ChatListItem({
           </div>
           {chat.lastMessage && (
             <div className="small" style={{ 
-              marginTop: '4px', 
+              marginTop: density === 'compact' ? '2px' : '4px',
               opacity: 0.7,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'
             }}>
-              {getChatPreview(chat)}
+              {hidePreview ? '🔒 Превью скрыто' : getChatPreview(chat)}
             </div>
           )}
         </div>

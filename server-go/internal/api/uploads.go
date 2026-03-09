@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,7 +16,7 @@ import (
 )
 
 const (
-	uploadsDir = "./uploads"
+	uploadsDir  = "./uploads"
 	maxFileSize = 50 * 1024 * 1024 // 50 MB
 )
 
@@ -88,7 +87,7 @@ func UploadAvatar(db *gorm.DB) gin.HandlerFunc {
 }
 
 // UploadAttachment загружает вложение в чат
-func UploadAttachment(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
+func UploadAttachment(db *gorm.DB, _ *websocket.Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		chatID := c.Param("id")
 		userID, _ := c.Get("userID")
@@ -129,30 +128,13 @@ func UploadAttachment(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 
 		attachmentURL := fmt.Sprintf("/uploads/attachments/%s", filename)
-
-		// Создаем сообщение с вложением
-		text := c.PostForm("text")
-		message := models.Message{
-			ID:            uuid.New().String(),
-			ChatID:        chatID,
-			SenderID:      userIDStr,
-			Text:          text,
-			AttachmentURL: attachmentURL,
-		}
-
-		if err := db.Create(&message).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-			return
-		}
-
-		// Загружаем полную информацию о сообщении
-		db.Preload("Sender").Preload("Reactions").First(&message, "id = ?", message.ID)
-
-		// Отправляем через WebSocket
-		messageJSON, _ := json.Marshal(gin.H{"type": "message", "data": message})
-		wsHub.BroadcastToChat(chatID, messageJSON)
-
-		c.JSON(http.StatusOK, gin.H{"message": message})
+		c.JSON(http.StatusOK, gin.H{
+			"ok":            true,
+			"attachmentUrl": attachmentURL,
+			"url":           attachmentURL,
+			"name":          file.Filename,
+			"size":          file.Size,
+		})
 	}
 }
 
@@ -161,7 +143,7 @@ func ServeUploads() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Param("filepath")
 		filePath := filepath.Join(uploadsDir, path)
-		
+
 		// Проверка безопасности (предотвращение path traversal)
 		if !strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(uploadsDir)) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
@@ -171,4 +153,3 @@ func ServeUploads() gin.HandlerFunc {
 		c.File(filePath)
 	}
 }
-

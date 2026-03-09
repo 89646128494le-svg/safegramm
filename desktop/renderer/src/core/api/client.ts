@@ -20,6 +20,8 @@ interface ApiResponse<T = any> {
   headers: Headers;
 }
 
+const DEFAULT_API_BASE = 'https://141.8.198.152.nip.io';
+
 class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
@@ -27,7 +29,7 @@ class ApiClient {
     'Content-Type': 'application/json'
   };
 
-  constructor(baseUrl: string = 'http://localhost:8080') {
+  constructor(baseUrl: string = DEFAULT_API_BASE) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.loadToken();
   }
@@ -332,10 +334,10 @@ const getApiUrl = () => {
   // Переменные должны иметь префикс VITE_ или быть явно определены в vite.config.ts
   if (typeof import.meta !== 'undefined' && import.meta.env) {
     // Проверяем VITE_ префикс (стандарт Vite)
-    return import.meta.env.VITE_API_URL || import.meta.env.API_URL || 'http://localhost:8080';
+    return import.meta.env.VITE_API_URL || import.meta.env.API_URL || DEFAULT_API_BASE;
   }
   // Fallback
-  return 'http://localhost:8080';
+  return DEFAULT_API_BASE;
 };
 
 export const apiClient = new ApiClient(getApiUrl());

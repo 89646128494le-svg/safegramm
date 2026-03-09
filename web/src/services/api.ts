@@ -37,12 +37,19 @@ declare global {
 /** Загрузить config.json (apiUrl или apiHost) и, в десктопе, serverUrl из Electron store. Десктоп не зависит от config.json — сразу берёт URL из store. */
 export function loadApiConfig(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
-  const isDesktop = !!(window as any).electronAPI;
+  const electronAPI = (window as any).electronAPI;
+  const isDesktop = !!electronAPI;
   if (isDesktop) {
-    return (window as any).electronAPI.getConfig().then((c: { serverUrl?: string }) => {
-      if (c?.serverUrl && String(c.serverUrl).trim()) runtimeApiUrl = normalizeBaseUrl(String(c.serverUrl).trim());
-      else runtimeApiUrl = SAFEGRAM_API_SERVER;
-    }).catch(() => { runtimeApiUrl = SAFEGRAM_API_SERVER; });
+    if (typeof electronAPI.getConfig !== 'function') {
+      runtimeApiUrl = SAFEGRAM_API_SERVER;
+      return Promise.resolve();
+    }
+    return electronAPI.getConfig()
+      .then((c: { serverUrl?: string }) => {
+        if (c?.serverUrl && String(c.serverUrl).trim()) runtimeApiUrl = normalizeBaseUrl(String(c.serverUrl).trim());
+        else runtimeApiUrl = SAFEGRAM_API_SERVER;
+      })
+      .catch(() => { runtimeApiUrl = SAFEGRAM_API_SERVER; });
   }
   return fetch('/config.json')
     .then((r) => (r.ok ? r.json() : null))

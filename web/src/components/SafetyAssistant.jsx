@@ -44,8 +44,10 @@ export default function SafetyAssistant({ onClose }) {
         mode: mode
       });
 
-      // api() в твоем проекте обычно сразу возвращает JSON
-      const reply = data.reply || 'Молчание... (нет ответа от сервера)';
+      const reply =
+        data.reply ||
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        'Модель не вернула текст ответа. Попробуйте уточнить запрос.';
       const actionPerformed = data.actionPerformed || [];
       setMessages((prev) => [
         ...prev,
@@ -139,7 +141,7 @@ export default function SafetyAssistant({ onClose }) {
         {busy && (
             <div className="assistant-msg assistant">
                 <div className="assistant-msg-author">{mode === 'x' ? 'Safety-X' : 'Safety'}</div>
-                <div className="assistant-msg-body flashing">Thinking...</div>
+                <div className="assistant-msg-body flashing">AI печатает...</div>
             </div>
         )}
 

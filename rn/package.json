@@ -1,8 +1,29 @@
 {
   "name": "safegram-rn",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
+  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "start": "echo \"Use Expo or React Native CLI to bootstrap\" && exit 0"
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "expo": "~55.0.5",
+    "expo-crypto": "~15.0.7",
+    "expo-document-picker": "~14.0.7",
+    "expo-secure-store": "~15.0.7",
+    "expo-status-bar": "~55.0.4",
+    "react": "19.2.0",
+    "react-native": "0.83.2",
+    "react-native-get-random-values": "^1.11.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.2"
   }
 }

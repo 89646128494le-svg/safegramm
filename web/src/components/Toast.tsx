@@ -183,7 +183,7 @@ export function useToast() {
       setToasts(prev => [...prev, toast]);
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== toast.id));
-      }, 4000);
+      }, 3000);
     };
     
     toastListeners.add(listener);

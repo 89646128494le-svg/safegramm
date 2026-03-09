@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getErrorMessage } from '../../services/api';
 import { getSocket } from '../../services/websocket';
@@ -67,6 +67,9 @@ interface User {
   roles?: string[] | string;
 }
 
+type ChatSortMode = 'recent' | 'unread' | 'name' | 'type';
+type ChatDensity = 'comfortable' | 'compact';
+
 export default function Chats() {
   const navigate = useNavigate();
   const { ui, setSidebarOpen, maintenance, setToken, setUser } = useStore();
@@ -86,7 +89,27 @@ export default function Chats() {
   const [chatsNextCursor, setChatsNextCursor] = useState('');
   const [chatsHasMore, setChatsHasMore] = useState(false);
   const [loadingMoreChats, setLoadingMoreChats] = useState(false);
+  const [sortMode, setSortMode] = useState<ChatSortMode>(() => {
+    if (typeof window === 'undefined') return 'recent';
+    const saved = localStorage.getItem('safegram_chat_sort_mode');
+    if (saved === 'unread' || saved === 'name' || saved === 'type' || saved === 'recent') return saved;
+    return 'recent';
+  });
+  const [density, setDensity] = useState<ChatDensity>(() => {
+    if (typeof window === 'undefined') return 'comfortable';
+    return localStorage.getItem('safegram_chat_density') === 'compact' ? 'compact' : 'comfortable';
+  });
   const chatListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('safegram_chat_sort_mode', sortMode);
+  }, [sortMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('safegram_chat_density', density);
+  }, [density]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
@@ -422,7 +445,9 @@ export default function Chats() {
     }
     try {
       const users = await api('/api/users/search?q=' + encodeURIComponent(q));
-      const user = users.users?.[0];
+      const items = Array.isArray(users.users) ? users.users : [];
+      const exact = items.find((u: any) => String(u.username || '').toLowerCase() === q.toLowerCase());
+      const user = exact || items[0];
       if (!user) {
         showToast('Пользователь не найден или скрыл себя из поиска. Добавьте его в контакты или попросите включить «Показывать в поиске» в настройках приватности.', 'warning');
         return;
@@ -533,49 +558,88 @@ export default function Chats() {
     return '';
   };
 
-  // Фильтрация чатов по поисковому запросу и активному фильтру
-  const filteredChats = chats.filter(chat => {
-    // Фильтр по типу
-    if (activeFilter === 'groups' && chat.type !== 'group') return false;
-    if (activeFilter === 'channels' && chat.type !== 'channel') return false;
-    if (activeFilter === 'unread' && (!(chat as any).unreadCount || (chat as any).unreadCount === 0)) return false;
-    if (activeFilter === 'starred' && !starredChats.has(chat.id)) return false;
-    
-    // Фильтр по архивированным
-    if (showArchived && !chat.archivedAt) return false;
-    if (!showArchived && chat.archivedAt) return false;
-    
-    // Поиск по запросу
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      const chatName = getChatName(chat).toLowerCase();
-      if (chatName.includes(query)) return true;
-      
-      // Поиск по имени пользователя в DM
-      if (chat.type === 'dm') {
-        const otherMemberId = chat.members.find(id => id !== currentUser?.id);
-        if (otherMemberId) {
-          const otherUser = users.get(otherMemberId);
-          if (otherUser && otherUser.username.toLowerCase().includes(query)) {
-            return true;
+  const getChatRecentTimestamp = useCallback((chat: Chat): number => {
+    const candidate = (chat.lastMessage as any)?.createdAt ?? (chat as any).lastMessageAt ?? 0;
+    if (typeof candidate === 'number') return candidate;
+    if (typeof candidate === 'string') {
+      const ts = new Date(candidate).getTime();
+      return Number.isFinite(ts) ? ts : 0;
+    }
+    return 0;
+  }, []);
+
+  const filteredChats = useMemo(() => {
+    const base = chats.filter(chat => {
+      if (activeFilter === 'groups' && chat.type !== 'group') return false;
+      if (activeFilter === 'channels' && chat.type !== 'channel') return false;
+      if (activeFilter === 'unread' && (!(chat as any).unreadCount || (chat as any).unreadCount === 0)) return false;
+      if (activeFilter === 'starred' && !starredChats.has(chat.id)) return false;
+
+      if (showArchived && !chat.archivedAt) return false;
+      if (!showArchived && chat.archivedAt) return false;
+
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const chatName = getChatName(chat).toLowerCase();
+        if (chatName.includes(query)) return true;
+
+        if (chat.type === 'dm') {
+          const otherMemberId = chat.members.find(id => id !== currentUser?.id);
+          if (otherMemberId) {
+            const otherUser = users.get(otherMemberId);
+            if (otherUser && otherUser.username.toLowerCase().includes(query)) {
+              return true;
+            }
           }
         }
+
+        const preview = getChatPreview(chat).toLowerCase();
+        if (preview.includes(query)) {
+          return true;
+        }
+
+        return false;
       }
-      
-      // Поиск по последнему сообщению
-      const preview = getChatPreview(chat).toLowerCase();
-      if (preview.includes(query)) {
-        return true;
+
+      return true;
+    });
+
+    const sorted = [...base];
+    sorted.sort((a, b) => {
+      const aUnread = (a as any).unreadCount || 0;
+      const bUnread = (b as any).unreadCount || 0;
+      const aTs = getChatRecentTimestamp(a);
+      const bTs = getChatRecentTimestamp(b);
+
+      if (sortMode === 'unread') {
+        if (bUnread !== aUnread) return bUnread - aUnread;
+        return bTs - aTs;
       }
-      
-      return false;
-    }
-    
-    return true;
-  });
+      if (sortMode === 'name') {
+        return getChatName(a).localeCompare(getChatName(b), 'ru');
+      }
+      if (sortMode === 'type') {
+        if (a.type !== b.type) return a.type.localeCompare(b.type);
+        return getChatName(a).localeCompare(getChatName(b), 'ru');
+      }
+      return bTs - aTs;
+    });
+
+    return sorted;
+  }, [activeFilter, chats, currentUser?.id, getChatName, getChatPreview, getChatRecentTimestamp, searchQuery, showArchived, sortMode, starredChats, users]);
+
+  const chatStats = useMemo(() => {
+    const total = chats.length;
+    const dm = chats.filter(c => c.type === 'dm').length;
+    const groups = chats.filter(c => c.type === 'group').length;
+    const channels = chats.filter(c => c.type === 'channel').length;
+    const unreadDialogs = chats.filter(c => (c as any).unreadCount > 0).length;
+    const unreadMessages = chats.reduce((sum, c) => sum + ((c as any).unreadCount || 0), 0);
+    return { total, dm, groups, channels, unreadDialogs, unreadMessages };
+  }, [chats]);
 
   // Подсчет статистики для фильтров
-  const unreadCount = chats.filter(c => (c as any).unreadCount > 0).length;
+  const unreadCount = chatStats.unreadDialogs;
   const starredCount = starredChats.size;
 
   if (!currentUser) {
@@ -635,6 +699,11 @@ export default function Chats() {
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                 {currentUser.status === 'online' ? '🟢 В сети' : '⚪ Не в сети'}
               </div>
+              {ui.stealthMode && (
+                <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: 2, animation: 'pulse 1.4s infinite' }}>
+                  🥷 Stealth mode
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -659,6 +728,36 @@ export default function Chats() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="chats-catalog-search-input"
           />
+        </div>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as ChatSortMode)}
+            style={{
+              flex: 1,
+              borderRadius: 8,
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-card)',
+              color: 'var(--text-primary)',
+              padding: '8px 10px',
+              fontSize: '12px',
+            }}
+            title="Сортировка чатов"
+          >
+            <option value="recent">Сначала новые</option>
+            <option value="unread">Сначала непрочитанные</option>
+            <option value="name">По имени</option>
+            <option value="type">По типу</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setDensity(density === 'compact' ? 'comfortable' : 'compact')}
+            className="btn"
+            style={{ minWidth: 90, padding: '8px 10px', fontSize: 12 }}
+            title="Плотность списка"
+          >
+            {density === 'compact' ? 'Компакт' : 'Обычный'}
+          </button>
         </div>
         {/* Кнопки типа чата — каталог */}
         <div className="chats-catalog-buttons">
@@ -689,6 +788,24 @@ export default function Chats() {
             starredCount={starredCount}
             vertical
           />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginBottom: 10 }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 10, padding: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Всего</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{chatStats.total}</div>
+          </div>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 10, padding: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Непрочитано</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{chatStats.unreadMessages}</div>
+          </div>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 10, padding: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>DM</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{chatStats.dm}</div>
+          </div>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 10, padding: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Группы/Каналы</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{chatStats.groups + chatStats.channels}</div>
+          </div>
         </div>
         {loading ? (
           <div className="empty-state">
@@ -748,6 +865,8 @@ export default function Chats() {
                     getChatName={getChatName}
                     getChatPreview={getChatPreview}
                     getChatUser={getChatUser}
+                    hidePreview={ui.stealthMode}
+                    density={density}
                   />
                 );
               })}

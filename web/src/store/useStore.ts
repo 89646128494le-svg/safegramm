@@ -14,6 +14,7 @@ interface UIState {
   theme: 'light' | 'dark' | 'red-black';
   sidebarOpen: boolean;
   notificationsEnabled: boolean;
+  stealthMode: boolean;
   /** URL прокси для API/WebSocket (как в Telegram). Пусто = прямое подключение. */
   proxyUrl: string;
 }
@@ -36,6 +37,7 @@ interface AppState {
   setTheme: (theme: UIState['theme']) => void;
   setSidebarOpen: (open: boolean) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
+  setStealthMode: (enabled: boolean) => void;
   setProxyUrl: (url: string) => void;
   setMaintenance: (data: MaintenanceStatus | null) => void;
   logout: () => void;
@@ -49,6 +51,7 @@ export const useStore = create<AppState>()((set) => ({
     theme: (typeof window !== 'undefined' ? localStorage.getItem('theme') : null) as UIState['theme'] || 'dark',
     sidebarOpen: true,
     notificationsEnabled: true,
+    stealthMode: typeof window !== 'undefined' ? localStorage.getItem('safegram_stealth_mode') === '1' : false,
     proxyUrl: typeof window !== 'undefined' ? (localStorage.getItem('safegram_proxy_url') || '') : '',
   },
   setUser: (user) => set({ user }),
@@ -71,6 +74,13 @@ export const useStore = create<AppState>()((set) => ({
   },
   setSidebarOpen: (open) => set((state) => ({ ui: { ...state.ui, sidebarOpen: open } })),
   setNotificationsEnabled: (enabled) => set((state) => ({ ui: { ...state.ui, notificationsEnabled: enabled } })),
+  setStealthMode: (enabled) => {
+    if (typeof window !== 'undefined') {
+      if (enabled) localStorage.setItem('safegram_stealth_mode', '1');
+      else localStorage.removeItem('safegram_stealth_mode');
+    }
+    set((state) => ({ ui: { ...state.ui, stealthMode: enabled } }));
+  },
   setProxyUrl: (url) => {
     if (typeof window !== 'undefined') {
       if (url) localStorage.setItem('safegram_proxy_url', url);

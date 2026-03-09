@@ -30,17 +30,19 @@ func GetCurrentUser(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"id":           user.ID,
-			"username":     user.Username,
-			"roles":        roles,
-			"plan":         user.Plan,
-			"avatarUrl":    user.AvatarURL,
-			"about":        user.About,
-			"status":       status,
-			"profileColor": user.ProfileColor,
-			"showBio":      user.ShowBio,
-			"showAvatar":   user.ShowAvatar,
-			"lastSeen":     user.LastSeen,
+			"id":               user.ID,
+			"username":         user.Username,
+			"roles":            roles,
+			"plan":             user.Plan,
+			"avatarUrl":        user.AvatarURL,
+			"about":            user.About,
+			"status":           status,
+			"profileColor":     user.ProfileColor,
+			"showBio":          user.ShowBio,
+			"showAvatar":       user.ShowAvatar,
+			"lastSeen":         user.LastSeen,
+			"twoFactorEnabled": user.TwoFASecret != "",
+			"pinEnabled":       user.PinHash != "",
 		})
 	}
 }
@@ -96,6 +98,15 @@ func SearchUsers(db *gorm.DB) gin.HandlerFunc {
 		searchTerm := "%" + strings.ToLower(query) + "%"
 		seen := make(map[string]bool)
 		var users []models.User
+		contactSet := make(map[string]bool)
+
+		if userIDStr != "" {
+			var contactIDs []string
+			db.Model(&models.Contact{}).Where("user_id = ?", userIDStr).Pluck("contact_id", &contactIDs)
+			for _, id := range contactIDs {
+				contactSet[id] = true
+			}
+		}
 
 		// Поиск по точному ID (UUID) — один символ не ищем, 2+ ок
 		if len(query) >= 32 && strings.Contains(query, "-") {
@@ -135,8 +146,10 @@ func SearchUsers(db *gorm.DB) gin.HandlerFunc {
 
 		// Контакты текущего пользователя по запросу (можно найти даже если скрыты из поиска)
 		if userIDStr != "" && len(users) < 20 {
-			var contactIDs []string
-			db.Model(&models.Contact{}).Where("user_id = ?", userIDStr).Pluck("contact_id", &contactIDs)
+			contactIDs := make([]string, 0, len(contactSet))
+			for id := range contactSet {
+				contactIDs = append(contactIDs, id)
+			}
 			if len(contactIDs) > 0 {
 				var contacts []models.User
 				db.Where("id IN ?", contactIDs).Where("LOWER(username) LIKE ?", searchTerm).Find(&contacts)
@@ -154,6 +167,21 @@ func SearchUsers(db *gorm.DB) gin.HandlerFunc {
 
 		result := make([]gin.H, 0, len(users))
 		for _, user := range users {
+			if user.ID == userIDStr {
+				continue
+			}
+			inContacts := contactSet[user.ID]
+
+			// Для пользователей вне контактов не раскрываем приватные поля
+			if !inContacts {
+				result = append(result, gin.H{
+					"id":        user.ID,
+					"username":  user.Username,
+					"isContact": false,
+				})
+				continue
+			}
+
 			avatarURL := user.AvatarURL
 			if !user.ShowAvatar {
 				avatarURL = ""
@@ -165,9 +193,9 @@ func SearchUsers(db *gorm.DB) gin.HandlerFunc {
 				"avatarUrl": avatarURL,
 				"status":    user.Status,
 				"isOnline":  isOnline,
+				"isContact": true,
 			})
 		}
 		c.JSON(http.StatusOK, gin.H{"users": result})
 	}
 }
-

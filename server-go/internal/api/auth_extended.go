@@ -91,10 +91,10 @@ func LoginExtended(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{
 			"token": tokenString,
 			"user": gin.H{
-				"id":       user.ID,
-				"username": user.Username,
+				"id":        user.ID,
+				"username":  user.Username,
 				"avatarUrl": user.AvatarURL,
-				"status":   user.Status,
+				"status":    user.Status,
 			},
 		})
 	}
@@ -144,7 +144,9 @@ func GetEmailStatus(c *gin.Context) {
 func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Username string `json:"username" binding:"required"`
+			Username        string `json:"username"`
+			UsernameOrEmail string `json:"usernameOrEmail"`
+			Login           string `json:"login"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -152,9 +154,27 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Находим пользователя
+		login := strings.TrimSpace(req.Username)
+		if login == "" {
+			login = strings.TrimSpace(req.UsernameOrEmail)
+		}
+		if login == "" {
+			login = strings.TrimSpace(req.Login)
+		}
+		if login == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "username or email is required"})
+			return
+		}
+
+		// Находим пользователя по username или email
 		var user models.User
-		if err := db.Where("LOWER(username) = LOWER(?)", req.Username).First(&user).Error; err != nil {
+		query := db
+		if strings.Contains(login, "@") {
+			query = query.Where("LOWER(email) = LOWER(?)", login)
+		} else {
+			query = query.Where("LOWER(username) = LOWER(?)", login)
+		}
+		if err := query.First(&user).Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user_not_found"})
 			return
 		}
@@ -175,8 +195,8 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 		go func() {
 			if err := email.SendVerificationCode(userEmail, codeVal); err != nil {
 				logger.Error("SendLoginEmailCode: failed to send email", err, map[string]interface{}{
-					"username": req.Username,
-					"email":    maskEmail(userEmail),
+					"login": login,
+					"email": maskEmail(userEmail),
 				})
 			}
 		}()
@@ -185,16 +205,16 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 		isDev := nodeEnv == "development" || nodeEnv == ""
 		if isDev {
 			c.JSON(http.StatusOK, gin.H{
-				"ok":          true,
-				"message":     "Код для входа (режим разработки). Используйте код ниже или проверьте почту.",
+				"ok":           true,
+				"message":      "Код для входа (режим разработки). Используйте код ниже или проверьте почту.",
 				"hasCloudCode": user.PinHash != "",
-				"code":        code,
+				"code":         code,
 			})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"ok":          true,
-			"message":     "Код отправлен на email",
+			"ok":           true,
+			"message":      "Код отправлен на email",
 			"hasCloudCode": user.PinHash != "",
 		})
 	}

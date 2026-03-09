@@ -15,6 +15,11 @@ interface NotificationOptions {
   timestamp?: number;
 }
 
+function isStealthModeEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('safegram_stealth_mode') === '1';
+}
+
 // Проверка поддержки уведомлений
 export function isNotificationSupported(): boolean {
   return 'Notification' in window;
@@ -307,6 +312,8 @@ export async function notifyNewMessage(
     }
   }
   
+  const stealthMode = isStealthModeEnabled();
+
   // Обрезаем текст сообщения
   const truncatedText = messageText.length > 100 
     ? messageText.substring(0, 100) + '...' 
@@ -316,9 +323,11 @@ export async function notifyNewMessage(
     ? `💬 ${chatName}` 
     : `💬 ${senderName}`;
   
-  const body = isMention 
-    ? `🔔 ${senderName} упомянул вас: ${truncatedText}`
-    : `${senderName}: ${truncatedText}`;
+  const body = stealthMode
+    ? '🔒 Новое сообщение'
+    : isMention
+      ? `🔔 ${senderName} упомянул вас: ${truncatedText}`
+      : `${senderName}: ${truncatedText}`;
   
   const tag = `message-${chatId || 'unknown'}`;
   const existing = activeNotifications.get(tag);
@@ -355,9 +364,11 @@ export async function notifyNewMessage(
   // Если есть существующее уведомление, обновляем его (группировка)
   if (existing) {
     const count = (existing.data?.count || 1) + 1;
-    const newBody = count > 1 
-      ? `${count} новых сообщений от ${senderName}`
-      : `${senderName}: ${truncatedText}`;
+    const newBody = stealthMode
+      ? '🔒 Новые сообщения'
+      : count > 1
+        ? `${count} новых сообщений от ${senderName}`
+        : `${senderName}: ${truncatedText}`;
     
     return updateOrCreateNotification(
       tag,
@@ -366,7 +377,7 @@ export async function notifyNewMessage(
         body: newBody,
         icon: avatarUrl || '/favicon.svg',
         tag,
-        image: imageUrl,
+        image: stealthMode ? undefined : imageUrl,
         actions,
         data: {
           type: 'message',
@@ -390,7 +401,7 @@ export async function notifyNewMessage(
       body,
       icon: avatarUrl || '/favicon.svg',
       tag,
-      image: imageUrl,
+      image: stealthMode ? undefined : imageUrl,
       actions,
       data: {
         type: 'message',

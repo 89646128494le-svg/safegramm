@@ -220,6 +220,24 @@ export default function Header({ user, onLogout }: HeaderProps) {
           </>
         )}
         <ThemeSwitcher />
+        {ui.stealthMode && (
+          <span
+            title="Stealth mode включен"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              background: 'rgba(245, 158, 11, 0.2)',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              animation: 'pulse 1.4s infinite',
+            }}
+          >
+            🥷
+          </span>
+        )}
         
         {user ? (
           <>

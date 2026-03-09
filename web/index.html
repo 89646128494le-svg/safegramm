@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -7,16 +7,16 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="description" content="SafeGram — защищённый мессенджер с end-to-end шифрованием, AI-модерацией и полным контролем над приватностью. Общайтесь свободно и безопасно." />
-  <meta name="keywords" content="мессенджер, шифрование, приватность, безопасность, E2EE, SafeGram" />
+  <meta name="description" content="SafeGram - secure messenger with end-to-end encryption and Safety AI." />
+  <meta name="keywords" content="messenger, encryption, privacy, security, E2EE, SafeGram" />
   <link rel="canonical" href="https://safegram.app/" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="SafeGram — Безопасный мессенджер" />
-  <meta property="og:description" content="Мессенджер с end-to-end шифрованием, AI-модерацией и приватностью. Общайтесь свободно и безопасно." />
+  <meta property="og:title" content="SafeGram - Secure Messenger" />
+  <meta property="og:description" content="Secure messaging with end-to-end encryption, AI moderation and privacy-first defaults." />
   <meta property="og:locale" content="ru_RU" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <title>SafeGram — Безопасный мессенджер</title>
+  <title>SafeGram - Secure Messenger</title>
   <style>
     html{scroll-behavior:smooth;width:100%;height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
     @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
@@ -25,13 +25,34 @@
     body{margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;min-height:100dvh;color:#e2e8f0;background:#0f172a;width:100%;overflow-x:hidden;border:none;outline:none}
     #root{min-height:100vh;min-height:100dvh;width:100%;max-width:100%;display:block;background:linear-gradient(135deg,#0b1020 0%,#1a1f35 100%);border:none;outline:none}
     #root .sg-spinner{width:28px;height:28px;border:3px solid rgba(124,108,255,.25);border-top-color:#7c6cff;border-radius:50%;animation:sg-spin .8s linear infinite;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+    .sg-seo-fallback{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
     .skip-link{position:absolute;top:-100px;left:16px;z-index:10000;padding:12px 20px;background:#7c6cff;color:#fff;font-weight:600;border-radius:10px;text-decoration:none;transition:top .2s}
     .skip-link:focus{top:16px;outline:2px solid #3dd8ff;outline-offset:2px}
   </style>
 </head>
 <body>
-  <a href="#main" class="skip-link">Перейти к основному содержимому</a>
-  <div id="root"><div class="sg-spinner" aria-hidden="true"></div></div>
+  <a href="#main" class="skip-link">Skip to main content</a>
+  <noscript>
+    <main id="main">
+      <h1>SafeGram - secure messenger</h1>
+      <section>
+        <h2>Functions</h2>
+        <p>Chats, AI assistant, encrypted attachments, and calls.</p>
+      </section>
+      <section>
+        <h2>Security</h2>
+        <p>End-to-end encryption, privacy-first search and local PIN lock.</p>
+      </section>
+    </main>
+  </noscript>
+  <div id="root">
+    <div class="sg-spinner" aria-hidden="true"></div>
+    <main id="main" class="sg-seo-fallback" aria-hidden="true">
+      <h1>SafeGram - secure messenger</h1>
+      <h2>Functions</h2>
+      <h2>Security</h2>
+    </main>
+  </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

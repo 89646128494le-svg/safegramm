@@ -30,6 +30,7 @@ import DMCall from '../components/DMCall';
 import ServerStrip from '../components/ServerStrip';
 import { getSocket, sendWebSocketMessage, subscribeToMessages } from '../services/websocket';
 import { isModerator } from '../utils/roles';
+import { hasLocalPin, verifyLocalPin } from '../services/pinLock';
 
 export default function AppShell() {
   const location = useLocation();
@@ -40,6 +41,9 @@ export default function AppShell() {
   const [showSafety, setShowSafety] = useState(false); 
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const [activeCall, setActiveCall] = useState<any>(null);
+  const [pinLocked, setPinLocked] = useState<boolean>(hasLocalPin());
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
   const activeCallRef = React.useRef<any>(null);
   activeCallRef.current = activeCall;
   const userRef = React.useRef<any>(null);
@@ -52,6 +56,16 @@ export default function AppShell() {
     if (typeof localStorage !== 'undefined' && localStorage.getItem('token')) {
       getSocket();
     }
+  }, []);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && hasLocalPin()) {
+        setPinLocked(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
   // Подписка на сообщения WebSocket (работает и после переподключения — входящие звонки не теряются)
@@ -220,6 +234,18 @@ export default function AppShell() {
     setActiveCall(null);
   };
 
+  const unlockWithPin = async () => {
+    setPinError('');
+    if (!pinInput.trim()) return;
+    const valid = await verifyLocalPin(pinInput);
+    if (!valid) {
+      setPinError('Неверный PIN-код');
+      return;
+    }
+    setPinInput('');
+    setPinLocked(false);
+  };
+
   return (
     <motion.div 
       className="app-shell"
@@ -362,6 +388,77 @@ export default function AppShell() {
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ConnectionStatus />
+
+      {pinLocked && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 12000,
+            background: 'rgba(3, 7, 18, 0.96)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 360,
+              borderRadius: 14,
+              border: '1px solid rgba(148, 163, 184, 0.25)',
+              background: 'rgba(15, 23, 42, 0.95)',
+              padding: 20,
+            }}
+          >
+            <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>SafeGram Locked</h2>
+            <p style={{ margin: '0 0 12px', color: 'var(--text-secondary, #94a3b8)', fontSize: 13 }}>
+              Введите PIN для продолжения.
+            </p>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={12}
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value.replace(/[^\dA-Za-z]/g, '').slice(0, 12))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') unlockWithPin();
+              }}
+              placeholder="PIN"
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: 10,
+                border: '1px solid rgba(148, 163, 184, 0.3)',
+                background: 'rgba(15, 23, 42, 0.8)',
+                color: '#e2e8f0',
+                marginBottom: 10,
+              }}
+            />
+            {pinError && (
+              <div style={{ color: '#f87171', fontSize: 12, marginBottom: 10 }}>{pinError}</div>
+            )}
+            <button
+              type="button"
+              onClick={unlockWithPin}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: 10,
+                border: 'none',
+                background: 'linear-gradient(135deg, #22d3ee, #3b82f6)',
+                color: '#061225',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Разблокировать
+            </button>
+          </div>
+        </div>
+      )}
       
       <IncomingCallNotification
         call={incomingCall}

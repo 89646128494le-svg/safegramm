@@ -10,9 +10,11 @@ interface SettingsProps {
   user: any;
 }
 
+const DEFAULT_SERVER_URL = 'https://141.8.198.152.nip.io';
+
 export default function Settings({ user: _user }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<'notifications' | 'privacy' | 'themes' | 'security' | 'connection'>('notifications');
-  const [serverUrl, setServerUrl] = useState('');
+  const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL);
   const [serverUrlSaving, setServerUrlSaving] = useState(false);
   const hasElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
   const [notifications, setNotifications] = useState({
@@ -46,7 +48,7 @@ export default function Settings({ user: _user }: SettingsProps) {
     if (!(window as any).electronAPI) return;
     setServerUrlSaving(true);
     try {
-      await (window as any).electronAPI.setConfig('serverUrl', serverUrl.trim() || 'http://localhost:8080');
+      await (window as any).electronAPI.setConfig('serverUrl', serverUrl.trim() || DEFAULT_SERVER_URL);
       if (window.confirm('Адрес сервера сохранён. Перезагрузить приложение для применения?')) {
         window.location.reload();
       }
@@ -61,7 +63,11 @@ export default function Settings({ user: _user }: SettingsProps) {
     try {
       if (hasElectron && (window as any).electronAPI) {
         const config = await (window as any).electronAPI.getConfig();
-        if (config && config.serverUrl != null) setServerUrl(String(config.serverUrl));
+        if (config && config.serverUrl != null && String(config.serverUrl).trim()) {
+          setServerUrl(String(config.serverUrl));
+        } else {
+          setServerUrl(DEFAULT_SERVER_URL);
+        }
       }
       const notifData = await apiClient.get('/api/users/me/notifications');
       if (notifData) setNotifications(prev => ({ ...prev, ...notifData }));
@@ -247,14 +253,14 @@ export default function Settings({ user: _user }: SettingsProps) {
         {activeTab === 'connection' && hasElectron && (
           <div className="settings-section">
             <h3>Подключение к серверу</h3>
-            <p className="settings-hint">Укажите адрес API (например, туннель ngrok или ваш ПК). По умолчанию — localhost.</p>
+            <p className="settings-hint">Укажите адрес API (например, туннель ngrok или ваш ПК). По умолчанию — https://141.8.198.152.nip.io.</p>
             <div className="setting-item">
               <label>Адрес сервера (API)</label>
               <input
                 type="url"
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
-                placeholder="https://your-tunnel.ngrok.io или http://localhost:8080"
+                placeholder="https://your-tunnel.ngrok.io или https://141.8.198.152.nip.io"
                 className="settings-input"
               />
             </div>

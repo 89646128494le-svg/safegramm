@@ -46,6 +46,7 @@ import { ConfirmModal, PromptModal } from './Modal';
 import { getChatBackground, getChatColor } from '../services/appearance';
 import AppearanceSettings from './AppearanceSettings';
 import { UsernameWithRole } from './RoleBadge';
+import { decryptVaultBlob, encryptFileForVault, saveVaultRecord, VaultEnvelope } from '../services/vault';
 
 const MAX_MESSAGE_LENGTH = 4096;
 
@@ -54,6 +55,7 @@ interface Message {
   chatId: string;
   senderId: string;
   text: string;
+  ciphertext?: string;
   attachmentUrl?: string;
   replyTo?: string;
   replyToMessage?: {
@@ -91,6 +93,7 @@ interface Message {
     type: string;
     size: number;
     previewUrl?: string;
+    vault?: VaultEnvelope;
   };
   editHistory?: Array<{
     text: string;
@@ -465,20 +468,21 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   }, [chatId, currentUser.id]);
 
   // Загрузка группового ключа
-  const loadGroupKey = useCallback(async () => {
-    if (!chatId) return;
+  const loadGroupKey = useCallback(async (): Promise<CryptoKey | null> => {
+    if (!chatId) return null;
     
     try {
       const keyData = await api(`/api/chats/${chatId}/group-key`);
       if (keyData.wrappedKey) {
         const createdBy = keyData.createdBy != null ? String(keyData.createdBy) : '';
-        if (!createdBy) return;
+        if (!createdBy) return null;
         const creatorKey = await api(`/api/users/${createdBy}/public_key`);
         if (creatorKey.publicKeyJwk) {
           const unwrappedKey = await unwrapKeyFromEnvelope(keyData.wrappedKey, creatorKey.publicKeyJwk, chatId);
           setGroupKey(unwrappedKey);
           setGroupKeyVersion(keyData.keyVersion || 0);
           setIsE2EEEnabled(true);
+          return unwrappedKey;
         }
       }
     } catch (e: any) {
@@ -490,6 +494,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         setIsE2EEEnabled(false);
       }
     }
+    return null;
   }, [chatId, initializeGroupE2EE]);
 
   // Обновление группового ключа (при изменении состава)
@@ -922,6 +927,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               chatId: msgChatId,
               senderId: messageData.senderId || messageData.sender_id,
               text: messageData.text || '',
+              ciphertext: messageData.ciphertext,
               attachmentUrl: messageData.attachmentUrl || messageData.attachment_url,
               attachmentDuration: messageData.attachmentDuration ?? messageData.attachment_duration,
               replyTo: messageData.replyTo || messageData.reply_to,
@@ -1258,6 +1264,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     };
   }, [chatId, currentUser.id, loadMessages, loadUsers]);
 
+  useEffect(() => {
+    if (!chatId || !isE2EEEnabled) return;
+    const key = `safegram_e2ee_notice_${chatId}`;
+    if (localStorage.getItem(key) === '1') return;
+    localStorage.setItem(key, '1');
+    showToast('E2EE инициализировано', 'info');
+  }, [chatId, isE2EEEnabled]);
+
   // Опрос новых сообщений каждые 4 с (fallback, если WebSocket не доставил)
   useEffect(() => {
     if (!chatId || selectedThreadId) return;
@@ -1354,6 +1368,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       return;
     }
 
+    setIsLoading(true);
     try {
       const payload: any = {
         text: finalText || null,
@@ -1362,11 +1377,23 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         stickerId: stickerId || null,
         expiresMs: expiresMs || null
       };
-      
+
+      const isGroupLike = chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel';
+      let activeGroupKey = groupKey;
+
+      // Гарантируем инициализацию E2EE ключа до отправки
+      if (isE2EEEnabled && isGroupLike && finalText && !activeGroupKey) {
+        activeGroupKey = await loadGroupKey();
+      }
+
       // Шифруем текст для групп с E2EE
-      if (isE2EEEnabled && groupKey && finalText && (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel')) {
+      if (isE2EEEnabled && isGroupLike && finalText) {
+        if (!activeGroupKey) {
+          showToast('E2EE ключ еще не готов. Попробуйте отправить через секунду.', 'warning');
+          return;
+        }
         try {
-          const ciphertext = await encryptPlaintext(groupKey, finalText);
+          const ciphertext = await encryptPlaintext(activeGroupKey, finalText);
           payload.ciphertext = ciphertext;
           payload.text = null; // Не отправляем открытый текст
         } catch (e) {
@@ -1379,6 +1406,36 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       if (selectedThreadId || threadId) {
         payload.threadId = threadId || selectedThreadId;
       }
+
+      // Проверяем онлайн статус до создания временного сообщения
+      if (!isOnline()) {
+        const queueId = addToOfflineQueue({
+          chatId,
+          text: messageText,
+          attachmentUrl,
+          replyToId: replyingTo?.id,
+          type: attachmentUrl ? 'media' : 'text',
+          data: payload
+        });
+
+        const queuedMessage: Message = {
+          id: queueId,
+          chatId,
+          senderId: currentUser.id,
+          text: messageText || '',
+          attachmentUrl,
+          replyTo: replyingTo?.id,
+          replyToMessage: replyingTo,
+          threadId,
+          createdAt: Date.now(),
+          sending: true
+        };
+
+        setMessages(prev => [...prev, queuedMessage]);
+        showToast('Сообщение будет отправлено при восстановлении связи', 'info');
+        return;
+      }
+
       // Оптимистичное обновление - добавляем сообщение сразу
       const tempId = 'temp-' + Date.now();
       const optimisticMessage: Message = {
@@ -1386,7 +1443,6 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         chatId,
         senderId: currentUser.id,
         text: finalText || '',
-        uploadProgress: 0,
         attachmentUrl: attachmentUrl || undefined,
         replyTo: replyingTo?.id || undefined,
         stickerId: stickerId || undefined,
@@ -1404,38 +1460,6 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       }, 0);
       
       try {
-        // Проверяем онлайн статус
-        if (!isOnline()) {
-          // Добавляем в офлайн очередь
-          const queueId = addToOfflineQueue({
-            chatId,
-            text: messageText,
-            attachmentUrl,
-            replyToId: replyingTo?.id,
-            type: attachmentUrl ? 'media' : 'text',
-            data: payload
-          });
-          
-          // Показываем оптимистичное сообщение
-          const optimisticMessage: Message = {
-            id: queueId,
-            chatId,
-            senderId: currentUser.id,
-            text: messageText,
-            attachmentUrl,
-            replyTo: replyingTo?.id,
-            replyToMessage: replyingTo,
-            threadId,
-            createdAt: Date.now(),
-            uploadProgress: 100,
-            sending: true
-          };
-          
-          setMessages(prev => [...prev, optimisticMessage]);
-          showToast('Сообщение будет отправлено при восстановлении связи', 'info');
-          return;
-        }
-
         flushWebSocketBatch();
         const response = await api(`/api/chats/${chatId}/messages`, 'POST', payload);
         const realId = response.id;
@@ -1445,6 +1469,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           id: realId,
           createdAt: typeof response.createdAt === 'string' ? new Date(response.createdAt).getTime() : (typeof response.createdAt === 'number' ? response.createdAt : Date.now()),
           expiresAt: response.expiresAt ? (typeof response.expiresAt === 'string' ? new Date(response.expiresAt).getTime() : response.expiresAt) : m.expiresAt,
+          uploadProgress: 100,
+          sending: false,
         } : m));
         
         // Убираем класс отправки и добавляем класс получения
@@ -1469,11 +1495,6 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         setReplyingTo(null);
         setEditingMessage(null);
         sendOptimized('typing', { chatId, isTyping: false });
-        
-        // Удаляем сообщение из офлайн очереди, если оно там было
-        if (optimisticMessage.id.startsWith('offline_')) {
-          removeFromOfflineQueue(optimisticMessage.id);
-        }
       } catch (e: any) {
         // Удаляем временное сообщение при ошибке
         setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -1609,6 +1630,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         return;
       }
       let fileToUpload = file;
+      let vaultEnvelope: VaultEnvelope | null = null;
 
       // Сжимаем изображения если нужно
       if (!isVoiceMessage && file.type.startsWith('image/') && shouldCompressImage(file)) {
@@ -1618,6 +1640,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         } catch (e) {
           console.warn('Failed to compress image, using original:', e);
         }
+      }
+
+      // Vault-first: шифруем клиентом до загрузки
+      if (!isVoiceMessage) {
+        const encrypted = await encryptFileForVault(fileToUpload);
+        fileToUpload = encrypted.encryptedFile;
+        vaultEnvelope = encrypted.envelope;
       }
       
       const form = new FormData();
@@ -1635,7 +1664,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         chatId,
         senderId: currentUser.id,
         text: '',
-        attachmentUrl: URL.createObjectURL(fileToUpload),
+        attachmentUrl: URL.createObjectURL(file),
         uploadProgress: 0,
         createdAt: Date.now(),
       };
@@ -1667,11 +1696,33 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             setMessages(prev => prev.filter(m => m.id !== tempId));
             
             // Отправляем сообщение с вложением
-            await api(`/api/chats/${chatId}/messages`, 'POST', {
+            const messagePayload: any = {
               text: isVoiceMessage ? '' : text.trim() || '', // Для голосовых сообщений без текста
               attachmentUrl: attachmentUrl,
               replyTo: replyingTo?.id || null
-            });
+            };
+            if (vaultEnvelope) {
+              messagePayload.document = {
+                name: vaultEnvelope.name,
+                type: vaultEnvelope.type,
+                size: vaultEnvelope.size,
+                previewUrl: attachmentUrl,
+                vault: vaultEnvelope,
+              };
+            }
+
+            const created = await api(`/api/chats/${chatId}/messages`, 'POST', messagePayload);
+
+            if (vaultEnvelope) {
+              const createdId = created?.id || created?.message?.id || `vault-${Date.now()}`;
+              saveVaultRecord({
+                id: createdId,
+                chatId,
+                attachmentUrl,
+                createdAt: Date.now(),
+                envelope: vaultEnvelope,
+              });
+            }
             
             if (!isVoiceMessage) {
               setText('');
@@ -1681,7 +1732,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             await loadMessages(undefined, false);
             
             if (!isVoiceMessage) {
-              showToast('Файл загружен', 'success');
+              showToast(vaultEnvelope ? 'Файл зашифрован и отправлен в Vault' : 'Файл загружен', 'success');
             }
           } catch (e: any) {
             setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -1689,7 +1740,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           }
         } else {
           setMessages(prev => prev.filter(m => m.id !== tempId));
-          const errorData = JSON.parse(xhr.responseText || '{}');
+          let errorData: any = {};
+          try {
+            errorData = JSON.parse(xhr.responseText || '{}');
+          } catch {
+            errorData = {};
+          }
           throw new Error(errorData.error || errorData.detail || 'upload_error');
         }
       });
@@ -1762,43 +1818,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   
   // Отправка документа
   const sendDocument = async (file: File) => {
-    try {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        showToast(`Файл слишком большой. Макс. ${MAX_ATTACHMENT_MB} МБ`, 'error');
-        return;
-      }
-      const form = new FormData();
-      form.append('file', file);
-      form.append('kind', 'document');
-      
-      const response = await fetch(`${getApiBaseUrl()}/api/chats/${chatId}/attach`, {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') },
-        body: form
-      });
-      
-      if (!response.ok) {
-        throw new Error('Ошибка загрузки документа');
-      }
-      
-      const data = await response.json();
-      const attachmentUrl = data.url || data.attachmentUrl;
-      
-      await api(`/api/chats/${chatId}/messages`, 'POST', {
-        document: {
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          previewUrl: attachmentUrl
-        },
-        attachmentUrl
-      });
-      
-      await loadMessages(undefined, false);
-      showToast('Документ отправлен', 'success');
-    } catch (e: any) {
-      showToast(getErrorMessage(e, 'Не удалось отправить документ.'), 'error');
-    }
+    await sendFile(file, false);
   };
 
   // Закрепить сообщение
@@ -3442,13 +3462,53 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       <div style={{ fontSize: '32px' }}>📄</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                          {msg.document.name}
+                          {msg.document.vault ? `🔐 ${msg.document.name}` : msg.document.name}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                           {msg.document.type.toUpperCase()} • {(msg.document.size / 1024).toFixed(1)} KB
                         </div>
                       </div>
-                      {msg.document.previewUrl && (
+                      {msg.document.vault && msg.attachmentUrl && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const attachmentUrl = msg.attachmentUrl!.startsWith('http')
+                                ? msg.attachmentUrl!
+                                : `${getApiBaseUrl()}${msg.attachmentUrl!.startsWith('/') ? '' : '/'}${msg.attachmentUrl!}`;
+                              const resp = await fetch(attachmentUrl, {
+                                headers: { Authorization: 'Bearer ' + localStorage.getItem('token') },
+                              });
+                              if (!resp.ok) throw new Error('vault_download_failed');
+                              const encryptedBlob = await resp.blob();
+                              const decryptedBlob = await decryptVaultBlob(encryptedBlob, msg.document.vault);
+                              const blobUrl = URL.createObjectURL(decryptedBlob);
+                              const a = document.createElement('a');
+                              a.href = blobUrl;
+                              a.download = msg.document.vault.name || msg.document.name || 'file.bin';
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
+                            } catch (e: any) {
+                              showToast(getErrorMessage(e, 'Не удалось расшифровать файл Vault.'), 'error');
+                            }
+                          }}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                            background: 'rgba(56, 189, 248, 0.15)',
+                            color: '#7dd3fc',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Расшифровать
+                        </button>
+                      )}
+                      {msg.document.previewUrl && !msg.document.vault && (
                         <img src={msg.document.previewUrl} alt="Preview" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px' }} />
                       )}
                     </div>
@@ -3507,7 +3567,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       </div>
                     </div>
                   )}
-                  {msg.attachmentUrl && (
+                  {msg.attachmentUrl && !msg.document?.vault && (
                     <div className="message-attachment">
                       {(() => {
                         // Формируем полный URL для медиафайла
@@ -4448,4 +4508,3 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     </div>
   );
 }
-

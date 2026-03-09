@@ -6,7 +6,9 @@
   "main": "main/main.js",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:web\" \"npm run dev:electron\"",
+    "dev": "npm run dev:standalone",
+    "dev:standalone": "npm run build:web && npx electron .",
+    "dev:webbridge": "concurrently \"npm run dev:web\" \"npm run dev:electron\"",
     "dev:web": "cd ../web && npm run dev",
     "dev:electron": "node scripts/wait-and-run.js",
     "build": "npm run build:web && npm run build:assets && npm run build:electron",
