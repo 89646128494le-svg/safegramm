@@ -77,6 +77,14 @@ func TestEmailTemplates(db *gorm.DB) gin.HandlerFunc {
 			err = email.SendAccountDeletedConfirmation(req.Email, username, appURL+"/support")
 		case "digest":
 			err = email.SendUnreadDigest(req.Email, username, 4, 19, appURL+"/app/chats")
+		case "admin_message":
+			err = email.SendAdminMessage(req.Email, username, "Это тестовое письмо от администрации SafeGram.", "Открыть SafeGram", appURL+"/app/chats")
+		case "maintenance":
+			err = email.SendMaintenanceNotification(req.Email, username, "10.03.2026 23:59", "Плановое обновление инфраструктуры и системы уведомлений.")
+		case "recruit_approved":
+			err = email.SendRecruitApproved(req.Email, username)
+		case "recruit_declined":
+			err = email.SendRecruitDeclined(req.Email, username, "Тестовый отказ для проверки шаблона.")
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": "unknown_template",
@@ -85,7 +93,8 @@ func TestEmailTemplates(db *gorm.DB) gin.HandlerFunc {
 					"group_invite", "security", "locked", "premium", "backup",
 					"backup_regenerated", "email_change_verify", "email_changed",
 					"premium_receipt", "premium_expiring", "export_ready",
-					"account_deleted", "digest",
+					"account_deleted", "digest", "admin_message", "maintenance",
+					"recruit_approved", "recruit_declined",
 				},
 			})
 			return

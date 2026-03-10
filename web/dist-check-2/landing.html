@@ -1,0 +1,179 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SafeGram — официальный сайт</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: rgba(15, 23, 42, 0.82);
+      --ink: #e2e8f0;
+      --muted: #9fb0c7;
+      --accent: #22d3ee;
+      --accent2: #3b82f6;
+      --border: rgba(148, 163, 184, 0.18);
+      --glow: rgba(34, 211, 238, 0.24);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Bahnschrift", "Trebuchet MS", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 10% 10%, rgba(34, 211, 238, 0.12), transparent 45%),
+                  radial-gradient(circle at 90% 0%, rgba(59, 130, 246, 0.16), transparent 40%),
+                  var(--bg);
+      color: var(--ink);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -30% 10% auto -20%;
+      height: 60vh;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.08), transparent 60%);
+      filter: blur(40px);
+      z-index: -1;
+    }
+    a { color: inherit; text-decoration: none; }
+    .shell { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: 0.08em; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 0 18px var(--glow); }
+    .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+    .hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; align-items: center; padding: 32px 0 18px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 20px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35); animation: rise .8s ease both; }
+    .title { font-family: "Georgia", "Times New Roman", serif; font-size: 36px; line-height: 1.15; margin: 0 0 12px; }
+    .subtitle { color: var(--muted); margin: 0 0 18px; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: rgba(15, 23, 42, 0.7); font-size: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .btn { padding: 12px 18px; border-radius: 999px; border: 1px solid transparent; font-weight: 700; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+    .primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #061225; box-shadow: 0 10px 24px rgba(34, 211, 238, 0.22); }
+    .ghost { background: transparent; color: var(--ink); border-color: var(--border); }
+    .btn:hover { transform: translateY(-1px); }
+    .stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    .stat { padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.02); }
+    .preview {
+      min-height: 280px;
+      border-radius: 20px;
+      background: linear-gradient(155deg, rgba(59, 130, 246, 0.18), rgba(34, 211, 238, 0.12)),
+                  radial-gradient(circle at 25% 20%, rgba(255, 255, 255, 0.08), transparent 35%),
+                  #0a0f1a;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: rgba(226, 232, 240, 0.7);
+      text-align: center;
+      padding: 20px;
+      animation: float 6s ease-in-out infinite;
+    }
+    .section-title { font-family: "Georgia", "Times New Roman", serif; font-size: 26px; margin: 32px 0 14px; }
+    .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    footer { margin: 32px 0 12px; color: var(--muted); font-size: 13px; }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="logo"><span class="dot"></span> SAFEGRAM</div>
+      <nav class="nav">
+        <a class="btn ghost" href="#features">Возможности</a>
+        <a class="btn ghost" href="#pricing">Safe‑X</a>
+        <a class="btn ghost" href="#downloads">Скачать</a>
+        <a class="btn primary" href="/login">Войти / Регистрация</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="card" style="--delay:.1s;">
+        <div class="pill">Локальный релиз 2025</div>
+        <h1 class="title">Безопасный мессенджер, где чаты, голос и видео работают вместе.</h1>
+        <p class="subtitle">SafeGram объединяет личные сообщения, каналы и серверы. Быстрый вход, приватность и ясный интерфейс — без лишнего.</p>
+        <div class="actions">
+          <a class="btn primary" href="/login">Открыть веб‑версию</a>
+          <a class="btn ghost" href="#downloads">Скачать приложения</a>
+        </div>
+        <div class="stats">
+          <div class="stat">Сообщения бесплатны</div>
+          <div class="stat">Голос и видео в реальном времени</div>
+          <div class="stat">Safe‑X с расширенными возможностями</div>
+        </div>
+      </div>
+      <div class="preview">SAFE • SECURE • VOICE</div>
+    </section>
+
+    <section id="features">
+      <h2 class="section-title">Возможности SafeGram</h2>
+      <div class="grid">
+        <div class="card" style="--delay:.15s;">
+          <div class="pill">Чаты и каналы</div>
+          <p class="subtitle">Личные диалоги, группы, публичные каналы и серверы — всё в одном месте с понятной навигацией.</p>
+        </div>
+        <div class="card" style="--delay:.2s;">
+          <div class="pill">Голос и видео</div>
+          <p class="subtitle">Созвоны, демонстрация экрана, уведомления о звонке и быстрый переход из чата в конференцию.</p>
+        </div>
+        <div class="card" style="--delay:.25s;">
+          <div class="pill">Безопасность</div>
+          <p class="subtitle">Контроль доступа, приватность, лимиты и защита от спама для стабильной работы.</p>
+        </div>
+        <div class="card" style="--delay:.3s;">
+          <div class="pill">Safety‑X</div>
+          <p class="subtitle">Расширенные функции, персонализация, больше лимитов и приоритетная поддержка.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="pricing">
+      <h2 class="section-title">Safe‑X планы</h2>
+      <div class="grid">
+        <div class="card">
+          <div class="pill">Free</div>
+          <p class="subtitle"><strong>0 ₽</strong> — личные чаты, базовые звонки, стандартные каналы.</p>
+        </div>
+        <div class="card">
+          <div class="pill">Lite</div>
+          <p class="subtitle"><strong>49 ₽/мес</strong> — темы, расширенные лимиты, быстрый поиск.</p>
+        </div>
+        <div class="card">
+          <div class="pill">Pro</div>
+          <p class="subtitle"><strong>149 ₽/мес</strong> — HD‑видео, демонстрация экрана, приоритетные звонки.</p>
+        </div>
+        <div class="card">
+          <div class="pill">Team</div>
+          <p class="subtitle"><strong>399 ₽/мес</strong> — серверы, роли, модерация и коллективные пространства.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="downloads">
+      <h2 class="section-title">Скачать</h2>
+      <div class="grid">
+        <div class="card">
+          <div class="pill">Windows</div>
+          <p class="subtitle">Установщик SafeGram для ПК (exe).</p>
+          <a class="btn primary" href="/downloads/safegram-setup.exe">Скачать .exe</a>
+        </div>
+        <div class="card">
+          <div class="pill">Android</div>
+          <p class="subtitle">APK для Android и мобильной версии.</p>
+          <a class="btn ghost" href="/downloads/safegram.apk">Скачать .apk</a>
+        </div>
+        <div class="card">
+          <div class="pill">Web</div>
+          <p class="subtitle">Веб‑версия с входом и регистрацией.</p>
+          <a class="btn ghost" href="/login">Открыть веб‑версию</a>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      SafeGram — локальный учебный проект. Для демонстрации используйте ваш ПК и локальную сеть.
+    </footer>
+  </div>
+</body>
+</html>

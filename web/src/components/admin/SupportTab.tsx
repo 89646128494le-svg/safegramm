@@ -110,7 +110,7 @@ export default function SupportTab() {
         return items[0]?.id || '';
       });
     } catch (error: any) {
-      showToast(getErrorMessage(error, 'Не удалось загрузить support tickets.'), 'error');
+      showToast(getErrorMessage(error, 'Не удалось загрузить тикеты техподдержки.'), 'error');
       setTickets([]);
       setSelectedTicketId('');
     } finally {
@@ -182,7 +182,7 @@ export default function SupportTab() {
       setReplyText('');
       await loadTickets();
       await loadThread(selectedTicket.userId);
-      showToast('Ответ отправлен в системный чат пользователя', 'success');
+      showToast('Ответ отправлен в чат «Техподдержка»', 'success');
     } catch (error: any) {
       showToast(getErrorMessage(error, 'Не удалось отправить ответ.'), 'error');
     } finally {
@@ -217,7 +217,7 @@ export default function SupportTab() {
             <h3 style={{ margin: 0, fontSize: '22px', fontWeight: 700 }}>Техподдержка</h3>
           </div>
           <p style={{ margin: 0, color: 'var(--subtle, #9ca3af)', lineHeight: 1.6 }}>
-            Реальные support tickets, связанные с системным чатом «Анонимная поддержка».
+            Тикеты и переписка пользователей в чате «Техподдержка».
           </p>
         </div>
 
@@ -431,7 +431,7 @@ export default function SupportTab() {
                       }}
                     >
                       <div style={{ fontSize: 11, marginBottom: 6, color: fromSupport ? 'rgba(255,255,255,0.82)' : 'var(--subtle, #9ca3af)' }}>
-                        {fromSupport ? 'Поддержка' : message.sender?.username || selectedTicket.user?.username || selectedTicket.userId}
+                        {fromSupport ? 'Техподдержка' : message.sender?.username || selectedTicket.user?.username || selectedTicket.userId}
                       </div>
                       <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>{message.text}</div>
                       <div style={{ fontSize: 11, marginTop: 8, color: fromSupport ? 'rgba(255,255,255,0.72)' : 'var(--subtle, #9ca3af)' }}>
@@ -455,7 +455,7 @@ export default function SupportTab() {
                   }
                 }}
                 rows={4}
-                placeholder="Ответ пойдёт в чат «Анонимная поддержка» пользователя..."
+                placeholder="Ответ появится в чате «Техподдержка» пользователя..."
                 style={{
                   width: '100%',
                   padding: '12px 14px',

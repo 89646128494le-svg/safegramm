@@ -172,7 +172,7 @@ export default function Pricing() {
           >
             <Wallet size={16} color="#6fc2ff" />
             <span style={{ fontSize: 13, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#b7c4e8' }}>
-              Premium billing • provider {provider} • mode {checkoutMode}
+              Premium
             </span>
           </div>
 
@@ -186,11 +186,10 @@ export default function Pricing() {
                 letterSpacing: '-0.04em',
               }}
             >
-              Тарифы SafeGram без ручных заявок и обходных путей.
+              Тарифы SafeGram
             </h1>
             <p style={{ margin: 0, fontSize: 18, lineHeight: 1.7, color: 'rgba(224,232,255,0.74)' }}>
-              Подписка теперь живёт как нормальная система: публичные планы, checkout, история оплат,
-              срок действия и единый premium status для web, desktop и mobile.
+              Выберите подходящий тариф, оформите подписку и управляйте статусом Premium в одном месте.
             </p>
           </div>
 
@@ -210,7 +209,7 @@ export default function Pricing() {
                 boxShadow: '0 20px 48px rgba(50, 95, 191, 0.28)',
               }}
             >
-              Открыть billing
+              Оформить подписку
               <ArrowRight size={18} />
             </Link>
             <div
@@ -227,8 +226,8 @@ export default function Pricing() {
             >
               <Shield size={18} color="#7cf2c4" />
               {provider === 'test'
-                ? 'Сейчас включён test-mode checkout для быстрого end-to-end прогона.'
-                : 'Провайдер оплаты активен, redirect checkout откроется по кнопке.'}
+                ? 'Сейчас доступно тестовое оформление подписки.'
+                : 'Оформление подписки откроется по кнопке.'}
             </div>
           </div>
         </div>
@@ -344,7 +343,7 @@ export default function Pricing() {
                     color: isCurrent ? '#eef2ff' : isPremium ? '#08101f' : '#eef2ff',
                   }}
                 >
-                  {isCurrent ? 'Текущий план' : plan.id === 'free' ? 'Начать бесплатно' : token ? 'Открыть checkout' : 'Войти и оформить'}
+                  {isCurrent ? 'Текущий план' : plan.id === 'free' ? 'Начать бесплатно' : token ? 'Оформить подписку' : 'Войти и оформить'}
                 </button>
               </motion.article>
             );
@@ -369,7 +368,7 @@ export default function Pricing() {
           >
             <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9fb0d7' }}>Срок действия</div>
             <div style={{ marginTop: 10, fontSize: 17, lineHeight: 1.65, color: 'rgba(238,242,255,0.78)' }}>
-              Premium больше не висит флагом навсегда. У пользователя есть `status`, `expiresAt` и история транзакций.
+              Статус Premium, срок действия и история оплат собраны в одном месте.
             </div>
           </div>
           <div
@@ -380,9 +379,9 @@ export default function Pricing() {
               border: '1px solid rgba(255,255,255,0.08)',
             }}
           >
-            <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9fb0d7' }}>Единый backend</div>
+            <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9fb0d7' }}>Единый статус</div>
             <div style={{ marginTop: 10, fontSize: 17, lineHeight: 1.65, color: 'rgba(238,242,255,0.78)' }}>
-              После активации web, desktop и mobile читают одинаковый premium state через `/api/premium` и `/api/users/me`.
+              После активации подписка сразу отображается в аккаунте.
             </div>
           </div>
           <div
@@ -395,7 +394,7 @@ export default function Pricing() {
           >
             <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9fb0d7' }}>Статус каталога</div>
             <div style={{ marginTop: 10, fontSize: 17, lineHeight: 1.65, color: 'rgba(238,242,255,0.78)' }}>
-              {loading ? 'Каталог обновляется...' : `Планы загружены из API. Активный checkout provider: ${provider}.`}
+              {loading ? 'Каталог обновляется...' : 'Планы загружены.'}
             </div>
           </div>
         </div>

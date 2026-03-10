@@ -255,7 +255,7 @@ export default function App() {
       return {
         eyebrow: 'Mobile access',
         title: 'Secure device sign in',
-        text: 'Use ID and password to enter the shared SafeGram backend. Registration still signs you in immediately for smoke testing.',
+        text: 'Use your ID and password to sign in to SafeGram. Registration signs you in right away.',
       };
     }
     if (authStep === 'email') {
@@ -304,7 +304,7 @@ export default function App() {
 
   const getChatCardSubtitle = useCallback((chat: ChatSummary) => {
     if (chat.lastMessage?.text) return chat.lastMessage.text;
-    if (chat.lastMessage?.ciphertext) return 'Encrypted message';
+    if (chat.lastMessage?.ciphertext) return 'Protected message';
     if (chat.lastMessage?.attachmentUrl) return 'Attachment';
     return 'No messages yet';
   }, []);
@@ -568,7 +568,7 @@ export default function App() {
             encrypted = true;
             if (isLiteCiphertext(item.ciphertext)) {
               const decrypted = await decryptForChat(chatId, item.ciphertext);
-              displayText = decrypted || 'Encrypted message (unavailable on this device)';
+              displayText = decrypted || 'Protected message (unavailable on this device)';
             } else {
               displayText = item.ciphertext;
             }
@@ -785,7 +785,7 @@ export default function App() {
       Alert.alert(
         'Support',
         response.chatId
-          ? 'Ticket created. Support replies will arrive in the anonymous support chat.'
+          ? 'Ticket created. Replies will arrive in Support.'
           : 'Ticket created.'
       );
       if (response.chatId) {
@@ -940,7 +940,7 @@ export default function App() {
     const normalized = await saveApiBase(apiInput);
     setApiBase(normalized);
     setApiInput(normalized);
-    Alert.alert('Saved', `API base: ${normalized}`);
+    Alert.alert('Saved', `Server: ${normalized}`);
   }, [apiInput]);
 
   const onToggleSecureMode = useCallback(async (next: boolean) => {
@@ -1050,14 +1050,14 @@ export default function App() {
             <View style={styles.sectionHeaderInline}>
               <View>
                 <Text style={styles.sectionTitle}>Connection</Text>
-                <Text style={styles.sectionSubtitle}>Shared backend for mobile, web and desktop.</Text>
+                <Text style={styles.sectionSubtitle}>Main SafeGram server for this device.</Text>
               </View>
               <View style={styles.statusPill}>
                 <Text style={styles.statusPillText}>{connectionHost}</Text>
               </View>
             </View>
 
-            <Text style={styles.fieldLabel}>API base</Text>
+            <Text style={styles.fieldLabel}>Server</Text>
             <TextInput
               value={apiInput}
               onChangeText={setApiInput}
@@ -1067,13 +1067,13 @@ export default function App() {
               placeholderTextColor="#6f7e99"
             />
             <Pressable style={styles.secondaryButton} onPress={onSaveApiBase}>
-              <Text style={styles.secondaryButtonText}>Save endpoint</Text>
+              <Text style={styles.secondaryButtonText}>Save server</Text>
             </Pressable>
           </GlassCard>
 
           <GlassCard>
             <Text style={styles.sectionTitle}>Account access</Text>
-            <Text style={styles.sectionSubtitle}>Tonight build keeps auth simple, but the flow supports email and cloud-code challenges.</Text>
+            <Text style={styles.sectionSubtitle}>Sign in with your account details. Additional verification may be requested when needed.</Text>
 
             <Text style={styles.fieldLabel}>Username</Text>
             <TextInput
@@ -1173,11 +1173,11 @@ export default function App() {
           <View style={styles.featureStrip}>
             <GlassCard style={styles.featureCard}>
               <Text style={styles.featureKicker}>Secure mode</Text>
-              <Text style={styles.featureText}>Ciphertext-only send path on mobile.</Text>
+              <Text style={styles.featureText}>Protected messages on this device.</Text>
             </GlassCard>
             <GlassCard style={styles.featureCard}>
-              <Text style={styles.featureKicker}>Shared backend</Text>
-              <Text style={styles.featureText}>Same account state as web and desktop.</Text>
+              <Text style={styles.featureKicker}>Secure sync</Text>
+              <Text style={styles.featureText}>Your chats stay in sync.</Text>
             </GlassCard>
           </View>
         </ScrollView>
@@ -1197,7 +1197,7 @@ export default function App() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.eyebrow}>Device profile</Text>
-                  <Text style={styles.cardTitle}>{user ? `@${user.username}` : 'SafeGram mobile'}</Text>
+                  <Text style={styles.cardTitle}>{user ? `@${user.username}` : 'SafeGram'}</Text>
                   <Text style={styles.cardSubtitle}>{connectionHost}</Text>
                 </View>
               </View>
@@ -1209,8 +1209,8 @@ export default function App() {
 
           <GlassCard>
             <Text style={styles.sectionTitle}>Connection</Text>
-            <Text style={styles.sectionSubtitle}>Keep all clients on the same backend endpoint.</Text>
-            <Text style={styles.fieldLabel}>API base</Text>
+            <Text style={styles.sectionSubtitle}>Connect this device to your SafeGram server.</Text>
+            <Text style={styles.fieldLabel}>Server</Text>
             <TextInput
               value={apiInput}
               onChangeText={setApiInput}
@@ -1220,7 +1220,7 @@ export default function App() {
               placeholderTextColor="#6f7e99"
             />
             <Pressable style={styles.primaryButton} onPress={onSaveApiBase}>
-              <Text style={styles.primaryButtonText}>Save API endpoint</Text>
+              <Text style={styles.primaryButtonText}>Save server</Text>
             </Pressable>
           </GlassCard>
 
@@ -1230,7 +1230,7 @@ export default function App() {
             <View style={styles.toggleRowCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.toggleTitle}>Secure mode</Text>
-                <Text style={styles.toggleText}>When enabled, mobile sends only `ciphertext` using `sg-lite-1`.</Text>
+                <Text style={styles.toggleText}>When enabled, messages are sent in protected mode on this device.</Text>
               </View>
               <Switch value={secureMode} onValueChange={onToggleSecureMode} />
             </View>
@@ -1238,14 +1238,14 @@ export default function App() {
 
           <GlassCard>
             <Text style={styles.sectionTitle}>Premium</Text>
-            <Text style={styles.sectionSubtitle}>Same subscription state as web and desktop.</Text>
+            <Text style={styles.sectionSubtitle}>Subscription status for this account.</Text>
 
             <View style={styles.pillRowWrap}>
               <View style={[styles.statusPill, premiumInfo?.isPremium ? styles.statusPillSecure : styles.statusPillPlain]}>
                 <Text style={styles.statusPillText}>{premiumInfo?.isPremium ? 'Premium active' : 'Free plan'}</Text>
               </View>
               <View style={styles.statusPill}>
-                <Text style={styles.statusPillText}>{premiumInfo?.provider ? `Provider ${premiumInfo.provider}` : 'Billing API'}</Text>
+                <Text style={styles.statusPillText}>{premiumInfo?.isPremium ? 'Premium active' : 'Subscription'}</Text>
               </View>
             </View>
 
@@ -1289,7 +1289,7 @@ export default function App() {
 
           <GlassCard>
             <Text style={styles.sectionTitle}>Support</Text>
-            <Text style={styles.sectionSubtitle}>Create a ticket and continue the conversation in the shared anonymous support chat.</Text>
+            <Text style={styles.sectionSubtitle}>Create a ticket and continue the conversation in Support.</Text>
 
             <Text style={styles.fieldLabel}>Category</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -1351,7 +1351,7 @@ export default function App() {
                 <Text style={styles.secondaryButtonText}>{supportLoading ? 'Refreshing tickets...' : 'Refresh tickets'}</Text>
               </Pressable>
               <Pressable style={styles.secondaryButtonWide} onPress={onOpenSupportPage}>
-                <Text style={styles.secondaryButtonText}>Open web support center</Text>
+                <Text style={styles.secondaryButtonText}>Open support page</Text>
               </Pressable>
             </View>
 
@@ -1442,7 +1442,7 @@ export default function App() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{selectedChatTitle}</Text>
-                  <Text style={styles.cardSubtitle}>Live DM view on {connectionHost}</Text>
+                  <Text style={styles.cardSubtitle}>Connection: {connectionHost}</Text>
                 </View>
               </View>
 
@@ -1477,7 +1477,7 @@ export default function App() {
               ListEmptyComponent={
                 <GlassCard style={styles.emptyStateCard}>
                   <Text style={styles.emptyStateTitle}>No messages yet</Text>
-                  <Text style={styles.emptyStateText}>Start the thread with a plain message or a secure ciphertext message.</Text>
+                  <Text style={styles.emptyStateText}>Start the conversation with a message or attachment.</Text>
                 </GlassCard>
               }
               renderItem={({ item }) => (
@@ -1618,7 +1618,7 @@ export default function App() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.eyebrow}>Encrypted inbox</Text>
-                    <Text style={styles.cardTitle}>{user ? `@${user.username}` : 'SafeGram mobile'}</Text>
+                    <Text style={styles.cardTitle}>{user ? `@${user.username}` : 'SafeGram'}</Text>
                     <Text style={styles.cardSubtitle}>{connectionHost}</Text>
                   </View>
                 </View>

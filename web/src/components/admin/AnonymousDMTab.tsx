@@ -54,7 +54,7 @@ export default function AnonymousDMTab() {
     } catch (e: any) {
       setMessages([]);
       setChatId(null);
-      const msg = e?.status === 404 ? 'Обновите сервер до последней версии для анонимных сообщений.' : getErrorMessage(e, 'Не удалось загрузить переписку');
+      const msg = e?.status === 404 ? 'Обновите сервер до последней версии для чатов техподдержки.' : getErrorMessage(e, 'Не удалось загрузить переписку');
       showToast(msg, 'error');
     } finally {
       setLoadMessagesLoading(false);
@@ -76,7 +76,7 @@ export default function AnonymousDMTab() {
       setMessages((prev) => [...prev, msg]);
       setSendText('');
     } catch (e: any) {
-      const msg = e?.status === 404 ? 'Обновите сервер до последней версии для анонимных сообщений.' : getErrorMessage(e, 'Ошибка отправки');
+      const msg = e?.status === 404 ? 'Обновите сервер до последней версии для чатов техподдержки.' : getErrorMessage(e, 'Ошибка отправки');
       showToast(msg, 'error');
     } finally {
       setSending(false);
@@ -106,7 +106,7 @@ export default function AnonymousDMTab() {
           Найти пользователя
         </h3>
         <p style={{ fontSize: '13px', color: 'var(--subtle, #9ca3af)', marginBottom: '8px' }}>
-          Сообщения придут в чат «Анонимная поддержка». Пользователь не узнает, кто написал.
+          Сообщение появится в чате «Техподдержка».
         </p>
         <div style={{ position: 'relative' }}>
           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--subtle)' }} />
@@ -187,7 +187,7 @@ export default function AnonymousDMTab() {
               gap: '8px',
             }}>
               <span>Пишете: {selectedUser.username}</span>
-              <span style={{ fontSize: '12px', fontWeight: '400', color: 'var(--subtle)' }}>(пользователь видит «Поддержка»)</span>
+              <span style={{ fontSize: '12px', fontWeight: '400', color: 'var(--subtle)' }}>(чат пользователя: «Техподдержка»)</span>
             </div>
             <div style={{
               flex: 1,
@@ -245,7 +245,7 @@ export default function AnonymousDMTab() {
                 value={sendText}
                 onChange={(e) => setSendText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                placeholder="Сообщение от имени «Поддержка»..."
+                placeholder="Сообщение для чата «Техподдержка»..."
                 rows={2}
                 style={{
                   flex: 1,

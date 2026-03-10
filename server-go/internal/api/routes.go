@@ -36,6 +36,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	api.POST("/auth/verify-email", AuthRateLimitMiddleware(), VerifyEmail(db))
 	api.POST("/auth/forgot-password", AuthRateLimitMiddleware(), ForgotPassword(db))
 	api.POST("/auth/reset-password", AuthRateLimitMiddleware(), ResetPassword(db))
+	api.GET("/exports/:token", DownloadAccountExport())
 
 	// Тестовый endpoint для просмотра всех email шаблонов (только development)
 	api.POST("/test/email", AuthRateLimitMiddleware(), TestEmailTemplates(db))
@@ -92,6 +93,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/users/me/2fa/disable", Disable2FA(db))
 	protected.POST("/users/me/recovery", GenerateRecoveryCodes(db))
 	protected.POST("/users/me/pin", SetPIN(db))
+	protected.POST("/users/me/email/change/request", RequestEmailChange(db))
+	protected.POST("/users/me/email/change/confirm", ConfirmEmailChange(db))
 
 	// Сессии
 	protected.GET("/users/me/sessions", GetSessions(db))
@@ -372,6 +375,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 
 	// Персональные сообщения от администрации и Security Dashboard
 	protected.POST("/admin/send-email", RequireAdmin(db), RequireAdmin2FA(db, cfg), SendPersonalEmail(db))
+	protected.POST("/admin/email/unread-digest", RequireAdmin(db), RequireAdmin2FA(db, cfg), SendUnreadDigestBatch(db))
+	protected.POST("/admin/email/premium-expiring", RequireAdmin(db), RequireAdmin2FA(db, cfg), SendPremiumExpiringBatch(db))
 	protected.GET("/admin/anonymous-chat/:targetUserId", RequireAdmin(db), RequireAdmin2FA(db, cfg), AdminGetAnonymousChat(db))
 	protected.POST("/admin/anonymous-dm", RequireAdmin(db), RequireAdmin2FA(db, cfg), AdminSendAnonymousDM(db, wsHub))
 	protected.GET("/admin/security/sessions", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminSecuritySessions(db))

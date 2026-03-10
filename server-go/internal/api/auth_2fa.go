@@ -10,6 +10,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"safegram-server/internal/email"
 	"safegram-server/internal/models"
 )
 
@@ -61,6 +62,11 @@ func Enable2FA(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": err.Error()})
 			return
 		}
+		var user models.User
+		if err := db.Select("id", "username", "email").First(&user, "id = ?", userIDStr).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
 		if !totp.Validate(req.Code, req.Secret) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_code"})
 			return
@@ -69,7 +75,18 @@ func Enable2FA(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "2FA включена"})
+		recordSuspiciousActivity(db, user.ID, "2fa_enable", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"issuer": "SafeGram",
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			queueEmailJob("security_alert_2fa_enable", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendSecurityAlert(emailAddress, user.Username, "Two-factor authentication was enabled for your SafeGram account.", settingsURL())
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "2FA enabled"})
 	}
 }
 
@@ -105,7 +122,18 @@ func Disable2FA(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		db.Model(&user).Updates(map[string]interface{}{"two_fa_secret": "", "recovery_codes": ""})
-		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "2FA отключена"})
+		recordSuspiciousActivity(db, user.ID, "2fa_disable", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"source": "settings",
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			queueEmailJob("security_alert_2fa_disable", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendSecurityAlert(emailAddress, user.Username, "Two-factor authentication was disabled for your SafeGram account.", settingsURL())
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "2FA disabled"})
 	}
 }
 
@@ -126,6 +154,12 @@ func GenerateRecoveryCodes(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
+		var user models.User
+		if err := db.Select("id", "username", "email", "recovery_codes").First(&user, "id = ?", userIDStr).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		hadRecoveryCodes := strings.TrimSpace(user.RecoveryCodes) != "" && strings.TrimSpace(user.RecoveryCodes) != "[]"
 		const numCodes = 10
 		codes := make([]string, numCodes)
 		hashes := make([]string, numCodes)
@@ -140,7 +174,34 @@ func GenerateRecoveryCodes(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"codes": codes, "message": "Сохраните коды. Каждый можно использовать один раз."})
+		recordSuspiciousActivity(db, user.ID, "recovery_codes_generated", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"regenerated": hadRecoveryCodes,
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			codesPayload := strings.Join(codes, "\n")
+			if hadRecoveryCodes {
+				queueEmailJob("backup_codes_regenerated", map[string]interface{}{
+					"userId": user.ID,
+					"email":  maskEmail(emailAddress),
+				}, func() error {
+					return email.SendBackupCodesRegenerated(emailAddress, user.Username, codesPayload)
+				})
+			} else {
+				queueEmailJob("backup_codes_created", map[string]interface{}{
+					"userId": user.ID,
+					"email":  maskEmail(emailAddress),
+				}, func() error {
+					return email.SendBackupCodes(emailAddress, user.Username, codesPayload)
+				})
+			}
+			queueEmailJob("security_alert_recovery_codes", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendSecurityAlert(emailAddress, user.Username, "New backup recovery codes were generated for your SafeGram account.", settingsURL())
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"codes": codes, "message": "Save these codes. Each code can be used only once."})
 	}
 }
 
@@ -171,7 +232,7 @@ func SetPIN(db *gorm.DB) gin.HandlerFunc {
 		}
 		pin := strings.TrimSpace(req.PIN)
 		if len(pin) < 4 || len(pin) > 12 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "PIN от 4 до 12 символов"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "PIN must be between 4 and 12 characters"})
 			return
 		}
 		pinHash, err := bcrypt.GenerateFromPassword([]byte(pin), bcrypt.DefaultCost)
@@ -180,6 +241,17 @@ func SetPIN(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		db.Model(&user).Update("pin_hash", string(pinHash))
-		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "PIN установлен"})
+		recordSuspiciousActivity(db, user.ID, "pin_set", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"source": "settings",
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			queueEmailJob("security_alert_pin_set", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendSecurityAlert(emailAddress, user.Username, "Cloud PIN was set or updated for your SafeGram account.", settingsURL())
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "PIN set"})
 	}
 }

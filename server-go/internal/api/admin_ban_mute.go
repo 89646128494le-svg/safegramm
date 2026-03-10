@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"safegram-server/internal/email"
 	"safegram-server/internal/models"
 )
 
@@ -33,13 +34,18 @@ func GetAdminBans(db *gorm.DB) gin.HandlerFunc {
 		out := make([]gin.H, 0, len(list))
 		for _, b := range list {
 			out = append(out, gin.H{
-				"id":        b.ID,
-				"userId":    b.UserID,
-				"username":  b.Username,
-				"reason":    b.Reason,
-				"bannedBy":  b.AdminID,
-				"bannedAt":  b.CreatedAt.Unix() * 1000,
-				"expiresAt": func() interface{} { if b.ExpiresAt != nil { return b.ExpiresAt.Unix() * 1000 }; return nil }(),
+				"id":       b.ID,
+				"userId":   b.UserID,
+				"username": b.Username,
+				"reason":   b.Reason,
+				"bannedBy": b.AdminID,
+				"bannedAt": b.CreatedAt.Unix() * 1000,
+				"expiresAt": func() interface{} {
+					if b.ExpiresAt != nil {
+						return b.ExpiresAt.Unix() * 1000
+					}
+					return nil
+				}(),
 				"permanent": b.ExpiresAt == nil,
 				"active":    true,
 			})
@@ -108,6 +114,22 @@ func CreateAdminBan(db *gorm.DB) gin.HandlerFunc {
 		db.Model(&user).Updates(map[string]interface{}{"status": "banned", "roles": "[]"})
 		logRoleBanHistory(db, body.UserID, adminIDStr, "ban", user.Roles, "[]", body.Reason)
 		logAdminAudit(db, adminIDStr, body.UserID, "block_user", body.Reason, c.ClientIP(), c.GetHeader("User-Agent"))
+		recordSuspiciousActivity(db, user.ID, "account_locked", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"reason":    body.Reason,
+			"permanent": body.Permanent,
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			reason := body.Reason
+			if reason == "" {
+				reason = "Доступ к аккаунту временно ограничен администрацией."
+			}
+			queueEmailJob("account_locked", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendAccountLockedNotification(emailAddress, user.Username, reason, supportCenterURL())
+			})
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true, "id": rec.ID})
 	}
 }
@@ -161,15 +183,20 @@ func GetAdminMutes(db *gorm.DB) gin.HandlerFunc {
 		out := make([]gin.H, 0, len(list))
 		for _, m := range list {
 			out = append(out, gin.H{
-				"id":        m.ID,
-				"userId":    m.UserID,
-				"username":  m.Username,
-				"chatId":    m.ChatID,
-				"chatName":  m.ChatName,
-				"reason":    m.Reason,
-				"mutedBy":   m.AdminID,
-				"mutedAt":   m.CreatedAt.Unix() * 1000,
-				"expiresAt": func() interface{} { if m.ExpiresAt != nil { return m.ExpiresAt.Unix() * 1000 }; return nil }(),
+				"id":       m.ID,
+				"userId":   m.UserID,
+				"username": m.Username,
+				"chatId":   m.ChatID,
+				"chatName": m.ChatName,
+				"reason":   m.Reason,
+				"mutedBy":  m.AdminID,
+				"mutedAt":  m.CreatedAt.Unix() * 1000,
+				"expiresAt": func() interface{} {
+					if m.ExpiresAt != nil {
+						return m.ExpiresAt.Unix() * 1000
+					}
+					return nil
+				}(),
 				"permanent": m.ExpiresAt == nil,
 				"active":    true,
 			})
@@ -281,14 +308,19 @@ func GetAdminModerationHistory(db *gorm.DB) gin.HandlerFunc {
 				kind: "ban",
 				ts:   b.CreatedAt,
 				obj: gin.H{
-					"type":      "ban",
-					"id":        b.ID,
-					"userId":    b.UserID,
-					"username":  b.Username,
-					"reason":    b.Reason,
-					"bannedBy":  b.AdminID,
-					"bannedAt":  b.CreatedAt.Unix() * 1000,
-					"expiresAt": func() interface{} { if b.ExpiresAt != nil { return b.ExpiresAt.Unix() * 1000 }; return nil }(),
+					"type":     "ban",
+					"id":       b.ID,
+					"userId":   b.UserID,
+					"username": b.Username,
+					"reason":   b.Reason,
+					"bannedBy": b.AdminID,
+					"bannedAt": b.CreatedAt.Unix() * 1000,
+					"expiresAt": func() interface{} {
+						if b.ExpiresAt != nil {
+							return b.ExpiresAt.Unix() * 1000
+						}
+						return nil
+					}(),
 					"permanent": b.ExpiresAt == nil,
 					"active":    isActiveUntil(b.ExpiresAt, b.RevokedAt),
 				},
@@ -299,16 +331,21 @@ func GetAdminModerationHistory(db *gorm.DB) gin.HandlerFunc {
 				kind: "mute",
 				ts:   m.CreatedAt,
 				obj: gin.H{
-					"type":      "mute",
-					"id":        m.ID,
-					"userId":    m.UserID,
-					"username":  m.Username,
-					"chatId":    m.ChatID,
-					"chatName":  m.ChatName,
-					"reason":    m.Reason,
-					"mutedBy":   m.AdminID,
-					"mutedAt":   m.CreatedAt.Unix() * 1000,
-					"expiresAt": func() interface{} { if m.ExpiresAt != nil { return m.ExpiresAt.Unix() * 1000 }; return nil }(),
+					"type":     "mute",
+					"id":       m.ID,
+					"userId":   m.UserID,
+					"username": m.Username,
+					"chatId":   m.ChatID,
+					"chatName": m.ChatName,
+					"reason":   m.Reason,
+					"mutedBy":  m.AdminID,
+					"mutedAt":  m.CreatedAt.Unix() * 1000,
+					"expiresAt": func() interface{} {
+						if m.ExpiresAt != nil {
+							return m.ExpiresAt.Unix() * 1000
+						}
+						return nil
+					}(),
 					"permanent": m.ExpiresAt == nil,
 					"active":    isActiveUntil(m.ExpiresAt, m.RevokedAt),
 				},
@@ -333,4 +370,3 @@ func GetAdminModerationHistory(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"history": h})
 	}
 }
-

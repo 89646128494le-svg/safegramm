@@ -61,7 +61,7 @@ export default function InvitePage() {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)', color: '#e2e8f0', textAlign: 'center' }}>
         <p style={{ marginBottom: 8, fontSize: 18 }}>{error}</p>
-        <p style={{ marginBottom: 16, fontSize: 14, color: 'rgba(226,232,240,0.7)', maxWidth: 320 }}>Убедитесь, что открываете полную ссылку из админки (кнопка «Копировать») и что сервер API доступен.</p>
+        <p style={{ marginBottom: 16, fontSize: 14, color: 'rgba(226,232,240,0.7)', maxWidth: 320 }}>Убедитесь, что открываете полную ссылку приглашения и что сервис доступен.</p>
         <a href="/" style={{ color: 'var(--accent, #7c6cff)', textDecoration: 'underline' }}>На главную</a>
       </div>
     );

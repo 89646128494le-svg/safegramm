@@ -1,4 +1,4 @@
-﻿
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { api, getApiBaseUrl, getErrorMessage } from '../services/api';
 import { getSocket, sendWebSocketMessage, closeSocket } from '../services/websocket';
@@ -120,10 +120,10 @@ interface Message {
   deletedAt?: number;
   expiresAt?: number;
   createdAt: number;
-  /** Ð”Ð»Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ð³Ð¾/Ð°ÑƒÐ´Ð¸Ð¾ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ Ð² ÑÐµÐºÑƒÐ½Ð´Ð°Ñ… (ÐµÑÐ»Ð¸ ÐµÑÑ‚ÑŒ Ñ Ð±ÑÐºÐµÐ½Ð´Ð°). */
+  /** Длительность голосового/аудио вложения в секундах (если есть с бэкенда). */
   attachmentDuration?: number;
-  isRead?: boolean; // ÐŸÑ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ð½Ð¾ Ð»Ð¸ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ð¼ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼
-  readReceipts?: Array<{ // Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¹, Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ð²ÑˆÐ¸Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ
+  isRead?: boolean; // Прочитано ли сообщение текущим пользователем
+  readReceipts?: Array<{ // Список пользователей, прочитавших сообщение
     userId: string;
     readAt: number;
     user?: {
@@ -198,7 +198,7 @@ interface EnhancedChatWindowProps {
   serverMemberRoles?: Record<string, ServerRoleBadge[]>;
 }
 
-// Ð¤ÑƒÐ½ÐºÑ†Ð¸Ñ Ð´Ð»Ñ Ð²Ð¾ÑÐ¿Ñ€Ð¾Ð¸Ð·Ð²ÐµÐ´ÐµÐ½Ð¸Ñ Ð·Ð²ÑƒÐºÐ° ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+// Функция для воспроизведения звука сообщения
 const playMessageSound = () => {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -221,7 +221,7 @@ const playMessageSound = () => {
   }
 };
 
-// Ð¤ÑƒÐ½ÐºÑ†Ð¸Ñ Ð´Ð»Ñ Ð²Ð¾ÑÐ¿Ñ€Ð¾Ð¸Ð·Ð²ÐµÐ´ÐµÐ½Ð¸Ñ Ð·Ð²ÑƒÐºÐ° Ð·Ð²Ð¾Ð½ÐºÐ°
+// Функция для воспроизведения звука звонка
 const playCallSound = () => {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -374,7 +374,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     return true;
   }, []);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð½Ð°ÑÑ‚Ñ€Ð¾ÐµÐº ÑƒÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ð¹
+  // Загрузка настроек уведомлений
   const loadNotificationSettings = useCallback(async () => {
     try {
       const notifData = await api('/api/users/me/notifications');
@@ -402,7 +402,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, []);
 
-  // ÐžÑ‚ÑÐ»ÐµÐ¶Ð¸Ð²Ð°Ð½Ð¸Ðµ Ð²Ð¸Ð´Ð¸Ð¼Ð¾ÑÑ‚Ð¸ ÑÑ‚Ñ€Ð°Ð½Ð¸Ñ†Ñ‹
+  // Отслеживание видимости страницы
   useEffect(() => {
     const handleVisibilityChange = () => {
       setIsPageVisible(!document.hidden);
@@ -414,7 +414,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     };
   }, []);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¹
+  // Загрузка пользователей
   const loadUsers = useCallback(async () => {
     try {
       const data = await api('/api/users');
@@ -426,8 +426,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, []);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð¸Ð½Ñ„Ð¾Ñ€Ð¼Ð°Ñ†Ð¸Ð¸ Ð¾ Ñ‡Ð°Ñ‚Ðµ
-  // Ð˜Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð°Ñ†Ð¸Ñ Ð³Ñ€ÑƒÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ E2EE ÐºÐ»ÑŽÑ‡Ð°
+  // Загрузка информации о чате
+  // Инициализация группового E2EE ключа
   const initializeGroupE2EE = useCallback(async () => {
     if (!chatId || !chatInfoRef.current) return;
     if (chatInfoRef.current.type !== 'group' && chatInfoRef.current.type !== 'channel') return;
@@ -435,12 +435,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     
     groupInitInFlightRef.current = chatId;
     try {
-      // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð²ÐµÑ€ÑÐ¸ÑŽ ÐºÐ»ÑŽÑ‡Ð°
+      // Проверяем версию ключа
       const versionData = await api(`/api/chats/${chatId}/group-key/version`);
       const serverVersion = versionData.keyVersion || 0;
       
       if (serverVersion === 0) {
-        // ÐšÐ»ÑŽÑ‡Ð° Ð½ÐµÑ‚ - Ð½ÑƒÐ¶Ð½Ð¾ Ð¸Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ (Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð´Ð»Ñ owner/admin)
+        // Ключа нет - нужно инициализировать (только для owner/admin)
         const chatData = await api(`/api/chats/${chatId}`);
         const isOwnerOrAdmin = chatData.members?.find((m: any) => 
           m.userId === currentUser.id && (m.role === 'owner' || m.role === 'admin')
@@ -448,13 +448,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         
         if (!isOwnerOrAdmin) {
           setIsE2EEEnabled(false);
-          return; // ÐÐµ owner/admin - Ð½Ðµ Ð¼Ð¾Ð¶ÐµÐ¼ Ð¸Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ
+          return; // Не owner/admin - не можем инициализировать
         }
         
-        // Ð“ÐµÐ½ÐµÑ€Ð¸Ñ€ÑƒÐµÐ¼ Ð³Ñ€ÑƒÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÐºÐ»ÑŽÑ‡
+        // Генерируем групповой ключ
         const newGroupKey = await generateGroupKey();
         
-        // ÐŸÐ¾Ð»ÑƒÑ‡Ð°ÐµÐ¼ Ð¿ÑƒÐ±Ð»Ð¸Ñ‡Ð½Ñ‹Ðµ ÐºÐ»ÑŽÑ‡Ð¸ Ð²ÑÐµÑ… ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¾Ð²
+        // Получаем публичные ключи всех участников
         const wrappedKeys: Record<string, string> = {};
         for (const memberId of chatInfoRef.current.members) {
           const uid = typeof memberId === 'string' ? memberId : (memberId as any)?.userId ?? (memberId as any)?.id;
@@ -470,7 +470,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           }
         }
         
-        // ÐžÑ‚Ð¿Ñ€Ð°Ð²Ð»ÑÐµÐ¼ Ð½Ð° ÑÐµÑ€Ð²ÐµÑ€
+        // Отправляем на сервер
         await api(`/api/chats/${chatId}/group-key/init`, 'POST', { wrappedKeys });
         setGroupKey(newGroupKey);
         setGroupKeyVersion(1);
@@ -479,7 +479,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           showToast('E2EE для группы инициализирован', 'success');
         }
       } else {
-        // ÐšÐ»ÑŽÑ‡ ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÐµÑ‚ - Ð·Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÐ¼ ÐµÐ³Ð¾
+        // Ключ существует - загружаем его
         await loadGroupKey();
       }
     } catch (e: any) {
@@ -492,7 +492,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [chatId, currentUser.id, shouldShowOnceToast]);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð³Ñ€ÑƒÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÐºÐ»ÑŽÑ‡Ð°
+  // Загрузка группового ключа
   const loadGroupKey = useCallback(async (): Promise<CryptoKey | null> => {
     if (!chatId) return null;
     
@@ -512,7 +512,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       }
     } catch (e: any) {
       if (e.message?.includes('key_not_found')) {
-        // ÐšÐ»ÑŽÑ‡Ð° Ð½ÐµÑ‚ - Ð¿Ð¾Ð¿Ñ€Ð¾Ð±ÑƒÐµÐ¼ Ð¸Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ
+        // Ключа нет - попробуем инициализировать
         await initializeGroupE2EE();
       } else {
         console.error('Failed to load group key:', e);
@@ -522,14 +522,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     return null;
   }, [chatId, initializeGroupE2EE]);
 
-  // ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ Ð³Ñ€ÑƒÐ¿Ð¿Ð¾Ð²Ð¾Ð³Ð¾ ÐºÐ»ÑŽÑ‡Ð° (Ð¿Ñ€Ð¸ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ð¸ ÑÐ¾ÑÑ‚Ð°Ð²Ð°)
+  // Обновление группового ключа (при изменении состава)
   const updateGroupKey = useCallback(async () => {
     if (!chatId || !chatInfoRef.current) return;
     
     try {
       const newGroupKey = await generateGroupKey();
       
-      // ÐŸÐ¾Ð»ÑƒÑ‡Ð°ÐµÐ¼ Ð¿ÑƒÐ±Ð»Ð¸Ñ‡Ð½Ñ‹Ðµ ÐºÐ»ÑŽÑ‡Ð¸ Ð²ÑÐµÑ… ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¾Ð²
+      // Получаем публичные ключи всех участников
       const wrappedKeys: Record<string, string> = {};
       for (const memberId of chatInfoRef.current.members) {
         const uid = typeof memberId === 'string' ? memberId : (memberId as any)?.userId ?? (memberId as any)?.id;
@@ -548,10 +548,10 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       await api(`/api/chats/${chatId}/group-key/update`, 'POST', { wrappedKeys });
       setGroupKey(newGroupKey);
       setGroupKeyVersion(prev => prev + 1);
-      showToast('Ð“Ñ€ÑƒÐ¿Ð¿Ð¾Ð²Ð¾Ð¹ ÐºÐ»ÑŽÑ‡ Ð¾Ð±Ð½Ð¾Ð²Ð»Ñ‘Ð½ (forward secrecy)', 'success');
+      showToast('Групповой ключ обновлён (forward secrecy)', 'success');
     } catch (e: any) {
       console.error('Failed to update group key:', e);
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÐºÐ»ÑŽÑ‡ ÑˆÐ¸Ñ„Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось обновить ключ шифрования.'), 'error');
     }
   }, [chatId]);
 
@@ -578,13 +578,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         }
         chatInfoRef.current = { members: memberIds, type: chat.type || 'dm', name: displayName || chat.name };
         
-        // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð¿Ñ€Ð°Ð²Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ñ
+        // Проверяем права пользователя
         if (chat.members && Array.isArray(chat.members)) {
           const currentMember = chat.members.find((m: any) => m.userId === currentUser.id);
           setIsChatOwner(currentMember?.role === 'owner');
         }
         
-        // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, ÑÐ²Ð»ÑÐµÑ‚ÑÑ Ð»Ð¸ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð°Ð´Ð¼Ð¸Ð½Ð¾Ð¼ Ð¿Ð»Ð°Ñ‚Ñ„Ð¾Ñ€Ð¼Ñ‹
+        // Проверяем, является ли пользователь админом платформы
         const userRoles = Array.isArray(currentUser.roles) ? currentUser.roles : 
                          (currentUser.roles ? String(currentUser.roles).split(',').map((r: string) => r.trim()) : []);
         setIsPlatformAdmin(userRoles.includes('admin') || userRoles.includes('owner'));
@@ -594,7 +594,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [chatId, currentUser?.id, currentUser?.roles]);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ Ñ Ð¿Ð°Ð³Ð¸Ð½Ð°Ñ†Ð¸ÐµÐ¹
+  // Загрузка сообщений с пагинацией
   const loadMessages = useCallback(async (beforeId?: string, append: boolean = false) => {
     if (!chatId) return;
     const url = selectedThreadId 
@@ -602,7 +602,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       : `/api/chats/${chatId}/messages`;
     
     try {
-      // Ð”Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ñ‹ Ð¿Ð°Ð³Ð¸Ð½Ð°Ñ†Ð¸Ð¸
+      // Добавляем параметры пагинации
       const params = new URLSearchParams();
       params.append('limit', '50');
       if (beforeId) {
@@ -623,17 +623,17 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       }));
       
       if (append && loadedMessages.length > 0) {
-        // Ð”Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ ÑÑ‚Ð°Ñ€Ñ‹Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ Ð² Ð½Ð°Ñ‡Ð°Ð»Ð¾, ÑƒÐ´Ð°Ð»ÑÑ Ð´ÑƒÐ±Ð»Ð¸ÐºÐ°Ñ‚Ñ‹
+        // Добавляем старые сообщения в начало, удаляя дубликаты
         setMessages(prev => {
           const combined = [...loadedMessages, ...prev];
-          // Ð£Ð´Ð°Ð»ÑÐµÐ¼ Ð´ÑƒÐ±Ð»Ð¸ÐºÐ°Ñ‚Ñ‹ Ð¿Ð¾ ID
+          // Удаляем дубликаты по ID
           const uniqueMessages = combined.filter((message, index, self) =>
             index === self.findIndex((m) => m.id === message.id)
           );
           return uniqueMessages;
         });
         
-        // Ð¡Ð¾Ñ…Ñ€Ð°Ð½ÑÐµÐ¼ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸ÑŽ Ð¿Ñ€Ð¾ÐºÑ€ÑƒÑ‚ÐºÐ¸
+        // Сохраняем позицию прокрутки
         const container = messagesContainerRef.current;
         if (container) {
           const scrollHeight = container.scrollHeight;
@@ -644,7 +644,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           }, 0);
         }
       } else {
-        // Ð—Ð°Ð¼ÐµÐ½ÑÐµÐ¼ Ð²ÑÐµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ (Ð¿ÐµÑ€Ð²Ð°Ñ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ°), ÑƒÐ´Ð°Ð»ÑÑ Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ñ‹Ðµ Ð´ÑƒÐ±Ð»Ð¸ÐºÐ°Ñ‚Ñ‹
+        // Заменяем все сообщения (первая загрузка), удаляя возможные дубликаты
         const uniqueMessages = loadedMessages.filter((message, index, self) =>
           index === self.findIndex((m) => m.id === message.id)
         );
@@ -656,7 +656,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         });
       }
       
-      // ÐžÐ±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ ÑÐ¾ÑÑ‚Ð¾ÑÐ½Ð¸Ðµ Ð¿Ð°Ð³Ð¸Ð½Ð°Ñ†Ð¸Ð¸
+      // Обновляем состояние пагинации
       if (loadedMessages.length < 50) {
         setHasMoreMessages(false);
       } else {
@@ -681,7 +681,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [chatId, selectedThreadId, groupKey]);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° ÑÑ‚Ð°Ñ€Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹
+  // Загрузка старых сообщений
   const loadMoreMessages = useCallback(async () => {
     if (loadingMoreMessages || !hasMoreMessages || !oldestMessageId) return;
     
@@ -693,7 +693,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [loadMessages, loadingMoreMessages, hasMoreMessages, oldestMessageId]);
 
-  // ÐŸÐ¾Ð´Ñ‚ÑÐ³Ð¸Ð²Ð°Ð½Ð¸Ðµ Ð½Ð¾Ð²Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ Ð¿Ð¾ Ñ‚Ð°Ð¹Ð¼ÐµÑ€Ñƒ (fallback, ÐµÑÐ»Ð¸ WebSocket Ð½Ðµ Ð´Ð¾ÑÑ‚Ð°Ð²Ð¸Ð»)
+  // Подтягивание новых сообщений по таймеру (fallback, если WebSocket не доставил)
   const pollNewMessages = useCallback(async () => {
     if (!chatId || selectedThreadId) return;
     const url = `/api/chats/${chatId}/messages`;
@@ -716,7 +716,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     } catch (_) { /* ignore */ }
   }, [chatId, selectedThreadId]);
 
-  // ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ð¿Ñ€Ð¾ÐºÑ€ÑƒÑ‚ÐºÐ¸ Ð´Ð»Ñ Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¾Ð¹ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¸
+  // Обработка прокрутки для автоматической загрузки
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
     const { scrollTop, scrollHeight, clientHeight } = container;
@@ -734,28 +734,28 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     setShowScrollToBottom(false);
   }, []);
 
-  // ÐžÑ‚Ð¼ÐµÑ‚Ð¸Ñ‚ÑŒ Ñ‡Ð°Ñ‚ ÐºÐ°Ðº Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ð½Ð½Ñ‹Ð¹
+  // Отметить чат как прочитанный
   const markChatAsRead = useCallback(async () => {
     if (!chatId) return;
     try {
       await api(`/api/chats/${chatId}/read`, 'POST');
     } catch (e) {
-      // Ð˜Ð³Ð½Ð¾Ñ€Ð¸Ñ€ÑƒÐµÐ¼ Ð¾ÑˆÐ¸Ð±ÐºÐ¸, ÑÑ‚Ð¾ Ð½Ðµ ÐºÑ€Ð¸Ñ‚Ð¸Ñ‡Ð½Ð¾
+      // Игнорируем ошибки, это не критично
     }
   }, [chatId]);
   
-  // ÐžÑ‚Ð¼ÐµÑ‡Ð°ÐµÐ¼ Ñ‡Ð°Ñ‚ ÐºÐ°Ðº Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ð½Ð½Ñ‹Ð¹ Ð¿Ð¾ÑÐ»Ðµ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¸ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹
+  // Отмечаем чат как прочитанный после загрузки сообщений
   useEffect(() => {
     if (messages.length > 0 && chatId) {
       markChatAsRead();
-      // Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÐ¼ callback Ð´Ð»Ñ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ ÑÑ‡ÐµÑ‚Ñ‡Ð¸ÐºÐ° Ð² Ñ€Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÑŒÑÐºÐ¾Ð¼ ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ðµ
+      // Вызываем callback для обновления счетчика в родительском компоненте
       if (onMarkAsRead) {
         onMarkAsRead();
       }
     }
   }, [messages.length, chatId, markChatAsRead, onMarkAsRead]);
 
-  // Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¼ÐµÐ½ÑŽ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ð¹ Ð¿Ð¾ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑŽ Ð¿Ñ€Ð¸ ÐºÐ»Ð¸ÐºÐµ Ð²Ð½Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+  // Закрыть меню действий по сообщению при клике вне сообщения
   useEffect(() => {
     if (!messageIdWithActions) return;
     const close = () => setMessageIdWithActions(null);
@@ -763,7 +763,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     return () => document.removeEventListener('click', close, true);
   }, [messageIdWithActions]);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð·Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð½Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹
+  // Загрузка закрепленных сообщений
   const loadPinnedMessages = useCallback(async () => {
     if (!chatId) return;
     try {
@@ -782,14 +782,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [chatId]);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð½Ð°Ð±Ð¾Ñ€Ð¾Ð² ÑÑ‚Ð¸ÐºÐµÑ€Ð¾Ð²
+  // Загрузка наборов стикеров
   const loadStickerPacks = useCallback(async () => {
     try {
       const data = await api('/api/sticker-packs');
       const packs = data.packs || [];
       setStickerPacks(packs);
       
-      // Ð—Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÐ¼ ÑÑ‚Ð¸ÐºÐµÑ€Ñ‹ Ð¸Ð· Ð²ÑÐµÑ… Ð½Ð°Ð±Ð¾Ñ€Ð¾Ð² Ð´Ð»Ñ Ð±Ñ‹ÑÑ‚Ñ€Ð¾Ð³Ð¾ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð°
+      // Загружаем стикеры из всех наборов для быстрого доступа
       const allStickers = new Map<string, Sticker>();
       for (const pack of packs) {
         try {
@@ -815,11 +815,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, []);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ñ‚Ñ€ÐµÐ´Ð¾Ð²
+  // Загрузка тредов
   const loadThreads = useCallback(async () => {
     try {
       const data = await api(`/api/chats/${chatId}/threads`);
-      // ÐŸÑ€ÐµÐ¾Ð±Ñ€Ð°Ð·ÑƒÐµÐ¼ Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚ Ð´Ð°Ð½Ð½Ñ‹Ñ… Ñ‚Ñ€ÐµÐ´Ð¾Ð²
+      // Преобразуем формат данных тредов
       const formattedThreads: Thread[] = (data.threads || []).map((t: any) => ({
         id: t.id,
         chatId: t.chatId || t.chat_id,
@@ -840,14 +840,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [chatId]);
 
-  // ÐŸÑ€Ð¸Ð¼ÐµÐ½ÐµÐ½Ð¸Ðµ Ñ„Ð¾Ð½Ð° Ð¸ Ñ†Ð²ÐµÑ‚Ð° Ñ‡Ð°Ñ‚Ð°
+  // Применение фона и цвета чата
   useEffect(() => {
     if (!chatId) return;
     
     const chatBg = getChatBackground(chatId);
     const chatColor = getChatColor(chatId);
     
-    // Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ ref Ð´Ð»Ñ ÐºÐ¾Ð½Ñ‚ÐµÐ¹Ð½ÐµÑ€Ð° Ñ‡Ð°Ñ‚Ð°
+    // Используем ref для контейнера чата
     const chatWindowElement = document.querySelector('.enhanced-chat-window') as HTMLElement;
     if (chatWindowElement) {
       if (chatBg) {
@@ -885,7 +885,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     
     loadUsers();
     loadChatInfo().then(() => {
-      // Ð˜Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð¸Ñ€ÑƒÐµÐ¼ E2EE Ð´Ð»Ñ Ð³Ñ€ÑƒÐ¿Ð¿ Ð¿Ð¾ÑÐ»Ðµ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¸ Ð¸Ð½Ñ„Ð¾Ñ€Ð¼Ð°Ñ†Ð¸Ð¸ Ð¾ Ñ‡Ð°Ñ‚Ðµ
+      // Инициализируем E2EE для групп после загрузки информации о чате
       if (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') {
         initializeGroupE2EE();
       }
@@ -921,7 +921,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
 
       const handleMessage = (event: MessageEvent) => {
         try {
-          // Ð‘ÑÐºÐµÐ½Ð´ Ð¼Ð¾Ð¶ÐµÑ‚ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÑÑ‚ÑŒ Ð½ÐµÑÐºÐ¾Ð»ÑŒÐºÐ¾ JSON Ñ‡ÐµÑ€ÐµÐ· \n
+          // Бэкенд может отправлять несколько JSON через \n
           const messages = event.data.split('\n').filter(m => m.trim());
           for (const msgText of messages) {
             if (!msgText.trim()) continue;
@@ -939,7 +939,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
 
       const handleWebSocketMessage = (data: any) => {
           
-          // Ð‘ÑÐºÐµÐ½Ð´ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÑÐµÑ‚ {"type": "message", "data": {...}}
+          // Бэкенд отправляет {"type": "message", "data": {...}}
           const messageData = data.data || data;
           const msgType = data.type;
           
@@ -985,7 +985,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             if (msg.senderId !== currentUser?.id) {
               if (ui.notificationsEnabled && notificationSettings.desktopEnabled && (!isPageVisible || document.hidden)) {
                 const sender = users.get(msg.senderId);
-                const senderName = sender?.username || 'ÐÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ñ‹Ð¹';
+                const senderName = sender?.username || 'Неизвестный';
                 const chatName = chatInfoRef.current?.name || (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel' ? chatInfoRef.current.type : undefined);
                 const chatType = chatInfoRef.current?.type as 'dm' | 'group' | 'channel' | undefined;
                 const isMention = currentUser && msg.text?.includes(`@${currentUser.username}`);
@@ -1006,7 +1006,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 }
                 notifyNewMessage(
                   senderName,
-                  msg.text || (msg.attachmentUrl ? 'ðŸ“Ž Ð’Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ' : 'Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ'),
+                  msg.text || (msg.attachmentUrl ? '📎 Вложение' : 'Сообщение'),
                   chatName,
                   chatId,
                   sender?.avatarUrl,
@@ -1088,18 +1088,18 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               });
             }
           } else if (msgType === 'webrtc:offer') {
-            // Ð’Ñ…Ð¾Ð´ÑÑ‰Ð¸Ð¹ Ð·Ð²Ð¾Ð½Ð¾Ðº
+            // Входящий звонок
             const offerData = data.data || data;
             const fromUserId = offerData.from || data.from;
             const msgChatId = offerData.chatId || data.chatId;
             
             if (msgChatId === chatId && fromUserId && chatInfoRef.current?.type === 'dm' && !inDMCall) {
-              const isVideo = offerData.video !== false; // ÐŸÐ¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ Ð²Ð¸Ð´ÐµÐ¾, ÐµÑÐ»Ð¸ Ð½Ðµ ÑƒÐºÐ°Ð·Ð°Ð½Ð¾
+              const isVideo = offerData.video !== false; // По умолчанию видео, если не указано
               
-              // ÐŸÐ¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ ÑƒÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ Ð¾ Ð·Ð²Ð¾Ð½ÐºÐµ
+              // Показываем уведомление о звонке
               if (ui.notificationsEnabled && notificationSettings.desktopEnabled) {
                 const caller = users.get(fromUserId);
-                const callerName = caller?.username || 'ÐÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ñ‹Ð¹';
+                const callerName = caller?.username || 'Неизвестный';
                 
                 const callSoundType = (notificationSettings.soundCall || 'alert') as any;
                 const callVolume = (notificationSettings.volumeCall || notificationSettings.soundVolume) / 100;
@@ -1115,17 +1115,17 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               } else if (notificationSettings.soundEnabled) {
                 playCallSound();
               }
-              // Ð¡Ð¾Ñ…Ñ€Ð°Ð½ÑÐµÐ¼ Ð²Ñ€ÐµÐ¼Ñ Ð½Ð°Ñ‡Ð°Ð»Ð° Ð²Ñ…Ð¾Ð´ÑÑ‰ÐµÐ³Ð¾ Ð·Ð²Ð¾Ð½ÐºÐ° Ð´Ð»Ñ Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾Ð³Ð¾ ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¸Ñ ÐºÐ°Ðº Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð½Ð¾Ð³Ð¾
+              // Сохраняем время начала входящего звонка для возможного сохранения как пропущенного
               const incomingCallStartTime = Date.now();
               const callKey = `${chatId}-${fromUserId}`;
               
-              // ÐžÑ‡Ð¸Ñ‰Ð°ÐµÐ¼ Ð¿Ñ€ÐµÐ´Ñ‹Ð´ÑƒÑ‰Ð¸Ð¹ Ñ‚Ð°Ð¹Ð¼ÐµÑ€ ÐµÑÐ»Ð¸ ÐµÑÑ‚ÑŒ
+              // Очищаем предыдущий таймер если есть
               const existingTimer = incomingCallTimerRef.current.get(callKey);
               if (existingTimer) {
                 clearTimeout(existingTimer);
               }
               
-              const confirmed = window.confirm(`Ð’Ñ…Ð¾Ð´ÑÑ‰Ð¸Ð¹ ${isVideo ? 'Ð²Ð¸Ð´ÐµÐ¾' : ''}Ð·Ð²Ð¾Ð½Ð¾Ðº Ð¾Ñ‚ ${users.get(fromUserId)?.username || 'ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ'}. ÐŸÑ€Ð¸Ð½ÑÑ‚ÑŒ?`);
+              const confirmed = window.confirm(`Входящий ${isVideo ? 'видео' : ''}звонок от ${users.get(fromUserId)?.username || 'Пользователь'}. Принять?`);
               if (confirmed) {
                 setInDMCall({ 
                   isVideo, 
@@ -1133,15 +1133,15 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   isIncoming: true,
                   offerData: offerData
                 });
-                // ÐžÑ‡Ð¸Ñ‰Ð°ÐµÐ¼ Ñ‚Ð°Ð¹Ð¼ÐµÑ€, Ñ‚Ð°Ðº ÐºÐ°Ðº Ð·Ð²Ð¾Ð½Ð¾Ðº Ð¿Ñ€Ð¸Ð½ÑÑ‚
+                // Очищаем таймер, так как звонок принят
                 incomingCallTimerRef.current.delete(callKey);
               } else {
-                // ÐžÑ‚ÐºÐ»Ð¾Ð½ÑÐµÐ¼ Ð·Ð²Ð¾Ð½Ð¾Ðº Ð¸ ÑÐ¾Ñ…Ñ€Ð°Ð½ÑÐµÐ¼ ÐºÐ°Ðº Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð½Ñ‹Ð¹
+                // Отклоняем звонок и сохраняем как пропущенный
                 sendOptimized('webrtc:hangup', {
                   chatId,
                   to: fromUserId,
                 });
-                // Ð¡Ð¾Ñ…Ñ€Ð°Ð½ÑÐµÐ¼ ÐºÐ°Ðº Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð½Ñ‹Ð¹
+                // Сохраняем как пропущенный
                 api('/api/calls', 'POST', {
                   chatId,
                   otherUserId: fromUserId,
@@ -1154,11 +1154,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 incomingCallTimerRef.current.delete(callKey);
               }
               
-              // Ð•ÑÐ»Ð¸ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð½Ðµ Ð¾Ñ‚Ð²ÐµÑ‚Ð¸Ñ‚ Ð² Ñ‚ÐµÑ‡ÐµÐ½Ð¸Ðµ 30 ÑÐµÐºÑƒÐ½Ð´, ÑÐ¾Ñ…Ñ€Ð°Ð½ÑÐµÐ¼ ÐºÐ°Ðº Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð½Ñ‹Ð¹
+              // Если пользователь не ответит в течение 30 секунд, сохраняем как пропущенный
               const timer = setTimeout(() => {
-                // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, Ñ‡Ñ‚Ð¾ Ð·Ð²Ð¾Ð½Ð¾Ðº Ð²ÑÐµ ÐµÑ‰Ðµ Ð²Ñ…Ð¾Ð´ÑÑ‰Ð¸Ð¹ Ð¸ Ð½Ðµ Ð±Ñ‹Ð» Ð¿Ñ€Ð¸Ð½ÑÑ‚
+                // Проверяем, что звонок все еще входящий и не был принят
                 if (!inDMCall || inDMCall.otherUserId !== fromUserId || !inDMCall.isIncoming) {
-                  // Ð—Ð²Ð¾Ð½Ð¾Ðº Ð½Ðµ Ð±Ñ‹Ð» Ð¿Ñ€Ð¸Ð½ÑÑ‚ - ÑÐ¾Ñ…Ñ€Ð°Ð½ÑÐµÐ¼ ÐºÐ°Ðº Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð½Ñ‹Ð¹
+                  // Звонок не был принят - сохраняем как пропущенный
                   api('/api/calls', 'POST', {
                     chatId,
                     otherUserId: fromUserId,
@@ -1174,31 +1174,31 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               incomingCallTimerRef.current.set(callKey, timer);
             }
           } else if (msgType === 'webrtc:hangup') {
-            // Ð—Ð²Ð¾Ð½Ð¾Ðº Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½
+            // Звонок завершен
             const hangupData = data.data || data;
             const fromUserId = hangupData.from || data.from;
             if (fromUserId && inDMCall && inDMCall.otherUserId === fromUserId) {
               setInDMCall(null);
-              showToast('Ð—Ð²Ð¾Ð½Ð¾Ðº Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½', 'info');
+              showToast('Звонок завершен', 'info');
             }
               } else if (msgType === 'message:pinned') {
-                // Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð·Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð¾
+                // Сообщение закреплено
                 const pinData = data.data || data;
                 const msgChatId = pinData.chatId || data.chatId;
                 if (msgChatId !== chatId) return;
                 
-                // ÐŸÐµÑ€ÐµÐ·Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÐ¼ Ð·Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð½Ñ‹Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+                // Перезагружаем закрепленные сообщения
                 loadPinnedMessages();
-                showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð·Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð¾', 'info');
+                showToast('Сообщение закреплено', 'info');
               } else if (msgType === 'message:unpinned') {
-                // Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¾Ñ‚ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð¾
+                // Сообщение откреплено
                 const unpinData = data.data || data;
                 const msgChatId = unpinData.chatId || data.chatId;
                 if (msgChatId !== chatId) return;
                 
-                // ÐŸÐµÑ€ÐµÐ·Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÐ¼ Ð·Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð½Ñ‹Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+                // Перезагружаем закрепленные сообщения
                 loadPinnedMessages();
-                showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¾Ñ‚ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð¾', 'info');
+                showToast('Сообщение откреплено', 'info');
               } else if (msgType === 'presence') {
                 const presenceData = data.data || data;
                 const userId = presenceData.userId;
@@ -1221,7 +1221,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   return newMap;
                 });
               } else if (msgType === 'message:read' || msgType === 'chat:read') {
-                // ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÑ‚Ð°Ñ‚ÑƒÑÐ° Ð¿Ñ€Ð¾Ñ‡Ñ‚ÐµÐ½Ð¸Ñ
+                // Обновление статуса прочтения
                 const readData = data.data || data;
                 const msgChatId = readData.chatId || data.chatId;
                 if (msgChatId !== chatId) return;
@@ -1231,7 +1231,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 const readAt = readData.readAt ? (typeof readData.readAt === 'string' ? new Date(readData.readAt).getTime() : readData.readAt) : Date.now();
                 
                 if (messageId) {
-                  // ÐžÐ±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ ÐºÐ¾Ð½ÐºÑ€ÐµÑ‚Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ
+                  // Обновляем конкретное сообщение
                   setMessages(prev => prev.map(m => {
                     if (m.id === messageId && m.senderId === currentUser.id) {
                       const receipts = m.readReceipts || [];
@@ -1245,7 +1245,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     return m;
                   }));
                 } else {
-                  // ÐžÐ±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ Ð²ÑÐµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ Ð¾Ñ‚ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ñ Ð² Ñ‡Ð°Ñ‚Ðµ
+                  // Обновляем все сообщения от текущего пользователя в чате
                   setMessages(prev => prev.map(m => {
                     if (m.senderId === currentUser.id && m.chatId === msgChatId) {
                       const receipts = m.readReceipts || [];
@@ -1264,7 +1264,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
 
       socket.addEventListener('message', handleMessage);
 
-      // ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¸ÑÑ‚ÐµÐºÑˆÐ¸Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ ÐºÐ°Ð¶Ð´ÑƒÑŽ Ð¼Ð¸Ð½ÑƒÑ‚Ñƒ
+      // Проверка истекших сообщений каждую минуту
       const expireCheckInterval = setInterval(() => {
         setMessages(prev => {
           const now = Date.now();
@@ -1298,14 +1298,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     showToast('E2EE инициализировано', 'info');
   }, [chatId, isE2EEEnabled, shouldShowOnceToast]);
 
-  // ÐžÐ¿Ñ€Ð¾Ñ Ð½Ð¾Ð²Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ ÐºÐ°Ð¶Ð´Ñ‹Ðµ 4 Ñ (fallback, ÐµÑÐ»Ð¸ WebSocket Ð½Ðµ Ð´Ð¾ÑÑ‚Ð°Ð²Ð¸Ð»)
+  // Опрос новых сообщений каждые 4 с (fallback, если WebSocket не доставил)
   useEffect(() => {
     if (!chatId || selectedThreadId) return;
     const t = setInterval(pollNewMessages, 12000);
     return () => clearInterval(t);
   }, [chatId, selectedThreadId, pollNewMessages]);
 
-  // ÐÐ²Ñ‚Ð¾ÑÐºÑ€Ð¾Ð»Ð» Ð¿Ñ€Ð¸ Ð½Ð¾Ð²Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑÑ… (Ð¼Ð³Ð½Ð¾Ð²ÐµÐ½Ð½Ð¾)
+  // Автоскролл при новых сообщениях (мгновенно)
   useEffect(() => {
     requestAnimationFrame(() => {
       if (messagesEndRef.current) {
@@ -1315,7 +1315,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     });
   }, [messages]);
 
-  // ÐÐ²Ñ‚Ð¾ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¸Ðµ Ñ‡ÐµÑ€Ð½Ð¾Ð²Ð¸ÐºÐ¾Ð²
+  // Автосохранение черновиков
   useEffect(() => {
     if (text.trim() && chatId) {
       const draftKey = `draft_${chatId}`;
@@ -1323,7 +1323,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [text, chatId]);
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ñ‡ÐµÑ€Ð½Ð¾Ð²Ð¸ÐºÐ° Ð¿Ñ€Ð¸ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ð¸Ð¸ Ñ‡Ð°Ñ‚Ð°
+  // Загрузка черновика при открытии чата
   useEffect(() => {
     if (chatId) {
       const draftKey = `draft_${chatId}`;
@@ -1334,7 +1334,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   }, [chatId]);
 
-  // ÐžÑ‚Ð¼ÐµÐ½Ð° Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+  // Отмена отправки сообщения
   const undoSendMessage = async () => {
     if (!lastSentMessage || !canUndo) return;
     
@@ -1349,17 +1349,17 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       setMessages(prev => prev.filter(m => m.id !== lastSentMessage.id));
       setLastSentMessage(null);
       setCanUndo(false);
-      showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¾Ñ‚Ð¼ÐµÐ½ÐµÐ½Ð¾', 'success');
+      showToast('Сообщение отменено', 'success');
     } catch (e: any) {
-      showToast('ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÑƒ', 'error');
+      showToast('Не удалось отменить отправку', 'error');
     }
   };
 
-  // ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ð¾Ñ„Ð»Ð°Ð¹Ð½ Ð¾Ñ‡ÐµÑ€ÐµÐ´Ð¸ Ð¿Ñ€Ð¸ Ð²Ð¾ÑÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¸ ÑÐ²ÑÐ·Ð¸
+  // Обработка офлайн очереди при восстановлении связи
   useEffect(() => {
     const unsubscribe = onOnlineStatusChange((online) => {
       if (online && chatId) {
-        // Ð¡Ð¸Ð½Ñ…Ñ€Ð¾Ð½Ð¸Ð·Ð¸Ñ€ÑƒÐµÐ¼ Ð¾Ñ‡ÐµÑ€ÐµÐ´ÑŒ Ð¿Ñ€Ð¸ Ð²Ð¾ÑÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¸ ÑÐ²ÑÐ·Ð¸
+        // Синхронизируем очередь при восстановлении связи
         processOfflineQueue(async (message) => {
           if (message.chatId === chatId) {
             try {
@@ -1370,11 +1370,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 type: message.type,
                 ...message.data
               });
-              // Ð£Ð´Ð°Ð»ÑÐµÐ¼ Ð¸Ð· Ð¾Ñ‡ÐµÑ€ÐµÐ´Ð¸ Ð¿Ð¾ÑÐ»Ðµ ÑƒÑÐ¿ÐµÑˆÐ½Ð¾Ð¹ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸
+              // Удаляем из очереди после успешной отправки
               removeFromOfflineQueue(message.id);
             } catch (e) {
               console.error('Failed to sync message:', e);
-              // Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¾ÑÑ‚Ð°Ð½ÐµÑ‚ÑÑ Ð² Ð¾Ñ‡ÐµÑ€ÐµÐ´Ð¸ Ð´Ð»Ñ Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€Ð½Ð¾Ð¹ Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÐ¸
+              // Сообщение останется в очереди для повторной попытки
             }
           }
         }).catch(e => console.error('Failed to sync offline queue:', e));
@@ -1384,13 +1384,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     return unsubscribe;
   }, [chatId]);
 
-  // ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ° ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+  // Отправка сообщения
   const sendMessage = async (messageText?: string, attachmentUrl?: string, stickerId?: string, expiresMs?: number, threadId?: string) => {
-    // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, Ñ‡Ñ‚Ð¾ ÐµÑÑ‚ÑŒ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ñ‚ÐµÐºÑÑ‚, Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð¸Ð»Ð¸ ÑÑ‚Ð¸ÐºÐµÑ€
+    // Проверяем, что есть хотя бы текст, вложение или стикер
     const finalText = messageText !== undefined ? messageText : text.trim();
     if (!finalText && !attachmentUrl && !stickerId) return;
     if (finalText.length > MAX_MESSAGE_LENGTH) {
-      showToast(`Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð½Ðµ Ð´Ð¾Ð»Ð¶Ð½Ð¾ Ð¿Ñ€ÐµÐ²Ñ‹ÑˆÐ°Ñ‚ÑŒ ${MAX_MESSAGE_LENGTH} ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð² (ÑÐµÐ¹Ñ‡Ð°Ñ ${finalText.length})`, 'error');
+      showToast(`Сообщение не должно превышать ${MAX_MESSAGE_LENGTH} символов (сейчас ${finalText.length})`, 'error');
       return;
     }
 
@@ -1407,24 +1407,24 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       const isGroupLike = chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel';
       let activeGroupKey = groupKey;
 
-      // Ð“Ð°Ñ€Ð°Ð½Ñ‚Ð¸Ñ€ÑƒÐµÐ¼ Ð¸Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð°Ñ†Ð¸ÑŽ E2EE ÐºÐ»ÑŽÑ‡Ð° Ð´Ð¾ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸
+      // Гарантируем инициализацию E2EE ключа до отправки
       if (isE2EEEnabled && isGroupLike && finalText && !activeGroupKey) {
         activeGroupKey = await loadGroupKey();
       }
 
-      // Ð¨Ð¸Ñ„Ñ€ÑƒÐµÐ¼ Ñ‚ÐµÐºÑÑ‚ Ð´Ð»Ñ Ð³Ñ€ÑƒÐ¿Ð¿ Ñ E2EE
+      // Шифруем текст для групп с E2EE
       if (isE2EEEnabled && isGroupLike && finalText) {
         if (!activeGroupKey) {
-          showToast('E2EE ÐºÐ»ÑŽÑ‡ ÐµÑ‰Ðµ Ð½Ðµ Ð³Ð¾Ñ‚Ð¾Ð². ÐŸÐ¾Ð¿Ñ€Ð¾Ð±ÑƒÐ¹Ñ‚Ðµ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ Ñ‡ÐµÑ€ÐµÐ· ÑÐµÐºÑƒÐ½Ð´Ñƒ.', 'warning');
+          showToast('E2EE ключ еще не готов. Попробуйте отправить через секунду.', 'warning');
           return;
         }
         try {
           const ciphertext = await encryptPlaintext(activeGroupKey, finalText);
           payload.ciphertext = ciphertext;
-          payload.text = null; // ÐÐµ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÑÐµÐ¼ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚
+          payload.text = null; // Не отправляем открытый текст
         } catch (e) {
           console.error('Failed to encrypt message:', e);
-          showToast('ÐžÑˆÐ¸Ð±ÐºÐ° ÑˆÐ¸Ñ„Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ', 'error');
+          showToast('Ошибка шифрования сообщения', 'error');
           return;
         }
       }
@@ -1433,7 +1433,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         payload.threadId = threadId || selectedThreadId;
       }
 
-      // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð¾Ð½Ð»Ð°Ð¹Ð½ ÑÑ‚Ð°Ñ‚ÑƒÑ Ð´Ð¾ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+      // Проверяем онлайн статус до создания временного сообщения
       if (!isOnline()) {
         const queueId = addToOfflineQueue({
           chatId,
@@ -1458,11 +1458,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         };
 
         setMessages(prev => [...prev, queuedMessage]);
-        showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð±ÑƒÐ´ÐµÑ‚ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¾ Ð¿Ñ€Ð¸ Ð²Ð¾ÑÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¸ ÑÐ²ÑÐ·Ð¸', 'info');
+        showToast('Сообщение будет отправлено при восстановлении связи', 'info');
         return;
       }
 
-      // ÐžÐ¿Ñ‚Ð¸Ð¼Ð¸ÑÑ‚Ð¸Ñ‡Ð½Ð¾Ðµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ - Ð´Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ ÑÑ€Ð°Ð·Ñƒ
+      // Оптимистичное обновление - добавляем сообщение сразу
       const tempId = 'temp-' + Date.now();
       const optimisticMessage: Message = {
         id: tempId,
@@ -1477,7 +1477,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       };
       setMessages(prev => [...prev, optimisticMessage]);
       
-      // Ð”Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ ÐºÐ»Ð°ÑÑ Ð´Ð»Ñ Ð°Ð½Ð¸Ð¼Ð°Ñ†Ð¸Ð¸ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸
+      // Добавляем класс для анимации отправки
       setTimeout(() => {
         const messageElement = document.querySelector(`[data-message-id="${tempId}"]`);
         if (messageElement) {
@@ -1489,7 +1489,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         flushWebSocketBatch();
         const response = await api(`/api/chats/${chatId}/messages`, 'POST', payload);
         const realId = response.id;
-        // Ð—Ð°Ð¼ÐµÐ½ÑÐµÐ¼ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð½Ð° Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾Ðµ
+        // Заменяем временное сообщение на реальное
         setMessages(prev => prev.map(m => m.id === tempId ? {
           ...m,
           id: realId,
@@ -1499,7 +1499,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           sending: false,
         } : m));
         
-        // Ð£Ð±Ð¸Ñ€Ð°ÐµÐ¼ ÐºÐ»Ð°ÑÑ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸ Ð¸ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÐµÐ¼ ÐºÐ»Ð°ÑÑ Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½Ð¸Ñ
+        // Убираем класс отправки и добавляем класс получения
         setTimeout(() => {
           const messageElement = document.querySelector(`[data-message-id="${realId}"]`);
           if (messageElement) {
@@ -1508,12 +1508,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           }
         }, 0);
         
-        // Ð¡Ð¾Ñ…Ñ€Ð°Ð½ÑÐµÐ¼ Ð´Ð»Ñ Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑ‚Ð¸ Ð¾Ñ‚Ð¼ÐµÐ½Ñ‹
+        // Сохраняем для возможности отмены
         setLastSentMessage({ id: realId, timestamp: Date.now() });
         setCanUndo(true);
         setTimeout(() => setCanUndo(false), 5000);
         
-        // ÐžÑ‡Ð¸Ñ‰Ð°ÐµÐ¼ Ñ‡ÐµÑ€Ð½Ð¾Ð²Ð¸Ðº
+        // Очищаем черновик
         if (chatId) {
           localStorage.removeItem(`draft_${chatId}`);
         }
@@ -1522,50 +1522,50 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         setEditingMessage(null);
         sendOptimized('typing', { chatId, isTyping: false });
       } catch (e: any) {
-        // Ð£Ð´Ð°Ð»ÑÐµÐ¼ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¿Ñ€Ð¸ Ð¾ÑˆÐ¸Ð±ÐºÐµ
+        // Удаляем временное сообщение при ошибке
         setMessages(prev => prev.filter(m => m.id !== tempId));
-        showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+        showToast(getErrorMessage(e, 'Не удалось отправить сообщение.'), 'error');
         throw e;
       }
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось отправить сообщение.'), 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Ð ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+  // Редактирование сообщения
   const editMessage = async (messageId: string, newText: string) => {
     if (!newText.trim()) {
-      showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð½Ðµ Ð¼Ð¾Ð¶ÐµÑ‚ Ð±Ñ‹Ñ‚ÑŒ Ð¿ÑƒÑÑ‚Ñ‹Ð¼', 'warning');
+      showToast('Сообщение не может быть пустым', 'warning');
       return;
     }
     if (newText.length > MAX_MESSAGE_LENGTH) {
-      showToast(`Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð½Ðµ Ð´Ð¾Ð»Ð¶Ð½Ð¾ Ð¿Ñ€ÐµÐ²Ñ‹ÑˆÐ°Ñ‚ÑŒ ${MAX_MESSAGE_LENGTH} ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð²`, 'error');
+      showToast(`Сообщение не должно превышать ${MAX_MESSAGE_LENGTH} символов`, 'error');
       return;
     }
     try {
       await api(`/api/messages/${messageId}/edit`, 'POST', { text: newText.trim() });
       setEditingMessage(null);
-      showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¾', 'success');
+      showToast('Сообщение изменено', 'success');
       await loadMessages(undefined, false);
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¸Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось изменить сообщение.'), 'error');
     }
   };
 
-  // Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+  // Удаление сообщения
   const deleteMessage = async (messageId: string, deleteForAll: boolean = false) => {
     try {
       await api(`/api/messages/${messageId}/delete`, 'POST', { deleteForAll });
-      showToast(deleteForAll ? 'Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¾ Ð´Ð»Ñ Ð²ÑÐµÑ…' : 'Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¾', 'success');
+      showToast(deleteForAll ? 'Сообщение удалено для всех' : 'Сообщение удалено', 'success');
       await loadMessages(undefined, false);
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось удалить сообщение.'), 'error');
     }
   };
 
-  // ÐŸÐ¾Ð¸ÑÐº Ð¿Ð¾ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑÐ¼
+  // Поиск по сообщениям
   const searchMessages = async (query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
@@ -1576,7 +1576,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       const data = await api(`/api/messages/search?q=${encodeURIComponent(query)}&chatId=${chatId}`);
       const results = data.messages || [];
       
-      // ÐŸÑ€ÐµÐ¾Ð±Ñ€Ð°Ð·ÑƒÐµÐ¼ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ñ‹ Ð² Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚ Message
+      // Преобразуем результаты в формат Message
       const formattedResults: Message[] = results.map((msg: any) => ({
         id: msg.id,
         chatId: msg.chatId || msg.chat_id || chatId,
@@ -1601,33 +1601,33 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       console.error('Failed to search messages:', e);
       setSearchResults([]);
       if (e.message && !e.message.includes('bad_request')) {
-        showToast(getErrorMessage(e, 'ÐŸÐ¾Ð¸ÑÐº Ð½Ðµ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½. ÐŸÐ¾Ð¿Ñ€Ð¾Ð±ÑƒÐ¹Ñ‚Ðµ ÑÐ½Ð¾Ð²Ð°.'), 'error');
+        showToast(getErrorMessage(e, 'Поиск не выполнен. Попробуйте снова.'), 'error');
       }
     }
   };
 
-  // ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ° Ð³ÐµÐ¾Ð»Ð¾ÐºÐ°Ñ†Ð¸Ð¸
+  // Отправка геолокации
   const sendLocation = async (lat: number, lng: number, address?: string) => {
     try {
-      // Ð¡Ð½Ð°Ñ‡Ð°Ð»Ð° Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÑÐµÐ¼ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ñ Ñ‚ÐµÐºÑÑ‚Ð¾Ð¼ Ð»Ð¾ÐºÐ°Ñ†Ð¸Ð¸
+      // Сначала отправляем сообщение с текстом локации
       const locationText = address || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       const msg = await api(`/api/chats/${chatId}/messages`, 'POST', {
-        text: `ðŸ“ ${locationText}`
+        text: `📍 ${locationText}`
       });
-      // Ð—Ð°Ñ‚ÐµÐ¼ Ð¿Ñ€Ð¸ÐºÑ€ÐµÐ¿Ð»ÑÐµÐ¼ ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ñ‹
+      // Затем прикрепляем координаты
       await api(`/api/messages/${msg.message.id}/location`, 'POST', {
         lat,
         lng,
         address
       });
-      showToast('Ð“ÐµÐ¾Ð»Ð¾ÐºÐ°Ñ†Ð¸Ñ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð°', 'success');
+      showToast('Геолокация отправлена', 'success');
       await loadMessages(undefined, false);
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ Ð³ÐµÐ¾Ð»Ð¾ÐºÐ°Ñ†Ð¸ÑŽ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось отправить геолокацию.'), 'error');
     }
   };
 
-  // Ð¡Ð¾Ð·Ð´Ð°Ð½Ð¸Ðµ Ñ‚Ñ€ÐµÐ´Ð°
+  // Создание треда
   const createThread = async (name: string) => {
     try {
       const data = await api(`/api/chats/${chatId}/threads`, 'POST', {
@@ -1639,36 +1639,36 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       setShowThreads(true);
       setShowThreadModal(false);
       setThreadRootMessageId('');
-      showToast('Ð¢Ñ€ÐµÐ´ ÑÐ¾Ð·Ð´Ð°Ð½', 'success');
+      showToast('Тред создан', 'success');
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ð·Ð´Ð°Ñ‚ÑŒ Ð¾Ð±ÑÑƒÐ¶Ð´ÐµÐ½Ð¸Ðµ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать обсуждение.'), 'error');
     }
   };
 
   const MAX_ATTACHMENT_MB = 50;
   const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
 
-  // ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ° Ñ„Ð°Ð¹Ð»Ð° Ñ Ð¿Ñ€Ð¾Ð³Ñ€ÐµÑÑÐ¾Ð¼ Ð¸ ÑÐ¶Ð°Ñ‚Ð¸ÐµÐ¼
+  // Отправка файла с прогрессом и сжатием
   const sendFile = async (file: File, isVoiceMessage: boolean = false) => {
     try {
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        showToast(`Ð¤Ð°Ð¹Ð» ÑÐ»Ð¸ÑˆÐºÐ¾Ð¼ Ð±Ð¾Ð»ÑŒÑˆÐ¾Ð¹. ÐœÐ°ÐºÑ. ${MAX_ATTACHMENT_MB} ÐœÐ‘`, 'error');
+        showToast(`Файл слишком большой. Макс. ${MAX_ATTACHMENT_MB} МБ`, 'error');
         return;
       }
       let fileToUpload = file;
       let vaultEnvelope: VaultEnvelope | null = null;
 
-      // Ð¡Ð¶Ð¸Ð¼Ð°ÐµÐ¼ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ ÐµÑÐ»Ð¸ Ð½ÑƒÐ¶Ð½Ð¾
+      // Сжимаем изображения если нужно
       if (!isVoiceMessage && file.type.startsWith('image/') && shouldCompressImage(file)) {
         try {
           fileToUpload = await compressImage(file, { maxSizeKB: 500, quality: 0.8 });
-          showToast('Ð˜Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ ÑÐ¶Ð°Ñ‚Ð¾', 'info');
+          showToast('Изображение сжато', 'info');
         } catch (e) {
           console.warn('Failed to compress image, using original:', e);
         }
       }
 
-      // Vault-first: ÑˆÐ¸Ñ„Ñ€ÑƒÐµÐ¼ ÐºÐ»Ð¸ÐµÐ½Ñ‚Ð¾Ð¼ Ð´Ð¾ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¸
+      // Vault-first: шифруем клиентом до загрузки
       if (!isVoiceMessage) {
         const encrypted = await encryptFileForVault(fileToUpload);
         fileToUpload = encrypted.encryptedFile;
@@ -1678,12 +1678,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       const form = new FormData();
       form.append('file', fileToUpload);
       
-      // Ð”Ð»Ñ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ ÑÐ¿ÐµÑ†Ð¸Ð°Ð»ÑŒÐ½Ð¾Ðµ Ð¸Ð¼Ñ Ð¿Ð¾Ð»Ñ
+      // Для голосовых сообщений используем специальное имя поля
       if (isVoiceMessage) {
         form.append('kind', 'voice');
       }
       
-      // Ð¡Ð¾Ð·Ð´Ð°ÐµÐ¼ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ñ Ð¿Ñ€Ð¾Ð³Ñ€ÐµÑÑÐ¾Ð¼
+      // Создаем временное сообщение с прогрессом
       const tempId = 'temp-upload-' + Date.now();
       const tempMessage: Message = {
         id: tempId,
@@ -1698,7 +1698,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       
       const xhr = new XMLHttpRequest();
       
-      // ÐžÑ‚ÑÐ»ÐµÐ¶Ð¸Ð²Ð°ÐµÐ¼ Ð¿Ñ€Ð¾Ð³Ñ€ÐµÑÑ
+      // Отслеживаем прогресс
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
           const progress = Math.round((e.loaded / e.total) * 100);
@@ -1715,15 +1715,15 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             const attachmentUrl = data.url || data.attachmentUrl || data.attachment_url;
             
             if (!attachmentUrl) {
-              throw new Error('ÐÐµ Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½ URL Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ');
+              throw new Error('Не получен URL вложения');
             }
             
-            // Ð£Ð´Ð°Ð»ÑÐµÐ¼ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ
+            // Удаляем временное сообщение
             setMessages(prev => prev.filter(m => m.id !== tempId));
             
-            // ÐžÑ‚Ð¿Ñ€Ð°Ð²Ð»ÑÐµÐ¼ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ñ Ð²Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼
+            // Отправляем сообщение с вложением
             const messagePayload: any = {
-              text: isVoiceMessage ? '' : text.trim() || '', // Ð”Ð»Ñ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ Ð±ÐµÐ· Ñ‚ÐµÐºÑÑ‚Ð°
+              text: isVoiceMessage ? '' : text.trim() || '', // Для голосовых сообщений без текста
               attachmentUrl: attachmentUrl,
               replyTo: replyingTo?.id || null
             };
@@ -1758,7 +1758,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             await loadMessages(undefined, false);
             
             if (!isVoiceMessage) {
-              showToast(vaultEnvelope ? 'Ð¤Ð°Ð¹Ð» Ð·Ð°ÑˆÐ¸Ñ„Ñ€Ð¾Ð²Ð°Ð½ Ð¸ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½ Ð² Vault' : 'Ð¤Ð°Ð¹Ð» Ð·Ð°Ð³Ñ€ÑƒÐ¶ÐµÐ½', 'success');
+              showToast(vaultEnvelope ? 'Файл зашифрован и отправлен в Vault' : 'Файл загружен', 'success');
             }
           } catch (e: any) {
             setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -1778,18 +1778,18 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       
       xhr.addEventListener('error', () => {
         setMessages(prev => prev.filter(m => m.id !== tempId));
-        showToast('ÐžÑˆÐ¸Ð±ÐºÐ° Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸ Ñ„Ð°Ð¹Ð»Ð°', 'error');
+        showToast('Ошибка отправки файла', 'error');
       });
       
       xhr.open('POST', `${getApiBaseUrl()}/api/chats/${chatId}/attach`);
       xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.getItem('token'));
       xhr.send(form);
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ñ„Ð°Ð¹Ð».'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить файл.'), 'error');
     }
   };
 
-  // Ð¡Ð¾Ð·Ð´Ð°Ð½Ð¸Ðµ Ð¾Ð¿Ñ€Ð¾ÑÐ°
+  // Создание опроса
   const createPoll = async (question: string, options: string[]) => {
     try {
       const response = await api(`/api/chats/${chatId}/messages`, 'POST', {
@@ -1799,13 +1799,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         }
       });
       await loadMessages(undefined, false);
-      showToast('ÐžÐ¿Ñ€Ð¾Ñ ÑÐ¾Ð·Ð´Ð°Ð½', 'success');
+      showToast('Опрос создан', 'success');
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ð·Ð´Ð°Ñ‚ÑŒ Ð¾Ð¿Ñ€Ð¾Ñ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать опрос.'), 'error');
     }
   };
   
-  // Ð¡Ð¾Ð·Ð´Ð°Ð½Ð¸Ðµ ÐºÐ°Ð»ÐµÐ½Ð´Ð°Ñ€Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ
+  // Создание календарного события
   const createCalendarEvent = async (title: string, startTime: string, endTime?: string, location?: string, description?: string) => {
     try {
       await api(`/api/chats/${chatId}/messages`, 'POST', {
@@ -1818,13 +1818,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         }
       });
       await loadMessages(undefined, false);
-      showToast('Ð¡Ð¾Ð±Ñ‹Ñ‚Ð¸Ðµ ÑÐ¾Ð·Ð´Ð°Ð½Ð¾', 'success');
+      showToast('Событие создано', 'success');
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ð·Ð´Ð°Ñ‚ÑŒ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ðµ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось создать событие.'), 'error');
     }
   };
   
-  // ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ° ÐºÐ¾Ð½Ñ‚Ð°ÐºÑ‚Ð°
+  // Отправка контакта
   const sendContact = async (name: string, phone?: string, email?: string, avatar?: string) => {
     try {
       await api(`/api/chats/${chatId}/messages`, 'POST', {
@@ -1836,45 +1836,45 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         }
       });
       await loadMessages(undefined, false);
-      showToast('ÐšÐ¾Ð½Ñ‚Ð°ÐºÑ‚ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½', 'success');
+      showToast('Контакт отправлен', 'success');
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð½Ñ‚Ð°ÐºÑ‚.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось отправить контакт.'), 'error');
     }
   };
   
-  // ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ° Ð´Ð¾ÐºÑƒÐ¼ÐµÐ½Ñ‚Ð°
+  // Отправка документа
   const sendDocument = async (file: File) => {
     await sendFile(file, false);
   };
 
-  // Ð—Ð°ÐºÑ€ÐµÐ¿Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ
+  // Закрепить сообщение
   const pinMessage = async (messageId: string) => {
     try {
       await api(`/api/messages/${messageId}/pin`, 'POST');
-      showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð·Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð¾', 'success');
+      showToast('Сообщение закреплено', 'success');
       loadPinnedMessages();
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°ÐºÑ€ÐµÐ¿Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось закрепить сообщение.'), 'error');
     }
   };
 
-  // ÐžÑ‚ÐºÑ€ÐµÐ¿Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ
+  // Открепить сообщение
   const unpinMessage = async (messageId: string) => {
     try {
       await api(`/api/messages/${messageId}/unpin`, 'POST');
-      showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¾Ñ‚ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð¾', 'success');
+      showToast('Сообщение откреплено', 'success');
       loadPinnedMessages();
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€ÐµÐ¿Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось открепить сообщение.'), 'error');
     }
   };
 
-  // Ð“Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ
+  // Голосовое сообщение
   const recordingStreamRef = useRef<MediaStream | null>(null);
   
   const startRecording = async () => {
     if (!chatId) {
-      showToast('Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ‡Ð°Ñ‚ Ð´Ð»Ñ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ', 'warning');
+      showToast('Выберите чат для отправки сообщения', 'warning');
       return;
     }
     
@@ -1890,7 +1890,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       };
       
       mediaRecorder.onstop = async () => {
-        // ÐžÑÑ‚Ð°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÐ¼ Ð¿Ð¾Ñ‚Ð¾Ðº
+        // Останавливаем поток
         if (recordingStreamRef.current) {
           recordingStreamRef.current.getTracks().forEach(track => track.stop());
           recordingStreamRef.current = null;
@@ -1901,11 +1901,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             const blob = new Blob(chunks, { type: 'audio/webm' });
             const file = new File([blob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
             
-            // ÐžÑ‚Ð¿Ñ€Ð°Ð²Ð»ÑÐµÐ¼ Ñ„Ð°Ð¹Ð» Ñ‡ÐµÑ€ÐµÐ· sendFile Ñ Ñ„Ð»Ð°Ð³Ð¾Ð¼ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ð³Ð¾ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+            // Отправляем файл через sendFile с флагом голосового сообщения
             await sendFile(file, true);
-            showToast('Ð“Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¾', 'success');
+            showToast('Голосовое сообщение отправлено', 'success');
           } catch (e: any) {
-            showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ Ð³Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+            showToast(getErrorMessage(e, 'Не удалось отправить голосовое сообщение.'), 'error');
           }
         }
         
@@ -1922,7 +1922,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         setRecordingTime(Math.floor((Date.now() - startTime) / 1000));
       }, 1000);
     } catch (e: any) {
-      showToast('ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð½Ð°Ñ‡Ð°Ñ‚ÑŒ Ð·Ð°Ð¿Ð¸ÑÑŒ: ' + (e.message || 'unknown'), 'error');
+      showToast('Не удалось начать запись: ' + (e.message || 'unknown'), 'error');
       setIsRecording(false);
     }
   };
@@ -1940,59 +1940,59 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
   
   const cancelRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
-      // ÐžÑÑ‚Ð°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÐ¼ Ð·Ð°Ð¿Ð¸ÑÑŒ
+      // Останавливаем запись
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       
-      // ÐžÑÑ‚Ð°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÐ¼ Ð¿Ð¾Ñ‚Ð¾Ðº
+      // Останавливаем поток
       if (recordingStreamRef.current) {
         recordingStreamRef.current.getTracks().forEach(track => track.stop());
         recordingStreamRef.current = null;
       }
       
-      // ÐžÑÑ‚Ð°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÐ¼ Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð»
+      // Останавливаем интервал
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
         recordingIntervalRef.current = null;
       }
       
       setRecordingTime(0);
-      showToast('Ð—Ð°Ð¿Ð¸ÑÑŒ Ð¾Ñ‚Ð¼ÐµÐ½ÐµÐ½Ð°', 'info');
+      showToast('Запись отменена', 'info');
     }
   };
 
-  // Ð ÐµÐ°ÐºÑ†Ð¸Ñ
+  // Реакция
   const addReaction = async (messageId: string, emoji: string) => {
     try {
       await api(`/api/messages/${messageId}/react`, 'POST', { emoji });
       await loadMessages(undefined, false);
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ Ñ€ÐµÐ°ÐºÑ†Ð¸ÑŽ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось поставить реакцию.'), 'error');
     }
   };
 
-  // Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹Ñ… Ñ‡Ð°Ñ‚Ð¾Ð² Ð´Ð»Ñ Ð¿ÐµÑ€ÐµÑÑ‹Ð»ÐºÐ¸
+  // Загрузка доступных чатов для пересылки
   const loadAvailableChats = async () => {
     try {
       const data = await api('/api/chats');
       const chats = (data.chats || []).filter((c: any) => c.id !== chatId);
       setAvailableChats(chats.map((c: any) => ({
         id: c.id,
-        name: c.name || c.members?.find((m: any) => m.userId !== currentUser.id)?.user?.username || 'Ð§Ð°Ñ‚',
+        name: c.name || c.members?.find((m: any) => m.userId !== currentUser.id)?.user?.username || 'Чат',
         type: c.type || 'dm'
       })));
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ñ‡Ð°Ñ‚Ñ‹.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить чаты.'), 'error');
     }
   };
 
-  // ÐŸÐµÑ€ÐµÑÑ‹Ð»ÐºÐ° ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+  // Пересылка сообщения
   const forwardMessage = async (targetChatId: string) => {
     if (!forwardMessageId) return;
     try {
       const message = messages.find(m => m.id === forwardMessageId);
       if (!message) {
-        showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾', 'error');
+        showToast('Сообщение не найдено', 'error');
         return;
       }
       
@@ -2001,23 +2001,23 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         comment: forwardComment.trim() || undefined
       });
       
-      showToast('Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¿ÐµÑ€ÐµÑÐ»Ð°Ð½Ð¾', 'success');
+      showToast('Сообщение переслано', 'success');
       setShowForwardModal(false);
       setForwardMessageId(null);
       setForwardComment('');
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿ÐµÑ€ÐµÑÐ»Ð°Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось переслать сообщение.'), 'error');
     }
   };
 
-  // Ð’Ð²Ð¾Ð´ Ñ‚ÐµÐºÑÑ‚Ð° Ñ Ð¾Ñ‚ÑÐ»ÐµÐ¶Ð¸Ð²Ð°Ð½Ð¸ÐµÐ¼ Ð¿ÐµÑ‡Ð°Ñ‚Ð¸ Ð¸ ÑƒÐ¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ð¹
+  // Ввод текста с отслеживанием печати и упоминаний
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     const newCursorPos = e.target.selectionStart || 0;
     setText(newText);
     setCursorPosition(newCursorPos);
     
-    // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ ÑƒÐ¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ñ
+    // Проверяем упоминания
     const textBeforeCursor = newText.slice(0, newCursorPos);
     const mentionMatch = textBeforeCursor.match(/@([\w.-]*)$/);
     if (mentionMatch) {
@@ -2034,7 +2034,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   };
 
-  // ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ð²Ñ‹Ð±Ð¾Ñ€Ð° ÑƒÐ¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ñ
+  // Обработка выбора упоминания
   const handleMentionSelect = (username: string) => {
     if (!mentionQuery) return;
     const textBefore = text.slice(0, mentionQuery.position - mentionQuery.query.length - 1);
@@ -2051,7 +2051,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }, 0);
   };
 
-  // ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ° Ð¿Ð¾ Enter
+  // Отправка по Enter
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (mentionQuery && (e.key === 'Enter' || e.key === 'Tab')) {
       return;
@@ -2062,7 +2062,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     }
   };
 
-  // ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° ÐºÐ»Ð¸ÐºÐ° Ð¿Ð¾ Ñ‚ÐµÐºÑÑ‚Ð¾Ð²Ð¾Ð¼Ñƒ Ð¿Ð¾Ð»ÑŽ
+  // Обработка клика по текстовому полю
   const handleInputClick = (e: React.MouseEvent<HTMLTextAreaElement>) => {
     const target = e.target as HTMLTextAreaElement;
     setCursorPosition(target.selectionStart || 0);
@@ -2082,8 +2082,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-    if (diff < 60000) return 'Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ñ‡Ñ‚Ð¾';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} Ð¼Ð¸Ð½ Ð½Ð°Ð·Ð°Ð´`;
+    if (diff < 60000) return 'только что';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} мин назад`;
     return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -2095,8 +2095,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     yesterday.setDate(yesterday.getDate() - 1);
     const dDay = new Date(d);
     dDay.setHours(0, 0, 0, 0);
-    if (dDay.getTime() === today.getTime()) return 'Ð¡ÐµÐ³Ð¾Ð´Ð½Ñ';
-    if (dDay.getTime() === yesterday.getTime()) return 'Ð’Ñ‡ÐµÑ€Ð°';
+    if (dDay.getTime() === today.getTime()) return 'Сегодня';
+    if (dDay.getTime() === yesterday.getTime()) return 'Вчера';
     return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
   };
 
@@ -2106,12 +2106,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Ð ÐµÐ½Ð´ÐµÑ€Ð¸Ð½Ð³ Ñ‚ÐµÐºÑÑ‚Ð° ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ Ñ Ð¿Ð¾Ð´ÑÐ²ÐµÑ‚ÐºÐ¾Ð¹ ÑƒÐ¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ð¹ Ð¸ Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸ÐµÐ¼
+  // Рендеринг текста сообщения с подсветкой упоминаний и форматированием
   const renderMessageText = (messageText: string) => {
     const parts: (string | React.ReactElement)[] = [];
     let lastIndex = 0;
     
-    // Ð£Ð»ÑƒÑ‡ÑˆÐµÐ½Ð½Ñ‹Ð¹ regex Ð´Ð»Ñ ÑƒÐ¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ð¹ - Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÑ‚ @username Ð¸ @username@domain
+    // Улучшенный regex для упоминаний - поддерживает @username и @username@domain
     const mentionRegex = /@([\w.-]+)/g;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const boldRegex = /\*\*(.+?)\*\*/g;
@@ -2168,7 +2168,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
       
       switch (match.type) {
         case 'mention':
-          // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÐµÑ‚ Ð»Ð¸ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ñ Ñ‚Ð°ÐºÐ¸Ð¼ username
+          // Проверяем, существует ли пользователь с таким username
           const mentionedUser = Array.from(users.values()).find(u => u.username.toLowerCase() === match.content.toLowerCase());
           parts.push(
             <span 
@@ -2187,14 +2187,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   setShowUserProfile(mentionedUser.id);
                 }
               }}
-              title={mentionedUser ? `ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ${mentionedUser.username}` : `@${match.content}`}
+              title={mentionedUser ? `Профиль ${mentionedUser.username}` : `@${match.content}`}
             >
               @{match.content}
             </span>
           );
           break;
         case 'url':
-          // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, ÑÐ²Ð»ÑÐµÑ‚ÑÑ Ð»Ð¸ ÑÑ‚Ð¾ Ð²Ð¸Ð´ÐµÐ¾ URL
+          // Проверяем, является ли это видео URL
           if (isVideoUrl(match.content)) {
             parts.push(
               <div key={match.index} style={{ marginTop: '8px' }}>
@@ -2274,8 +2274,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
     <div className="enhanced-chat-window">
         <div className="chat-header">
           {onBack && (
-            <button type="button" className="chat-back-btn-mobile" onClick={onBack} aria-label="ÐÐ°Ð·Ð°Ð´ Ðº ÑÐ¿Ð¸ÑÐºÑƒ Ñ‡Ð°Ñ‚Ð¾Ð²">
-              â†
+            <button type="button" className="chat-back-btn-mobile" onClick={onBack} aria-label="Назад к списку чатов">
+              ←
             </button>
           )}
           <div className="chat-title">
@@ -2284,7 +2284,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 {chatInfoRef.current.type === 'dm' ? (() => {
                   const otherMemberId = chatInfoRef.current.members.find((id: string) => id !== currentUser.id);
                   const otherUser = otherMemberId ? users.get(otherMemberId) : null;
-                  const displayName = otherUser?.username || chatInfoRef.current?.name || 'ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ';
+                  const displayName = otherUser?.username || chatInfoRef.current?.name || 'Пользователь';
                   const isOnline = otherUser?.status === 'online';
                   return (
                     <>
@@ -2314,13 +2314,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           color: isOnline ? 'var(--accent-primary, #7c6cff)' : 'var(--text-secondary)',
                           fontWeight: isOnline ? 500 : 400,
                         }}>
-                          {isOnline ? 'Ð¾Ð½Ð»Ð°Ð¹Ð½' : 'Ð±Ñ‹Ð»(Ð°) Ð½ÐµÐ´Ð°Ð²Ð½Ð¾'}
+                          {isOnline ? 'онлайн' : 'был(а) недавно'}
                         </span>
                       </div>
                       <button
                         type="button"
                         onClick={() => setShowVerificationModal(true)}
-                        title="ÐŸÐ¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð¸Ðµ Ð»Ð¸Ñ‡Ð½Ð¾ÑÑ‚Ð¸ / Ð¾Ñ‚Ð¿ÐµÑ‡Ð°Ñ‚Ð¾Ðº ÐºÐ»ÑŽÑ‡Ð°"
+                        title="Подтверждение личности / отпечаток ключа"
                         style={{
                           padding: '6px 10px',
                           background: 'transparent',
@@ -2334,16 +2334,16 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           gap: '4px',
                         }}
                       >
-                        ðŸ›¡ï¸
+                        🛡️
                       </button>
                     </>
                   );
                 })() : (
                   <>
-                    {chatInfoRef.current.type === 'group' ? 'ðŸ‘¥' : 'ðŸ“¢'}
-                    <span style={{ fontWeight: '600' }}>{chatInfoRef.current.name || 'Ð§Ð°Ñ‚'}</span>
+                    {chatInfoRef.current.type === 'group' ? '👥' : '📢'}
+                    <span style={{ fontWeight: '600' }}>{chatInfoRef.current.name || 'Чат'}</span>
                     {isE2EEEnabled && (chatInfoRef.current.type === 'group' || chatInfoRef.current.type === 'channel') && (
-                      <span title="End-to-End Encryption Ð°ÐºÑ‚Ð¸Ð²ÐµÐ½" style={{ fontSize: '14px', color: '#10b981', marginLeft: '4px' }}>ðŸ”’</span>
+                      <span title="End-to-End Encryption активен" style={{ fontSize: '14px', color: '#10b981', marginLeft: '4px' }}>🔒</span>
                     )}
                   </>
                 )}
@@ -2351,9 +2351,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             ) : selectedThreadId ? (
             <div className="thread-header">
               <button onClick={() => { setSelectedThreadId(null); setShowThreads(false); }} className="back-btn">
-                â† ÐÐ°Ð·Ð°Ð´
+                ← Назад
               </button>
-              <span>{threads.find(t => t.id === selectedThreadId)?.name || 'Ð¢Ñ€ÐµÐ´'}</span>
+              <span>{threads.find(t => t.id === selectedThreadId)?.name || 'Тред'}</span>
             </div>
           ) : replyingTo ? (
             <div className="reply-preview" style={{
@@ -2368,7 +2368,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '2px', color: 'var(--text-primary)' }}>
-                  ÐžÑ‚Ð²ÐµÑ‚ Ð½Ð° {users.get(replyingTo.senderId)?.username || 'Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ñ'}
+                  Ответ на {users.get(replyingTo.senderId)?.username || 'пользователя'}
                 </div>
                 <div style={{ 
                   fontSize: '12px', 
@@ -2377,7 +2377,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap'
                 }}>
-                  {replyingTo.text ? (replyingTo.text.length > 50 ? replyingTo.text.slice(0, 50) + '...' : replyingTo.text) : 'Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ'}
+                  {replyingTo.text ? (replyingTo.text.length > 50 ? replyingTo.text.slice(0, 50) + '...' : replyingTo.text) : 'Сообщение'}
                 </div>
               </div>
               <button 
@@ -2398,9 +2398,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 onMouseLeave={(e) => {
                   e.currentTarget.style.color = 'var(--text-secondary)';
                 }}
-                title="ÐžÑ‚Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð¾Ñ‚Ð²ÐµÑ‚"
+                title="Отменить ответ"
               >
-                âœ•
+                ✕
               </button>
             </div>
           ) : null}
@@ -2409,22 +2409,22 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           <button
             className="search-btn"
             onClick={() => setShowSearch(!showSearch)}
-            title="ÐŸÐ¾Ð¸ÑÐº"
+            title="Поиск"
           >
-            ðŸ”
+            🔍
           </button>
           <button
             className="media-gallery-btn"
             onClick={() => setShowMediaGallery(true)}
-            title="ÐœÐµÐ´Ð¸Ð° Ð³Ð°Ð»ÐµÑ€ÐµÑ"
+            title="Медиа галерея"
           >
-            ðŸ“· ÐœÐµÐ´Ð¸Ð°
+            📷 Медиа
           </button>
           <div style={{ display: 'flex', gap: '4px' }}>
             <button
               className="export-btn"
               onClick={() => setShowExportDialog(true)}
-              title="Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ Ð¸ÑÑ‚Ð¾Ñ€Ð¸Ð¸ Ñ‡Ð°Ñ‚Ð°"
+              title="Экспорт истории чата"
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -2442,11 +2442,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 e.currentTarget.style.background = 'transparent';
               }}
             >
-              ðŸ’¾
+              💾
             </button>
             <button
               onClick={() => setShowStatistics(true)}
-              title="Ð¡Ñ‚Ð°Ñ‚Ð¸ÑÑ‚Ð¸ÐºÐ° Ñ‡Ð°Ñ‚Ð°"
+              title="Статистика чата"
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -2464,13 +2464,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 e.currentTarget.style.background = 'transparent';
               }}
             >
-              ðŸ“Š
+              📊
             </button>
             {(chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') && (
               <>
                 <button
                   onClick={() => setShowBotManager(true)}
-                  title="Ð‘Ð¾Ñ‚Ñ‹"
+                  title="Боты"
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -2488,11 +2488,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  ðŸ¤–
+                  🤖
                 </button>
                 <button
                   onClick={() => setShowCalendar(true)}
-                  title="ÐšÐ°Ð»ÐµÐ½Ð´Ð°Ñ€ÑŒ"
+                  title="Календарь"
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -2510,11 +2510,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  ðŸ“…
+                  📅
                 </button>
                 <button
                   onClick={() => setShowTodos(true)}
-                  title="Ð—Ð°Ð´Ð°Ñ‡Ð¸"
+                  title="Задачи"
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -2532,7 +2532,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  âœ…
+                  ✅
                 </button>
               </>
             )}
@@ -2541,9 +2541,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             <button
               className="pinned-btn"
               onClick={() => setShowPinned(!showPinned)}
-              title="Ð—Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð½Ñ‹Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ"
+              title="Закрепленные сообщения"
             >
-              ðŸ“Œ {pinnedMessages.length}
+              📌 {pinnedMessages.length}
             </button>
           )}
           {(chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') && (
@@ -2551,47 +2551,47 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               <button
                 className="threads-btn"
                 onClick={() => setShowThreads(!showThreads)}
-                title="ÐŸÐ¾ÐºÐ°Ð·Ð°Ñ‚ÑŒ Ñ‚Ñ€ÐµÐ´Ñ‹"
+                title="Показать треды"
               >
-                ðŸ’¬ Ð¢Ñ€ÐµÐ´Ñ‹ {threads.length > 0 && `(${threads.length})`}
+                💬 Треды {threads.length > 0 && `(${threads.length})`}
               </button>
               <button
                 className="settings-btn"
                 onClick={() => setShowGroupSettings(true)}
-                title={chatInfoRef.current?.type === 'group' ? 'ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ Ð³Ñ€ÑƒÐ¿Ð¿Ñ‹' : 'ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ ÐºÐ°Ð½Ð°Ð»Ð°'}
+                title={chatInfoRef.current?.type === 'group' ? 'Настройки группы' : 'Настройки канала'}
               >
-                âš™ï¸
+                ⚙️
               </button>
               <button
                 className="call-btn"
                 onClick={() => { setGroupCallVoiceOnly(true); setInGroupCall(true); }}
-                title="Ð“Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ð¹ Ñ‡Ð°Ñ‚ (Ð±ÐµÐ· Ð²Ð¸Ð´ÐµÐ¾)"
+                title="Голосовой чат (без видео)"
               >
-                ðŸ“ž Ð“Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ð¹
+                📞 Голосовой
               </button>
               <button
                 className="video-call-btn"
                 onClick={() => { setGroupCallVoiceOnly(false); setInGroupCall(true); }}
-                title="Ð’Ð¸Ð´ÐµÐ¾Ð·Ð²Ð¾Ð½Ð¾Ðº Ñ Ð´ÐµÐ¼Ð¾Ð½ÑÑ‚Ñ€Ð°Ñ†Ð¸ÐµÐ¹ ÑÐºÑ€Ð°Ð½Ð°"
+                title="Видеозвонок с демонстрацией экрана"
               >
-                ðŸ“¹ Ð’Ð¸Ð´ÐµÐ¾ / Ð­ÐºÑ€Ð°Ð½
+                📹 Видео / Экран
               </button>
               {(isChatOwner || isPlatformAdmin) && (
                 <button
                   className="delete-chat-btn"
                   onClick={async () => {
-                    if (!confirm('Ð’Ñ‹ ÑƒÐ²ÐµÑ€ÐµÐ½Ñ‹, Ñ‡Ñ‚Ð¾ Ñ…Ð¾Ñ‚Ð¸Ñ‚Ðµ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ ÑÑ‚Ð¾Ñ‚ Ñ‡Ð°Ñ‚? Ð­Ñ‚Ð¾ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ðµ Ð½ÐµÐ»ÑŒÐ·Ñ Ð¾Ñ‚Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ.')) {
+                    if (!confirm('Вы уверены, что хотите удалить этот чат? Это действие нельзя отменить.')) {
                       return;
                     }
                     try {
                       await api(`/api/chats/${chatId}`, 'DELETE');
-                      showToast('Ð§Ð°Ñ‚ ÑƒÐ´Ð°Ð»ÐµÐ½', 'success');
+                      showToast('Чат удален', 'success');
                       window.location.href = '/app/chats';
                     } catch (e: any) {
-                      showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ.'), 'error');
+                      showToast(getErrorMessage(e, 'Не удалось удалить сообщение.'), 'error');
                     }
                   }}
-                  title="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ñ‡Ð°Ñ‚"
+                  title="Удалить чат"
                   style={{
                     background: 'transparent',
                     border: 'none',
@@ -2603,7 +2603,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     transition: 'var(--transition-base)'
                   }}
                 >
-                  ðŸ—‘ï¸
+                  🗑️
                 </button>
               )}
             </>
@@ -2619,9 +2619,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     setInDMCall({ isVideo: false, otherUserId: otherMemberId });
                   }
                 }}
-                title="Ð—Ð²Ð¾Ð½Ð¾Ðº"
+                title="Звонок"
               >
-                ðŸ“ž
+                📞
               </button>
               <button
                 className="video-call-btn"
@@ -2632,16 +2632,16 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     setInDMCall({ isVideo: true, otherUserId: otherMemberId });
                   }
                 }}
-                title="Ð’Ð¸Ð´ÐµÐ¾Ð·Ð²Ð¾Ð½Ð¾Ðº"
+                title="Видеозвонок"
               >
-                ðŸ“¹
+                📹
               </button>
             </>
           )}
           <button
             className="call-history-btn"
             onClick={() => setShowCallHistory(true)}
-            title="Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ Ð·Ð²Ð¾Ð½ÐºÐ¾Ð²"
+            title="История звонков"
             style={{
               background: 'transparent',
               border: 'none',
@@ -2659,12 +2659,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               e.currentTarget.style.background = 'transparent';
             }}
           >
-            ðŸ“ž
+            📞
           </button>
           <button
             className="appearance-btn"
             onClick={() => setShowAppearanceSettings(true)}
-            title="Ð’Ð½ÐµÑˆÐ½Ð¸Ð¹ Ð²Ð¸Ð´ Ñ‡Ð°Ñ‚Ð°"
+            title="Внешний вид чата"
             style={{
               background: 'transparent',
               border: 'none',
@@ -2682,7 +2682,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               e.currentTarget.style.background = 'transparent';
             }}
           >
-            ðŸŽ¨
+            🎨
           </button>
           <button
             className="settings-btn"
@@ -2696,21 +2696,21 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 setShowGroupSettings(true);
               }
             }}
-            title={chatInfoRef.current?.type === 'dm' ? 'ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ' : 'ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸'}
+            title={chatInfoRef.current?.type === 'dm' ? 'Профиль' : 'Настройки'}
           >
-            {chatInfoRef.current?.type === 'dm' ? 'ðŸ‘¤' : 'âš™ï¸'}
+            {chatInfoRef.current?.type === 'dm' ? '👤' : '⚙️'}
           </button>
-          {onClose && <button className="close-btn" onClick={onClose}>âœ•</button>}
+          {onClose && <button className="close-btn" onClick={onClose}>✕</button>}
         </div>
       </div>
 
-      {/* ÐŸÐ¾Ð¸ÑÐº Ð¿Ð¾ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑÐ¼ */}
+      {/* Поиск по сообщениям */}
       {showSearch && (
         <div className="message-search">
           <div className="search-header">
             <input
               type="text"
-              placeholder="ÐŸÐ¾Ð¸ÑÐº Ð¿Ð¾ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑÐ¼..."
+              placeholder="Поиск по сообщениям..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -2723,7 +2723,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               className="search-input"
             />
             <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}>
-              âœ•
+              ✕
             </button>
           </div>
           {searchQuery.trim() && (
@@ -2735,7 +2735,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   const textLower = (result.text || '').toLowerCase();
                   const matchIndex = textLower.indexOf(queryLower);
                   
-                  // Ð’Ñ‹Ð´ÐµÐ»ÑÐµÐ¼ Ð½Ð°Ð¹Ð´ÐµÐ½Ð½Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚
+                  // Выделяем найденный текст
                   const renderHighlightedText = (text: string) => {
                     if (!text || matchIndex === -1) return text;
                     const before = text.substring(0, matchIndex);
@@ -2757,12 +2757,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       key={result.id}
                       className="search-result-item"
                       onClick={async () => {
-                        // Ð•ÑÐ»Ð¸ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð½Ðµ Ð² Ñ‚ÐµÐºÑƒÑ‰ÐµÐ¼ ÑÐ¿Ð¸ÑÐºÐµ, Ð·Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÐ¼ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ
+                        // Если сообщение не в текущем списке, загружаем сообщения
                         if (!messages.find(m => m.id === result.id)) {
                           await loadMessages(undefined, false);
                         }
                         
-                        // ÐŸÑ€Ð¾ÐºÑ€ÑƒÑ‚ÐºÐ° Ðº ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑŽ
+                        // Прокрутка к сообщению
                         setTimeout(() => {
                           const element = document.querySelector(`[data-message-id="${result.id}"]`);
                           if (element) {
@@ -2799,13 +2799,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                             renderHighlightedText(result.text)
                           )
                         ) : result.attachmentUrl ? (
-                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>ðŸ“Ž Ð’Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ</span>
+                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>📎 Вложение</span>
                         ) : result.stickerId ? (
-                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>ðŸŽ¨ Ð¡Ñ‚Ð¸ÐºÐµÑ€</span>
+                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>🎨 Стикер</span>
                         ) : result.gifUrl ? (
-                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>ðŸŽ¬ GIF</span>
+                          <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>🎬 GIF</span>
                         ) : (
-                          <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð±ÐµÐ· Ñ‚ÐµÐºÑÑ‚Ð°</span>
+                          <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Сообщение без текста</span>
                         )}
                       </div>
                     </div>
@@ -2813,7 +2813,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 })
               ) : searchQuery.trim() && (
                 <div className="search-results-empty">
-                  ÐÐ¸Ñ‡ÐµÐ³Ð¾ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾
+                  Ничего не найдено
                 </div>
               )}
             </div>
@@ -2821,7 +2821,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         </div>
       )}
 
-      {/* ÐŸÐ°Ð½ÐµÐ»ÑŒ Ð·Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð½Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ */}
+      {/* Панель закрепленных сообщений */}
       {showPinned && (
         <div className="pinned-messages-panel" style={{
           position: 'absolute',
@@ -2847,7 +2847,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             background: 'var(--bg-secondary)'
           }}>
             <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
-              ðŸ“Œ Ð—Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð½Ñ‹Ðµ ({pinnedMessages.length})
+              📌 Закрепленные ({pinnedMessages.length})
             </h4>
             <button 
               onClick={() => setShowPinned(false)}
@@ -2870,7 +2870,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 e.currentTarget.style.color = 'var(--text-secondary)';
               }}
             >
-              âœ•
+              ✕
             </button>
           </div>
           <div className="pinned-messages-list" style={{
@@ -2885,7 +2885,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 color: 'var(--text-tertiary)',
                 fontStyle: 'italic'
               }}>
-                ÐÐµÑ‚ Ð·Ð°ÐºÑ€ÐµÐ¿Ð»ÐµÐ½Ð½Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹
+                Нет закрепленных сообщений
               </div>
             ) : (
               pinnedMessages.map((pinnedMsg) => {
@@ -2895,7 +2895,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     key={pinnedMsg.id}
                     className="pinned-message-item"
                     onClick={() => {
-                      // ÐŸÑ€Ð¾ÐºÑ€ÑƒÑ‚ÐºÐ° Ðº ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑŽ
+                      // Прокрутка к сообщению
                       const element = document.querySelector(`[data-message-id="${pinnedMsg.id}"]`);
                       if (element) {
                         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2995,13 +2995,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           pinnedMsg.text
                         )
                       ) : pinnedMsg.attachmentUrl ? (
-                        <span style={{ fontStyle: 'italic' }}>ðŸ“Ž Ð’Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ</span>
+                        <span style={{ fontStyle: 'italic' }}>📎 Вложение</span>
                       ) : pinnedMsg.stickerId ? (
-                        <span style={{ fontStyle: 'italic' }}>ðŸŽ¨ Ð¡Ñ‚Ð¸ÐºÐµÑ€</span>
+                        <span style={{ fontStyle: 'italic' }}>🎨 Стикер</span>
                       ) : pinnedMsg.gifUrl ? (
-                        <span style={{ fontStyle: 'italic' }}>ðŸŽ¬ GIF</span>
+                        <span style={{ fontStyle: 'italic' }}>🎬 GIF</span>
                       ) : (
-                        <span style={{ fontStyle: 'italic', color: 'var(--text-tertiary)' }}>Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð±ÐµÐ· Ñ‚ÐµÐºÑÑ‚Ð°</span>
+                        <span style={{ fontStyle: 'italic', color: 'var(--text-tertiary)' }}>Сообщение без текста</span>
                       )}
                     </div>
                     {(isChatOwner || isPlatformAdmin || pinnedMsg.senderId === currentUser.id) && (
@@ -3011,7 +3011,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           e.stopPropagation();
                           unpinMessage(pinnedMsg.id);
                         }}
-                        title="ÐžÑ‚ÐºÑ€ÐµÐ¿Ð¸Ñ‚ÑŒ"
+                        title="Открепить"
                         style={{
                           position: 'absolute',
                           top: 'var(--spacing-xs)',
@@ -3034,7 +3034,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           e.currentTarget.style.color = 'var(--text-tertiary)';
                         }}
                       >
-                        ðŸ“Œ
+                        📌
                       </button>
                     )}
                   </div>
@@ -3059,10 +3059,10 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             gap: '8px',
           }}
         >
-          <span>âš ï¸</span>
-          <span>{maintenance.message || 'Ð’ÐµÐ´ÑƒÑ‚ÑÑ Ñ‚ÐµÑ…Ð½Ð¸Ñ‡ÐµÑÐºÐ¸Ðµ Ñ€Ð°Ð±Ð¾Ñ‚Ñ‹.'}</span>
+          <span>⚠️</span>
+          <span>{maintenance.message || 'Ведутся технические работы.'}</span>
           {maintenance.timestamp && (
-            <span style={{ opacity: 0.8, fontSize: '12px' }}> â€¢ {maintenance.timestamp}</span>
+            <span style={{ opacity: 0.8, fontSize: '12px' }}> • {maintenance.timestamp}</span>
           )}
         </div>
       )}
@@ -3072,7 +3072,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         className="messages-container chat-messages"
         onScroll={handleScroll}
       >
-        {/* ÐšÐ½Ð¾Ð¿ÐºÐ° Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¸ ÑÑ‚Ð°Ñ€Ñ‹Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹ */}
+        {/* Кнопка загрузки старых сообщений */}
         {hasMoreMessages && (
           <div style={{ 
             padding: 'var(--spacing-md)', 
@@ -3094,16 +3094,16 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 opacity: loadingMoreMessages ? 0.6 : 1
               }}
             >
-              {loadingMoreMessages ? 'â³ Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ°...' : 'â¬†ï¸ Ð—Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ ÑÑ‚Ð°Ñ€Ñ‹Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ'}
+              {loadingMoreMessages ? '⏳ Загрузка...' : '⬆️ Загрузить старые сообщения'}
             </button>
           </div>
         )}
         {messages.length === 0 && !loadingMoreMessages && (
           <div className="chat-empty-state">
-            <div className="chat-empty-icon">ðŸ’¬</div>
-            <h3 className="chat-empty-title">ÐÐµÑ‚ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹</h3>
-            <p className="chat-empty-desc">ÐÐ°Ð¿Ð¸ÑˆÐ¸Ñ‚Ðµ Ð¿ÐµÑ€Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ Ð¸Ð»Ð¸ Ð¿Ñ€Ð¸ÐºÑ€ÐµÐ¿Ð¸Ñ‚Ðµ Ñ„Ð°Ð¹Ð»</p>
-            <p className="chat-empty-hint">Ð”Ð²Ð¾Ð¹Ð½Ð¾Ð¹ ÐºÐ»Ð¸Ðº Ð¿Ð¾ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑŽ â€” Ð¾Ñ‚Ð²ÐµÑ‚Ð¸Ñ‚ÑŒ</p>
+            <div className="chat-empty-icon">💬</div>
+            <h3 className="chat-empty-title">Нет сообщений</h3>
+            <p className="chat-empty-desc">Напишите первое сообщение или прикрепите файл</p>
+            <p className="chat-empty-hint">Двойной клик по сообщению — ответить</p>
           </div>
         )}
         {messages.map((msg, idx) => {
@@ -3192,14 +3192,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     marginBottom: '4px',
                     display: 'inline-block'
                   }}>
-                    ðŸ’¬ Ð¢Ñ€ÐµÐ´: {threads.find(t => t.id === msg.threadId)?.name || 'Ð¢Ñ€ÐµÐ´'}
+                    💬 Тред: {threads.find(t => t.id === msg.threadId)?.name || 'Тред'}
                   </div>
                 )}
                 {msg.replyTo && (
                   <div 
                     className="message-reply"
                     onClick={() => {
-                      // ÐŸÑ€Ð¾ÐºÑ€ÑƒÑ‚ÐºÐ° Ðº Ð¸ÑÑ…Ð¾Ð´Ð½Ð¾Ð¼Ñƒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑŽ
+                      // Прокрутка к исходному сообщению
                       const replyMessage = msg.replyToMessage || messages.find(m => m.id === msg.replyTo);
                       if (replyMessage) {
                         const element = document.querySelector(`[data-message-id="${msg.replyTo}"]`);
@@ -3233,9 +3233,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                         const replyMsg = msg.replyToMessage || messages.find(m => m.id === msg.replyTo);
                         if (replyMsg) {
                           const replySender = users.get(replyMsg.senderId);
-                          return `â†©ï¸ ÐžÑ‚Ð²ÐµÑ‚ Ð½Ð° ${replySender?.username || 'Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ñ'}`;
+                          return `↩️ Ответ на ${replySender?.username || 'пользователя'}`;
                         }
-                        return 'â†©ï¸ ÐžÑ‚Ð²ÐµÑ‚ Ð½Ð° ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ';
+                        return '↩️ Ответ на сообщение';
                       })()}
                     </div>
                     <div style={{ 
@@ -3251,11 +3251,11 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           if ('text' in replyMsg && replyMsg.text) {
                             return replyMsg.text.length > 50 ? replyMsg.text.slice(0, 50) + '...' : replyMsg.text;
                           }
-                          if ('attachmentUrl' in replyMsg && replyMsg.attachmentUrl) return 'ðŸ“Ž Ð’Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ';
-                          if ('stickerId' in replyMsg && replyMsg.stickerId) return 'ðŸŽ¨ Ð¡Ñ‚Ð¸ÐºÐµÑ€';
-                          if ('gifUrl' in replyMsg && replyMsg.gifUrl) return 'ðŸŽ¬ GIF';
+                          if ('attachmentUrl' in replyMsg && replyMsg.attachmentUrl) return '📎 Вложение';
+                          if ('stickerId' in replyMsg && replyMsg.stickerId) return '🎨 Стикер';
+                          if ('gifUrl' in replyMsg && replyMsg.gifUrl) return '🎬 GIF';
                         }
-                        return 'Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ';
+                        return 'Сообщение';
                       })()}
                     </div>
                   </div>
@@ -3273,10 +3273,10 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     alignItems: 'center',
                     gap: '8px'
                   }}>
-                    <span>âž¡ï¸ ÐŸÐµÑ€ÐµÑÐ»Ð°Ð½Ð¾</span>
+                    <span>➡️ Переслано</span>
                     {msg.forwardedMessage && (
                       <span style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
-                        Ð¾Ñ‚ {msg.forwardedMessage.sender?.username || 'Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ñ'}
+                        от {msg.forwardedMessage.sender?.username || 'пользователя'}
                       </span>
                     )}
                   </div>
@@ -3292,7 +3292,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     color: 'var(--text-secondary)'
                   }}>
                     <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                      {msg.forwardedMessage.sender?.username || 'ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ'}
+                      {msg.forwardedMessage.sender?.username || 'Пользователь'}
                     </div>
                     <div style={{ 
                       fontSize: '12px', 
@@ -3306,9 +3306,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           msg.forwardedMessage.text.slice(0, 50) + '...' : 
                           msg.forwardedMessage.text
                       ) : msg.forwardedMessage.attachmentUrl ? (
-                        'ðŸ“Ž Ð’Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ'
+                        '📎 Вложение'
                       ) : (
-                        'Ð¡Ð¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ'
+                        'Сообщение'
                       )}
                     </div>
                   </div>
@@ -3339,7 +3339,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           color: 'var(--text-tertiary)',
                           fontStyle: 'italic'
                         }}>
-                          Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° ÑÑ‚Ð¸ÐºÐµÑ€Ð°...
+                          Загрузка стикера...
                         </div>
                       )}
                     </div>
@@ -3380,7 +3380,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                             dangerouslySetInnerHTML={{ __html: parseMarkdown(msg.text) }}
                             style={{ wordWrap: 'break-word' }}
                           />
-                          {/* ÐŸÑ€ÐµÐ²ÑŒÑŽ ÑÑÑ‹Ð»Ð¾Ðº */}
+                          {/* Превью ссылок */}
                           {(() => {
                             const urlRegex = /(https?:\/\/[^\s<]+)/g;
                             const urls: string[] = [];
@@ -3400,7 +3400,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       )}
                     </div>
                   )}
-                  {/* ÐžÐ¿Ñ€Ð¾Ñ */}
+                  {/* Опрос */}
                   {msg.pollId && msg.poll && (
                     <Poll
                       pollId={msg.pollId}
@@ -3413,7 +3413,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       totalVotes={msg.poll.totalVotes}
                     />
                   )}
-                  {/* ÐšÐ°Ð»ÐµÐ½Ð´Ð°Ñ€Ð½Ð¾Ðµ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ðµ */}
+                  {/* Календарное событие */}
                   {msg.calendarEvent && (
                     <div style={{
                       padding: '12px',
@@ -3423,15 +3423,15 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       border: '1px solid var(--border)'
                     }}>
                       <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-primary)' }}>
-                        ðŸ“… {msg.calendarEvent.title}
+                        📅 {msg.calendarEvent.title}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                        ðŸ• {new Date(msg.calendarEvent.startTime).toLocaleString('ru-RU')}
+                        🕐 {new Date(msg.calendarEvent.startTime).toLocaleString('ru-RU')}
                         {msg.calendarEvent.endTime && ` - ${new Date(msg.calendarEvent.endTime).toLocaleString('ru-RU')}`}
                       </div>
                       {msg.calendarEvent.location && (
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          ðŸ“ {msg.calendarEvent.location}
+                          📍 {msg.calendarEvent.location}
                         </div>
                       )}
                       {msg.calendarEvent.description && (
@@ -3441,7 +3441,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       )}
                     </div>
                   )}
-                  {/* ÐšÐ¾Ð½Ñ‚Ð°ÐºÑ‚ */}
+                  {/* Контакт */}
                   {msg.contact && (
                     <div style={{
                       padding: '12px',
@@ -3458,22 +3458,22 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       )}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                          ðŸ‘¤ {msg.contact.name}
+                          👤 {msg.contact.name}
                         </div>
                         {msg.contact.phone && (
                           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            ðŸ“ž {msg.contact.phone}
+                            📞 {msg.contact.phone}
                           </div>
                         )}
                         {msg.contact.email && (
                           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            âœ‰ï¸ {msg.contact.email}
+                            ✉️ {msg.contact.email}
                           </div>
                         )}
                       </div>
                     </div>
                   )}
-                  {/* Ð”Ð¾ÐºÑƒÐ¼ÐµÐ½Ñ‚ */}
+                  {/* Документ */}
                   {msg.document && (
                     <div style={{
                       padding: '12px',
@@ -3485,13 +3485,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       gap: '12px',
                       alignItems: 'center'
                     }}>
-                      <div style={{ fontSize: '32px' }}>ðŸ“„</div>
+                      <div style={{ fontSize: '32px' }}>📄</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                          {msg.document.vault ? `ðŸ” ${msg.document.name}` : msg.document.name}
+                          {msg.document.vault ? `🔐 ${msg.document.name}` : msg.document.name}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          {msg.document.type.toUpperCase()} â€¢ {(msg.document.size / 1024).toFixed(1)} KB
+                          {msg.document.type.toUpperCase()} • {(msg.document.size / 1024).toFixed(1)} KB
                         </div>
                       </div>
                       {msg.document.vault && msg.attachmentUrl && (
@@ -3517,7 +3517,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                               a.remove();
                               setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
                             } catch (e: any) {
-                              showToast(getErrorMessage(e, 'ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ñ€Ð°ÑÑˆÐ¸Ñ„Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ Ñ„Ð°Ð¹Ð» Vault.'), 'error');
+                              showToast(getErrorMessage(e, 'Не удалось расшифровать файл Vault.'), 'error');
                             }
                           }}
                           style={{
@@ -3531,7 +3531,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                             fontWeight: 600,
                           }}
                         >
-                          Ð Ð°ÑÑˆÐ¸Ñ„Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ
+                          Расшифровать
                         </button>
                       )}
                       {msg.document.previewUrl && !msg.document.vault && (
@@ -3539,7 +3539,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       )}
                     </div>
                   )}
-                  {/* Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ */}
+                  {/* История редактирования */}
                   {msg.editHistory && msg.editHistory.length > 0 && (
                     <details style={{
                       marginTop: '8px',
@@ -3547,7 +3547,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       color: 'var(--text-tertiary)'
                     }}>
                       <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
-                        Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ ({msg.editHistory.length})
+                        История редактирования ({msg.editHistory.length})
                       </summary>
                       <div style={{ marginTop: '8px', padding: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px' }}>
                         {msg.editHistory.map((edit, idx) => (
@@ -3563,7 +3563,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       </div>
                     </details>
                   )}
-                  {/* ÐŸÑ€Ð¾Ð³Ñ€ÐµÑÑ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÐ¸ */}
+                  {/* Прогресс отправки */}
                   {msg.uploadProgress !== undefined && msg.uploadProgress < 100 && (
                     <div style={{
                       marginTop: '8px',
@@ -3574,7 +3574,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                       color: 'var(--text-secondary)'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span>ÐžÑ‚Ð¿Ñ€Ð°Ð²ÐºÐ°...</span>
+                        <span>Отправка...</span>
                         <span>{msg.uploadProgress}%</span>
                       </div>
                       <div style={{
@@ -3596,7 +3596,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   {msg.attachmentUrl && !msg.document?.vault && (
                     <div className="message-attachment">
                       {(() => {
-                        // Ð¤Ð¾Ñ€Ð¼Ð¸Ñ€ÑƒÐµÐ¼ Ð¿Ð¾Ð»Ð½Ñ‹Ð¹ URL Ð´Ð»Ñ Ð¼ÐµÐ´Ð¸Ð°Ñ„Ð°Ð¹Ð»Ð°
+                        // Формируем полный URL для медиафайла
                         const attachmentUrl = msg.attachmentUrl.startsWith('http') 
                           ? msg.attachmentUrl 
                           : `${getApiBaseUrl()}${msg.attachmentUrl.startsWith('/') ? '' : '/'}${msg.attachmentUrl}`;
@@ -3614,14 +3614,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                         } else {
                           return (
                             <a href={attachmentUrl} target="_blank" rel="noreferrer" download>
-                              ðŸ“Ž {msg.attachmentUrl.split('/').pop()}
+                              📎 {msg.attachmentUrl.split('/').pop()}
                             </a>
                           );
                         }
                       })()}
                     </div>
                   )}
-                  {msg.text && msg.text.includes('ðŸ“') && (
+                  {msg.text && msg.text.includes('📍') && (
                     <div className="message-location">
                       <button
                         className="location-view-btn"
@@ -3635,34 +3635,34 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           }
                         }}
                       >
-                        ðŸ“ ÐŸÐ¾ÐºÐ°Ð·Ð°Ñ‚ÑŒ Ð½Ð° ÐºÐ°Ñ€Ñ‚Ðµ
+                        📍 Показать на карте
                       </button>
                     </div>
                   )}
                   <div className="message-meta">
                     <span>{formatTime(msg.createdAt)}</span>
-                    {msg.editedAt && <span className="edited">(Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¾)</span>}
+                    {msg.editedAt && <span className="edited">(изменено)</span>}
                     {isMe && (
                       <span className="read-status" title={(() => {
                         if (msg.readReceipts && msg.readReceipts.length > 0) {
                           const lastRead = msg.readReceipts[msg.readReceipts.length - 1];
-                          return `ÐŸÑ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ð½Ð¾ ${formatTime(lastRead.readAt)}`;
+                          return `Прочитано ${formatTime(lastRead.readAt)}`;
                         }
-                        return 'ÐÐµ Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ð½Ð¾';
+                        return 'Не прочитано';
                       })()}>
                         {(() => {
-                          // Ð”Ð»Ñ DM Ñ‡Ð°Ñ‚Ð¾Ð² Ð¿Ð¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ Ð¿Ñ€Ð¾ÑÑ‚Ð¾Ð¹ ÑÑ‚Ð°Ñ‚ÑƒÑ
+                          // Для DM чатов показываем простой статус
                           if (chatInfoRef.current?.type === 'dm') {
                             if (msg.readReceipts && msg.readReceipts.length > 0) {
-                              return 'âœ“âœ“'; // ÐŸÑ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ð½Ð¾ (Ð´Ð²Ð¾Ð¹Ð½Ð°Ñ Ð³Ð°Ð»Ð¾Ñ‡ÐºÐ°)
+                              return '✓✓'; // Прочитано (двойная галочка)
                             }
-                            return 'âœ“'; // Ð”Ð¾ÑÑ‚Ð°Ð²Ð»ÐµÐ½Ð¾ (Ð¾Ð´Ð½Ð° Ð³Ð°Ð»Ð¾Ñ‡ÐºÐ°)
+                            return '✓'; // Доставлено (одна галочка)
                           }
-                          // Ð”Ð»Ñ Ð³Ñ€ÑƒÐ¿Ð¿Ð¾Ð²Ñ‹Ñ… Ñ‡Ð°Ñ‚Ð¾Ð² Ð¿Ð¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ð²ÑˆÐ¸Ñ…
+                          // Для групповых чатов показываем количество прочитавших
                           if (msg.readReceipts && msg.readReceipts.length > 0) {
-                            return `âœ“âœ“ ${msg.readReceipts.length}`;
+                            return `✓✓ ${msg.readReceipts.length}`;
                           }
-                          return 'âœ“';
+                          return '✓';
                         })()}
                       </span>
                     )}
@@ -3683,53 +3683,53 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   </div>
                 )}
                 <div className="message-actions">
-                  <button onClick={() => addReaction(msg.id, 'ðŸ‘')}>ðŸ‘</button>
-                  <button onClick={() => addReaction(msg.id, 'â¤ï¸')}>â¤ï¸</button>
-                  <button onClick={() => setReplyingTo(msg)}>ÐžÑ‚Ð²ÐµÑ‚Ð¸Ñ‚ÑŒ</button>
+                  <button onClick={() => addReaction(msg.id, '👍')}>👍</button>
+                  <button onClick={() => addReaction(msg.id, '❤️')}>❤️</button>
+                  <button onClick={() => setReplyingTo(msg)}>Ответить</button>
                   <button onClick={() => {
                     setForwardMessageId(msg.id);
                     loadAvailableChats();
                     setShowForwardModal(true);
-                  }} title="ÐŸÐµÑ€ÐµÑÐ»Ð°Ñ‚ÑŒ">
-                    âž¡ï¸ ÐŸÐµÑ€ÐµÑÐ»Ð°Ñ‚ÑŒ
+                  }} title="Переслать">
+                    ➡️ Переслать
                   </button>
                   {savedMessages.has(msg.id) ? (
-                    <button onClick={() => setSavedMessages(prev => { const next = new Set(prev); next.delete(msg.id); return next; })} title="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð¸Ð· Ð¸Ð·Ð±Ñ€Ð°Ð½Ð½Ð¾Ð³Ð¾">
-                      â­
+                    <button onClick={() => setSavedMessages(prev => { const next = new Set(prev); next.delete(msg.id); return next; })} title="Удалить из избранного">
+                      ⭐
                     </button>
                   ) : (
-                    <button onClick={() => setSavedMessages(prev => new Set(prev).add(msg.id))} title="Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ Ð² Ð¸Ð·Ð±Ñ€Ð°Ð½Ð½Ð¾Ðµ">
-                      â˜†
+                    <button onClick={() => setSavedMessages(prev => new Set(prev).add(msg.id))} title="Сохранить в избранное">
+                      ☆
                     </button>
                   )}
                   {(() => {
                     const isPinned = pinnedMessages.some(p => p.id === msg.id);
                     return isPinned ? (
-                      <button onClick={() => unpinMessage(msg.id)} title="ÐžÑ‚ÐºÑ€ÐµÐ¿Ð¸Ñ‚ÑŒ">
-                        ðŸ“Œ
+                      <button onClick={() => unpinMessage(msg.id)} title="Открепить">
+                        📌
                       </button>
                     ) : (
-                      <button onClick={() => pinMessage(msg.id)} title="Ð—Ð°ÐºÑ€ÐµÐ¿Ð¸Ñ‚ÑŒ">
-                        ðŸ“Œ
+                      <button onClick={() => pinMessage(msg.id)} title="Закрепить">
+                        📌
                       </button>
                     );
                   })()}
                   {msg.senderId === currentUser.id && (
                     <>
-                      <button onClick={() => setEditingMessage(msg)} title="Ð ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ">
-                        âœï¸
+                      <button onClick={() => setEditingMessage(msg)} title="Редактировать">
+                        ✏️
                       </button>
                       <button 
                         onClick={() => setConfirmDelete({ open: true, messageId: msg.id, deleteForAll: true })}
-                        title="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð´Ð»Ñ Ð²ÑÐµÑ…"
+                        title="Удалить для всех"
                       >
-                        ðŸ—‘ï¸
+                        🗑️
                       </button>
                       <button 
                         onClick={() => setConfirmDelete({ open: true, messageId: msg.id, deleteForAll: false })}
-                        title="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð´Ð»Ñ Ð¼ÐµÐ½Ñ"
+                        title="Удалить для меня"
                       >
-                        ðŸ—‘ï¸
+                        🗑️
                       </button>
                     </>
                   )}
@@ -3737,8 +3737,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     <button onClick={() => {
                       setThreadRootMessageId(msg.id);
                       setShowThreadModal(true);
-                    }} title="Ð¡Ð¾Ð·Ð´Ð°Ñ‚ÑŒ Ñ‚Ñ€ÐµÐ´">
-                      ðŸ’¬ Ð¢Ñ€ÐµÐ´
+                    }} title="Создать тред">
+                      💬 Тред
                     </button>
                   )}
                 </div>
@@ -3748,14 +3748,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           );
         })}
         {typingUsers.size > 0 && (() => {
-          const names = Array.from(typingUsers).map((userId: string) => getUser(userId).username || 'ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ');
+          const names = Array.from(typingUsers).map((userId: string) => getUser(userId).username || 'Пользователь');
           const text = names.length === 1
-            ? `${names[0]} Ð¿ÐµÑ‡Ð°Ñ‚Ð°ÐµÑ‚...`
+            ? `${names[0]} печатает...`
             : names.length === 2
-              ? `${names[0]} Ð¸ ${names[1]} Ð¿ÐµÑ‡Ð°Ñ‚Ð°ÑŽÑ‚...`
+              ? `${names[0]} и ${names[1]} печатают...`
               : names.length > 2
-                ? `${names.slice(0, -1).join(', ')} Ð¸ ${names[names.length - 1]} Ð¿ÐµÑ‡Ð°Ñ‚Ð°ÑŽÑ‚...`
-                : 'Ð¿ÐµÑ‡Ð°Ñ‚Ð°ÑŽÑ‚...';
+                ? `${names.slice(0, -1).join(', ')} и ${names[names.length - 1]} печатают...`
+                : 'печатают...';
           return (
             <div className="typing-indicator">
               <span></span>
@@ -3773,23 +3773,23 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           type="button"
           className="scroll-to-bottom-fab"
           onClick={() => scrollToBottom(true)}
-          title="Ð’Ð½Ð¸Ð· Ðº Ð½Ð¾Ð²Ñ‹Ð¼ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸ÑÐ¼"
-          aria-label="ÐŸÑ€Ð¾ÐºÑ€ÑƒÑ‚Ð¸Ñ‚ÑŒ Ð²Ð½Ð¸Ð·"
+          title="Вниз к новым сообщениям"
+          aria-label="Прокрутить вниз"
         >
-          â†“
+          ↓
         </button>
       )}
 
-      {/* Ð¡Ð¿Ð¸ÑÐ¾Ðº Ñ‚Ñ€ÐµÐ´Ð¾Ð² */}
+      {/* Список тредов */}
       {showThreads && !selectedThreadId && (chatInfoRef.current?.type === 'group' || chatInfoRef.current?.type === 'channel') && (
         <div className="threads-sidebar">
           <div className="threads-header">
-            <h4>Ð¢Ñ€ÐµÐ´Ñ‹</h4>
-            <button onClick={() => setShowThreads(false)}>âœ•</button>
+            <h4>Треды</h4>
+            <button onClick={() => setShowThreads(false)}>✕</button>
           </div>
           <div className="threads-list">
             {threads.length === 0 ? (
-              <div className="empty-threads">ÐÐµÑ‚ Ñ‚Ñ€ÐµÐ´Ð¾Ð²</div>
+              <div className="empty-threads">Нет тредов</div>
             ) : (
               threads.map(thread => (
                 <div
@@ -3802,7 +3802,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 >
                   <div className="thread-name">{thread.name}</div>
                   <div className="thread-meta">
-                    {thread.messageCount || 0} ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹
+                    {thread.messageCount || 0} сообщений
                     {thread.unreadCount > 0 && (
                       <span className="thread-unread">{thread.unreadCount}</span>
                     )}
@@ -3817,7 +3817,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         </div>
       )}
 
-      {/* ÐœÐµÐ´Ð¸Ð° Ð³Ð°Ð»ÐµÑ€ÐµÑ */}
+      {/* Медиа галерея */}
       {showMediaGallery && (
         <div className="media-gallery-overlay">
           <MediaGallery
@@ -3827,7 +3827,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         </div>
       )}
 
-      {/* ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»Ñ */}
+      {/* Профиль пользователя */}
       {showUserProfile && (
         <div className="user-profile-overlay">
           <UserProfile
@@ -3838,7 +3838,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         </div>
       )}
 
-      {/* ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ Ð³Ñ€ÑƒÐ¿Ð¿Ñ‹/ÐºÐ°Ð½Ð°Ð»Ð° */}
+      {/* Настройки группы/канала */}
       {showGroupSettings && chatInfoRef.current?.type && (chatInfoRef.current.type === 'group' || chatInfoRef.current.type === 'channel') && (
         <GroupChannelSettings
           chatId={chatId}
@@ -3852,7 +3852,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         />
       )}
 
-      {/* Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ Ð·Ð²Ð¾Ð½ÐºÐ¾Ð² */}
+      {/* История звонков */}
       {showCallHistory && (
         <CallHistory
           chatId={chatId}
@@ -3861,7 +3861,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         />
       )}
 
-      {/* ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ Ð²Ð½ÐµÑˆÐ½ÐµÐ³Ð¾ Ð²Ð¸Ð´Ð° */}
+      {/* Настройки внешнего вида */}
       {showAppearanceSettings && (
         <AppearanceSettings
           chatId={chatId}
@@ -3869,7 +3869,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         />
       )}
 
-      {/* Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ Ñ‡Ð°Ñ‚Ð° */}
+      {/* Экспорт чата */}
       {showExportDialog && (
         <ExportChatDialog
           chatId={chatId}
@@ -3877,15 +3877,15 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             ? (() => {
                 const otherMemberId = chatInfoRef.current?.members?.find((id: string) => id !== currentUser.id);
                 const otherUser = otherMemberId ? users.get(otherMemberId) : null;
-                return otherUser?.username || chatInfoRef.current?.name || 'ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ';
+                return otherUser?.username || chatInfoRef.current?.name || 'Пользователь';
               })()
-            : (chatInfoRef.current?.name || 'Ð§Ð°Ñ‚')}
+            : (chatInfoRef.current?.name || 'Чат')}
           messages={messages}
           onClose={() => setShowExportDialog(false)}
         />
       )}
 
-      {/* Ð¡Ñ‚Ð°Ñ‚Ð¸ÑÑ‚Ð¸ÐºÐ° Ñ‡Ð°Ñ‚Ð° */}
+      {/* Статистика чата */}
       {showStatistics && (
         <ChatStatistics
           chatId={chatId}
@@ -3893,14 +3893,14 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         />
       )}
 
-      {/* Ð ÐµÐ·ÐµÑ€Ð²Ð½Ð¾Ðµ ÐºÐ¾Ð¿Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ðµ */}
+      {/* Резервное копирование */}
       {showBackupManager && (
         <BackupManager
           onClose={() => setShowBackupManager(false)}
         />
       )}
 
-      {/* Ð£Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ Ð±Ð¾Ñ‚Ð°Ð¼Ð¸ */}
+      {/* Управление ботами */}
       {showBotManager && (
         <BotManager
           chatId={chatId}
@@ -3908,7 +3908,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         />
       )}
 
-      {/* ÐšÐ°Ð»ÐµÐ½Ð´Ð°Ñ€ÑŒ */}
+      {/* Календарь */}
       {showCalendar && (
         <CalendarIntegration
           chatId={chatId}
@@ -3916,7 +3916,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         />
       )}
 
-      {/* Ð—Ð°Ð´Ð°Ñ‡Ð¸ */}
+      {/* Задачи */}
       {showTodos && (
         <TodoIntegration
           chatId={chatId}
@@ -3924,7 +3924,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
         />
       )}
 
-      {/* ÐœÐ¾Ð´Ð°Ð»ÑŒÐ½Ð¾Ðµ Ð¾ÐºÐ½Ð¾ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ Ñ‚Ñ€ÐµÐ´Ð° */}
+      {/* Модальное окно создания треда */}
       <PromptModal
         isOpen={showThreadModal}
         onClose={() => {
@@ -3932,56 +3932,56 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           setThreadRootMessageId('');
         }}
         onConfirm={createThread}
-        title="Ð¡Ð¾Ð·Ð´Ð°Ñ‚ÑŒ Ñ‚Ñ€ÐµÐ´"
-        message="Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ñ‚Ñ€ÐµÐ´Ð° (Ð½ÐµÐ¾Ð±ÑÐ·Ð°Ñ‚ÐµÐ»ÑŒÐ½Ð¾):"
-        placeholder="ÐÐ°Ð·Ð²Ð°Ð½Ð¸Ðµ Ñ‚Ñ€ÐµÐ´Ð°"
+        title="Создать тред"
+        message="Введите название треда (необязательно):"
+        placeholder="Название треда"
         defaultValue=""
-        confirmText="Ð¡Ð¾Ð·Ð´Ð°Ñ‚ÑŒ"
-        cancelText="ÐžÑ‚Ð¼ÐµÐ½Ð°"
+        confirmText="Создать"
+        cancelText="Отмена"
       />
 
-      {/* ÐœÐ¾Ð´Ð°Ð»ÑŒÐ½Ð¾Ðµ Ð¾ÐºÐ½Ð¾: Ð¾Ñ‚Ð¿ÐµÑ‡Ð°Ñ‚Ð¾Ðº ÐºÐ»ÑŽÑ‡Ð° / Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð¸Ðµ Ð»Ð¸Ñ‡Ð½Ð¾ÑÑ‚Ð¸ */}
+      {/* Модальное окно: отпечаток ключа / подтверждение личности */}
       {showVerificationModal && chatInfoRef.current?.type === 'dm' && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }} onClick={() => setShowVerificationModal(false)}>
           <div className="modal-content" style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', maxWidth: '400px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>ðŸ›¡ï¸ ÐŸÐ¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð¸Ðµ Ð»Ð¸Ñ‡Ð½Ð¾ÑÑ‚Ð¸</h3>
-              <button type="button" onClick={() => setShowVerificationModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--subtle)', cursor: 'pointer', fontSize: '20px' }}>âœ•</button>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>🛡️ Подтверждение личности</h3>
+              <button type="button" onClick={() => setShowVerificationModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--subtle)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
             <p style={{ fontSize: '14px', color: 'var(--subtle)', marginBottom: '16px', lineHeight: 1.5 }}>
-              Ð¡Ñ€Ð°Ð²Ð½Ð¸Ñ‚Ðµ ÑÑ‚Ð¾Ñ‚ Ð¾Ñ‚Ð¿ÐµÑ‡Ð°Ñ‚Ð¾Ðº Ñ Ð¾Ñ‚Ð¿ÐµÑ‡Ð°Ñ‚ÐºÐ¾Ð¼ Ð½Ð° ÑƒÑÑ‚Ñ€Ð¾Ð¹ÑÑ‚Ð²Ðµ ÑÐ¾Ð±ÐµÑÐµÐ´Ð½Ð¸ÐºÐ°. ÐŸÑ€Ð¸ Ð¿Ð¾Ð»Ð½Ð¾Ð¼ E2E Ð·Ð´ÐµÑÑŒ Ð±ÑƒÐ´ÐµÑ‚ Ð¾Ñ‚Ð¾Ð±Ñ€Ð°Ð¶Ð°Ñ‚ÑŒÑÑ Ð¾Ñ‚Ð¿ÐµÑ‡Ð°Ñ‚Ð¾Ðº ÐºÐ»ÑŽÑ‡Ð°.
+              Сравните этот отпечаток с отпечатком на устройстве собеседника. При полном E2E здесь будет отображаться отпечаток ключа.
             </p>
             <div style={{ fontFamily: 'monospace', fontSize: '16px', letterSpacing: '0.15em', padding: '16px', background: 'var(--panel-2)', borderRadius: '8px', textAlign: 'center', wordBreak: 'break-all' }}>
               {(() => {
                 const otherId = chatInfoRef.current?.members?.find((id: string) => id !== currentUser.id);
                 const raw = chatId && otherId ? [chatId, otherId].sort().join('') : '';
-                const hash = raw ? Array.from(raw).reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0) | 0, 0).toString(16).toUpperCase().slice(-12) : 'â€”';
-                const fp = hash !== 'â€”' ? (hash.match(/.{1,4}/g) || [hash]).join(' ') : 'â€”';
+                const hash = raw ? Array.from(raw).reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0) | 0, 0).toString(16).toUpperCase().slice(-12) : '—';
+                const fp = hash !== '—' ? (hash.match(/.{1,4}/g) || [hash]).join(' ') : '—';
                 return fp;
               })()}
             </div>
-            <button type="button" onClick={() => setShowVerificationModal(false)} style={{ marginTop: '16px', width: '100%', padding: '10px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ</button>
+            <button type="button" onClick={() => setShowVerificationModal(false)} style={{ marginTop: '16px', width: '100%', padding: '10px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>Закрыть</button>
           </div>
         </div>
       )}
 
-      {/* ÐœÐ¾Ð´Ð°Ð»ÑŒÐ½Ð¾Ðµ Ð¾ÐºÐ½Ð¾ Ð¿ÐµÑ€ÐµÑÑ‹Ð»ÐºÐ¸ */}
+      {/* Модальное окно пересылки */}
       {showForwardModal && forwardMessageId && (
         <div className="modal-overlay" onClick={() => setShowForwardModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', width: '90%' }}>
             <div className="modal-header">
-              <h3>ÐŸÐµÑ€ÐµÑÐ»Ð°Ñ‚ÑŒ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ</h3>
-              <button onClick={() => setShowForwardModal(false)}>âœ•</button>
+              <h3>Переслать сообщение</h3>
+              <button onClick={() => setShowForwardModal(false)}>✕</button>
             </div>
             <div className="modal-body">
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
-                  ÐšÐ¾Ð¼Ð¼ÐµÐ½Ñ‚Ð°Ñ€Ð¸Ð¹ (Ð½ÐµÐ¾Ð±ÑÐ·Ð°Ñ‚ÐµÐ»ÑŒÐ½Ð¾):
+                  Комментарий (необязательно):
                 </label>
                 <textarea
                   value={forwardComment}
                   onChange={(e) => setForwardComment(e.target.value)}
-                  placeholder="Ð”Ð¾Ð±Ð°Ð²ÑŒÑ‚Ðµ ÐºÐ¾Ð¼Ð¼ÐµÐ½Ñ‚Ð°Ñ€Ð¸Ð¹..."
+                  placeholder="Добавьте комментарий..."
                   rows={3}
                   style={{
                     width: '100%',
@@ -3996,12 +3996,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
-                  Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ‡Ð°Ñ‚:
+                  Выберите чат:
                 </label>
                 <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                   {availableChats.length === 0 ? (
                     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--subtle, #888)' }}>
-                      ÐÐµÑ‚ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹Ñ… Ñ‡Ð°Ñ‚Ð¾Ð²
+                      Нет доступных чатов
                     </div>
                   ) : (
                     availableChats.map(chat => (
@@ -4027,9 +4027,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                           e.currentTarget.style.background = 'var(--bg-secondary, #1a1a1a)';
                         }}
                       >
-                        <div style={{ fontWeight: '600' }}>{chat.name || (chat.type === 'dm' ? 'ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ' : 'Ð§Ð°Ñ‚')}</div>
+                        <div style={{ fontWeight: '600' }}>{chat.name || (chat.type === 'dm' ? 'Пользователь' : 'Чат')}</div>
                         <div style={{ fontSize: '12px', color: 'var(--subtle, #888)', marginTop: '4px' }}>
-                          {chat.type === 'dm' ? 'Ð”Ð¸Ð°Ð»Ð¾Ð³' : chat.type === 'group' ? 'Ð“Ñ€ÑƒÐ¿Ð¿Ð°' : 'ÐšÐ°Ð½Ð°Ð»'}
+                          {chat.type === 'dm' ? 'Диалог' : chat.type === 'group' ? 'Группа' : 'Канал'}
                         </div>
                       </button>
                     ))
@@ -4038,7 +4038,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               </div>
             </div>
             <div className="modal-footer">
-              <button onClick={() => setShowForwardModal(false)}>ÐžÑ‚Ð¼ÐµÐ½Ð°</button>
+              <button onClick={() => setShowForwardModal(false)}>Отмена</button>
             </div>
           </div>
         </div>
@@ -4079,7 +4079,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 fontWeight: '500'
               }}
             >
-              âœ“ ÐžÑ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ
+              ✓ Отправить
             </button>
             <button 
               onClick={cancelRecording}
@@ -4094,7 +4094,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 fontWeight: '500'
               }}
             >
-              âœ• ÐžÑ‚Ð¼ÐµÐ½Ð°
+              ✕ Отмена
             </button>
           </div>
         )}
@@ -4103,13 +4103,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             <button
               className="attach-btn"
               onClick={() => document.getElementById('file-input')?.click()}
-              title={`ÐŸÑ€Ð¸ÐºÑ€ÐµÐ¿Ð¸Ñ‚ÑŒ Ñ„Ð°Ð¹Ð» (Ð¼Ð°ÐºÑ. ${MAX_ATTACHMENT_MB} ÐœÐ‘)`}
+              title={`Прикрепить файл (макс. ${MAX_ATTACHMENT_MB} МБ)`}
               onMouseEnter={(e) => {
                 const menu = e.currentTarget.nextElementSibling as HTMLElement;
                 if (menu) menu.style.display = 'flex';
               }}
             >
-              ðŸ“Ž
+              📎
             </button>
             <div 
               style={{
@@ -4149,7 +4149,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                ðŸ“Ž Ð¤Ð°Ð¹Ð»
+                📎 Файл
               </button>
               <button
                 onClick={() => {
@@ -4175,7 +4175,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                ðŸ–¼ï¸ Ð˜Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ
+                🖼️ Изображение
               </button>
               <button
                 onClick={() => {
@@ -4201,7 +4201,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                ðŸ“„ Ð”Ð¾ÐºÑƒÐ¼ÐµÐ½Ñ‚
+                📄 Документ
               </button>
               <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
               <button
@@ -4219,7 +4219,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                ðŸ“Š ÐžÐ¿Ñ€Ð¾Ñ
+                📊 Опрос
               </button>
               <button
                 onClick={() => setShowCalendarCreator(true)}
@@ -4236,7 +4236,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                ðŸ“… Ð¡Ð¾Ð±Ñ‹Ñ‚Ð¸Ðµ
+                📅 Событие
               </button>
               <button
                 onClick={() => setShowContactCreator(true)}
@@ -4253,7 +4253,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
-                ðŸ‘¤ ÐšÐ¾Ð½Ñ‚Ð°ÐºÑ‚
+                👤 Контакт
               </button>
             </div>
           </div>
@@ -4264,7 +4264,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setPreviewAttachment(undefined);
               setShowMessagePreview(true);
             }}
-            title="ÐŸÑ€ÐµÐ´Ð¿Ñ€Ð¾ÑÐ¼Ð¾Ñ‚Ñ€"
+            title="Предпросмотр"
             disabled={!text.trim()}
             style={{
               opacity: text.trim() ? 1 : 0.5,
@@ -4277,7 +4277,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               marginRight: '4px'
             }}
           >
-            ðŸ‘ï¸
+            👁️
           </button>
           <button
             className="emoji-btn"
@@ -4287,9 +4287,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowGifPicker(false);
               setShowLocationPicker(false);
             }}
-            title="Ð­Ð¼Ð¾Ð´Ð·Ð¸"
+            title="Эмодзи"
           >
-            ðŸ˜€
+            😀
           </button>
           <button
             className="sticker-btn"
@@ -4299,9 +4299,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowGifPicker(false);
               setShowLocationPicker(false);
             }}
-            title="Ð¡Ñ‚Ð¸ÐºÐµÑ€Ñ‹"
+            title="Стикеры"
           >
-            ðŸŽ¨
+            🎨
           </button>
           <button
             className="gif-btn"
@@ -4313,7 +4313,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             }}
             title="GIF"
           >
-            ðŸŽ¬
+            🎬
           </button>
           <button
             className="location-btn"
@@ -4324,9 +4324,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowGifPicker(false);
               setShowExpirePicker(false);
             }}
-            title="Ð“ÐµÐ¾Ð»Ð¾ÐºÐ°Ñ†Ð¸Ñ"
+            title="Геолокация"
           >
-            ðŸ“
+            📍
           </button>
           <button
             className="expire-btn"
@@ -4337,13 +4337,13 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setShowGifPicker(false);
               setShowLocationPicker(false);
             }}
-            title="Ð¡Ð°Ð¼Ð¾ÑƒÐ½Ð¸Ñ‡Ñ‚Ð¾Ð¶Ð°ÑŽÑ‰ÐµÐµÑÑ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ"
+            title="Самоуничтожающееся сообщение"
             style={{
               background: selectedExpireTime ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
               border: selectedExpireTime ? '1px solid rgba(239, 68, 68, 0.3)' : 'none'
             }}
           >
-            â±ï¸ {selectedExpireTime ? `${selectedExpireTime}Ñ` : ''}
+            ⏱️ {selectedExpireTime ? `${selectedExpireTime}с` : ''}
           </button>
           {showExpirePicker && (
             <div style={{
@@ -4358,7 +4358,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               minWidth: '200px',
               zIndex: 1000
             }}>
-              <div style={{ marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>Ð’Ñ€ÐµÐ¼Ñ Ð¶Ð¸Ð·Ð½Ð¸ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ñ:</div>
+              <div style={{ marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>Время жизни сообщения:</div>
               {[5, 10, 30, 60, 300, 3600].map(seconds => (
                 <button
                   key={seconds}
@@ -4378,7 +4378,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                     fontSize: '13px'
                   }}
                 >
-                  {seconds < 60 ? `${seconds} ÑÐµÐºÑƒÐ½Ð´` : seconds < 3600 ? `${seconds / 60} Ð¼Ð¸Ð½ÑƒÑ‚` : `${seconds / 3600} Ñ‡Ð°ÑÐ¾Ð²`}
+                  {seconds < 60 ? `${seconds} секунд` : seconds < 3600 ? `${seconds / 60} минут` : `${seconds / 3600} часов`}
                 </button>
               ))}
               <button
@@ -4398,7 +4398,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                   fontSize: '13px'
                 }}
               >
-                ÐžÑ‚ÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ
+                Отключить
               </button>
             </div>
           )}
@@ -4411,7 +4411,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               onKeyDown={handleKeyDown}
               onClick={handleInputClick}
               onSelect={handleInputSelectionChange}
-              placeholder="ÐÐ°Ð¿Ð¸ÑˆÐ¸Ñ‚Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ... (Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐ¹Ñ‚Ðµ @ Ð´Ð»Ñ ÑƒÐ¿Ð¾Ð¼Ð¸Ð½Ð°Ð½Ð¸Ð¹)"
+              placeholder="Напишите сообщение... (используйте @ для упоминаний)"
               rows={1}
             />
             {mentionQuery && (
@@ -4470,7 +4470,7 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           </div>
           {isRecording ? (
             <button className="record-btn active" onClick={stopRecording}>
-              â¹
+              ⏹
             </button>
           ) : (
             <button
@@ -4479,9 +4479,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               onMouseUp={stopRecording}
               onTouchStart={startRecording}
               onTouchEnd={stopRecording}
-              title="Ð“Ð¾Ð»Ð¾ÑÐ¾Ð²Ð¾Ðµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ (ÑƒÐ´ÐµÑ€Ð¶Ð¸Ð²Ð°Ð¹Ñ‚Ðµ)"
+              title="Голосовое сообщение (удерживайте)"
             >
-              ðŸŽ¤
+              🎤
             </button>
           )}
           {canUndo && lastSentMessage && (
@@ -4500,9 +4500,9 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
                 marginRight: '8px',
                 transition: 'var(--transition-base)'
               }}
-              title="ÐžÑ‚Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²ÐºÑƒ (Ð´Ð¾ 5 ÑÐµÐº)"
+              title="Отменить отправку (до 5 сек)"
             >
-              â†¶ ÐžÑ‚Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ
+              ↶ Отменить
             </button>
           )}
           <button 
@@ -4513,12 +4513,12 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
               setSelectedExpireTime(null);
             }} 
             disabled={!text.trim() || isLoading}
-            title="ÐžÑ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ (Enter)"
+            title="Отправить (Enter)"
           >
             {isLoading ? (
               <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div>
             ) : (
-              'âž¤'
+              '➤'
             )}
           </button>
         </div>

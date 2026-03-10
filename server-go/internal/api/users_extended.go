@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"safegram-server/internal/email"
 	"safegram-server/internal/models"
 	"safegram-server/internal/redis"
 )
@@ -54,8 +55,15 @@ func UpdateUser(db *gorm.DB) gin.HandlerFunc {
 			updates["username"] = req.Username
 		}
 		if req.Email != "" {
-			email := strings.TrimSpace(req.Email)
-			updates["email"] = &email
+			emailAddress := strings.TrimSpace(req.Email)
+			if !strings.EqualFold(emailAddress, userEmailValue(&user)) {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   "email_change_requires_verification",
+					"message": "Для смены email используйте отдельный flow подтверждения.",
+				})
+				return
+			}
+			updates["email"] = &emailAddress
 		}
 		// Разрешаем и пустое био (очистка)
 		updates["about"] = req.About
@@ -172,6 +180,20 @@ func ChangePassword(db *gorm.DB) gin.HandlerFunc {
 				Update("is_active", false)
 		}
 
+		recordSuspiciousActivity(db, user.ID, "password_change", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"source": "settings",
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			ip := c.ClientIP()
+			queueEmailJob("password_changed", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+				"ip":     ip,
+			}, func() error {
+				return email.SendPasswordChangedNotification(emailAddress, user.Username, ip)
+			})
+		}
+
 		c.JSON(http.StatusOK, gin.H{"ok": true, "otherSessionsRevoked": true})
 	}
 }
@@ -206,14 +228,14 @@ func GetUserProfile(db *gorm.DB) gin.HandlerFunc {
 
 		// Чужой профиль: без email; avatar/bio по настройкам; lastSeen по LastSeenVisibility
 		profile := gin.H{
-			"id":            user.ID,
-			"username":      user.Username,
-			"avatarUrl":     "",
-			"about":         "",
-			"status":        user.Status,
-			"profileColor":  user.ProfileColor,
-			"plan":          user.Plan,
-			"createdAt":     user.CreatedAt,
+			"id":           user.ID,
+			"username":     user.Username,
+			"avatarUrl":    "",
+			"about":        "",
+			"status":       user.Status,
+			"profileColor": user.ProfileColor,
+			"plan":         user.Plan,
+			"createdAt":    user.CreatedAt,
 			"lastSeen":     nil,
 		}
 		if user.ShowAvatar {
@@ -247,14 +269,14 @@ func GetUserNotifications(db *gorm.DB) gin.HandlerFunc {
 		// Пока возвращаем дефолтные настройки
 		c.JSON(http.StatusOK, gin.H{
 			"notifications": gin.H{
-				"messages":      true,
-				"mentions":      true,
-				"reactions":     false,
-				"calls":         true,
-				"groups":        true,
-				"servers":       true,
-				"email":         false,
-				"push":          true,
+				"messages":  true,
+				"mentions":  true,
+				"reactions": false,
+				"calls":     true,
+				"groups":    true,
+				"servers":   true,
+				"email":     false,
+				"push":      true,
 			},
 		})
 	}
@@ -287,10 +309,10 @@ func GetUserPrivacy(db *gorm.DB) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, gin.H{
 			"privacy": gin.H{
-				"showBio":              user.ShowBio,
-				"showAvatar":           user.ShowAvatar,
-				"lastSeenVisibility":   lastSeen,
-				"allowFindByUsername":   user.AllowFindByUsername,
+				"showBio":             user.ShowBio,
+				"showAvatar":          user.ShowAvatar,
+				"lastSeenVisibility":  lastSeen,
+				"allowFindByUsername": user.AllowFindByUsername,
 			},
 		})
 	}
@@ -307,10 +329,10 @@ func UpdateUserPrivacy(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var req struct {
-			ShowBio              *bool   `json:"showBio"`
-			ShowAvatar           *bool   `json:"showAvatar"`
-			LastSeenVisibility   *string `json:"lastSeenVisibility"`
-			AllowFindByUsername  *bool   `json:"allowFindByUsername"`
+			ShowBio             *bool   `json:"showBio"`
+			ShowAvatar          *bool   `json:"showAvatar"`
+			LastSeenVisibility  *string `json:"lastSeenVisibility"`
+			AllowFindByUsername *bool   `json:"allowFindByUsername"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -342,4 +364,3 @@ func UpdateUserPrivacy(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
-

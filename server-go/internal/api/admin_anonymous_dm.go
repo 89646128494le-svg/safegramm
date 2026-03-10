@@ -15,11 +15,12 @@ import (
 const (
 	// SupportSystemUserID is the system user used to present support replies anonymously.
 	SupportSystemUserID = "00000000-0000-0000-0000-000000000001"
+	SupportDisplayName = "Техподдержка"
 )
 
 var supportSenderDisplay = gin.H{
 	"id":        "support",
-	"username":  "Поддержка",
+	"username":  SupportDisplayName,
 	"avatarUrl": "",
 }
 
@@ -27,12 +28,15 @@ func EnsureSupportUser(db *gorm.DB) error {
 	var user models.User
 	err := db.First(&user, "id = ?", SupportSystemUserID).Error
 	if err == nil {
+		if user.Username != SupportDisplayName {
+			return db.Model(&models.User{}).Where("id = ?", SupportSystemUserID).Update("username", SupportDisplayName).Error
+		}
 		return nil
 	}
 
 	user = models.User{
 		ID:       SupportSystemUserID,
-		Username: "Поддержка",
+		Username: SupportDisplayName,
 		PassHash: "system",
 		Salt:     "system",
 	}
@@ -50,6 +54,11 @@ func getOrCreateAnonymousSupportChat(db *gorm.DB, targetUserID string) (*models.
 		Where("id NOT IN (SELECT chat_id FROM chat_members WHERE user_id != ? AND deleted_at IS NULL)", targetUserID).
 		First(&chat).Error
 	if err == nil {
+		if chat.Name != SupportDisplayName {
+			if updateErr := db.Model(&models.Chat{}).Where("id = ?", chat.ID).Update("name", SupportDisplayName).Error; updateErr == nil {
+				chat.Name = SupportDisplayName
+			}
+		}
 		return &chat, false, nil
 	}
 
@@ -57,7 +66,7 @@ func getOrCreateAnonymousSupportChat(db *gorm.DB, targetUserID string) (*models.
 	chat = models.Chat{
 		ID:         chatID,
 		Type:       "anonymous_support",
-		Name:       "Анонимная поддержка",
+		Name:       SupportDisplayName,
 		CreatedBy:  SupportSystemUserID,
 		InviteLink: "anon-" + chatID,
 	}

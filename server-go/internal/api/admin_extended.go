@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"safegram-server/internal/email"
 	"safegram-server/internal/models"
 )
 
@@ -54,6 +55,17 @@ func AdminUsersBulk(db *gorm.DB) gin.HandlerFunc {
 				db.Model(&user).Updates(map[string]interface{}{"status": "banned", "roles": "[]"})
 				logRoleBanHistory(db, userID, adminIDStr, "ban", oldRoles, "[]", "bulk")
 				logAdminAudit(db, adminIDStr, userID, "block_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
+				recordSuspiciousActivity(db, user.ID, "account_locked", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+					"reason": "bulk_admin_block",
+				})
+				if emailAddress := userEmailValue(&user); emailAddress != "" {
+					queueEmailJob("account_locked_bulk", map[string]interface{}{
+						"userId": user.ID,
+						"email":  maskEmail(emailAddress),
+					}, func() error {
+						return email.SendAccountLockedNotification(emailAddress, user.Username, "Доступ к аккаунту ограничен администрацией.", supportCenterURL())
+					})
+				}
 				done++
 			case "unblock":
 				db.Model(&user).Update("status", "online")
@@ -185,6 +197,18 @@ func PostAdminUserRecoveryCodesReset(db *gorm.DB) gin.HandlerFunc {
 		}
 		user.SetRecoveryCodes(newCodes)
 		db.Model(&user).Update("recovery_codes", user.RecoveryCodes)
+		recordSuspiciousActivity(db, user.ID, "recovery_codes_generated", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"regeneratedByAdmin": true,
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			codesPayload := strings.Join(newCodes, "\n")
+			queueEmailJob("backup_codes_regenerated_admin", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendBackupCodesRegenerated(emailAddress, user.Username, codesPayload)
+			})
+		}
 		adminID, _ := c.Get("userID")
 		if aid, ok := adminID.(string); ok {
 			logAdminAudit(db, aid, userID, "recovery_codes_reset", "", c.ClientIP(), c.GetHeader("User-Agent"))
@@ -271,7 +295,12 @@ func GetAdminGlobalSearch(db *gorm.DB) gin.HandlerFunc {
 		db.Where("username LIKE ? OR id = ?", like, q).Limit(10).Find(&users)
 		userList := make([]gin.H, len(users))
 		for i, u := range users {
-			userList[i] = gin.H{"id": u.ID, "username": u.Username, "email": func() string { if u.Email != nil { return *u.Email }; return "" }()}
+			userList[i] = gin.H{"id": u.ID, "username": u.Username, "email": func() string {
+				if u.Email != nil {
+					return *u.Email
+				}
+				return ""
+			}()}
 		}
 		var chats []models.Chat
 		db.Where("name LIKE ? OR id = ?", like, q).Limit(10).Find(&chats)

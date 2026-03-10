@@ -109,7 +109,7 @@ export default function Feedback() {
       setSubject('');
       setBody('');
       await loadTickets();
-      showToast('Заявка создана. Ответы придут в чат «Анонимная поддержка».', 'success');
+      showToast('Заявка создана. Ответы придут в чат «Техподдержка».', 'success');
     } catch (error: any) {
       showToast(getErrorMessage(error, 'Не удалось отправить обращение.'), 'error');
     } finally {
@@ -137,14 +137,14 @@ export default function Feedback() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
             <LifeBuoy size={28} color="#6fc2ff" />
             <span style={{ color: '#7dd3fc', fontSize: 13, letterSpacing: 1.2, textTransform: 'uppercase', fontWeight: 700 }}>
-              SafeGram Support
+              Техподдержка
             </span>
           </div>
-          <h1 style={{ margin: '0 0 12px', fontSize: 34, lineHeight: 1.05 }}>Техническая поддержка SafeGram</h1>
-          <p style={{ margin: '0 0 18px', color: 'var(--subtle, #9ca3af)', maxWidth: 720, lineHeight: 1.7 }}>
-            Поддержка ведётся внутри SafeGram через системный чат «Анонимная поддержка». Войдите в аккаунт,
-            создайте обращение и продолжайте переписку там же, где у вас обычные чаты.
-          </p>
+          <h1 style={{ margin: '0 0 12px', fontSize: 34, lineHeight: 1.05 }}>Техподдержка SafeGram</h1>
+            <p style={{ margin: '0 0 18px', color: 'var(--subtle, #9ca3af)', maxWidth: 720, lineHeight: 1.7 }}>
+              Поддержка доступна прямо внутри SafeGram через чат «Техподдержка». Войдите в аккаунт,
+              создайте обращение и продолжайте переписку там же, где у вас обычные чаты.
+            </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link
               to="/login?redirect=%2Fsupport"
@@ -195,13 +195,12 @@ export default function Feedback() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
               <Headset size={28} color="#6fc2ff" />
               <span style={{ color: '#7dd3fc', fontSize: 13, letterSpacing: 1.2, textTransform: 'uppercase', fontWeight: 700 }}>
-                Support Center
+                Техподдержка
               </span>
             </div>
-            <h1 style={{ margin: '0 0 10px', fontSize: 34, lineHeight: 1.05 }}>Реальная техподдержка внутри SafeGram</h1>
+            <h1 style={{ margin: '0 0 10px', fontSize: 34, lineHeight: 1.05 }}>Техподдержка SafeGram</h1>
             <p style={{ margin: 0, color: 'var(--subtle, #9ca3af)', lineHeight: 1.7 }}>
-              Каждое обращение создаёт тикет и поднимает чат «Анонимная поддержка». Ответы приходят в тот же backend,
-              что используют web, desktop и mobile.
+              Каждое обращение создаёт тикет. Ответы приходят прямо в чат «Техподдержка».
             </p>
           </div>
 
@@ -211,8 +210,8 @@ export default function Feedback() {
               <div style={{ marginTop: 6, fontSize: 28, fontWeight: 800 }}>{activeTicketCount}</div>
             </div>
             <div style={{ padding: 16, borderRadius: 18, background: 'rgba(8,18,36,0.7)', border: '1px solid rgba(111,194,255,0.18)' }}>
-              <div style={{ color: '#7dd3fc', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Канал ответов</div>
-              <div style={{ marginTop: 6, fontSize: 16, fontWeight: 700 }}>Анонимная поддержка</div>
+              <div style={{ color: '#7dd3fc', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Чат поддержки</div>
+              <div style={{ marginTop: 6, fontSize: 16, fontWeight: 700 }}>Техподдержка</div>
             </div>
           </div>
         </div>
@@ -229,7 +228,7 @@ export default function Feedback() {
         >
           <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700 }}>Создать обращение</h2>
           <p style={{ margin: '0 0 18px', color: 'var(--subtle, #9ca3af)', lineHeight: 1.7 }}>
-            Опишите проблему один раз. Поддержка продолжит диалог уже в системном чате этого аккаунта.
+            Опишите проблему один раз. Дальше можно продолжить диалог в чате поддержки.
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
@@ -368,7 +367,7 @@ export default function Feedback() {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 18 }}>
             <div>
               <h2 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 700 }}>Мои обращения</h2>
-              <p style={{ margin: 0, color: 'var(--subtle, #9ca3af)' }}>Статусы тикетов и переход в support-chat.</p>
+              <p style={{ margin: 0, color: 'var(--subtle, #9ca3af)' }}>Статусы тикетов и быстрый переход в чат поддержки.</p>
             </div>
             <button
               type="button"
@@ -492,8 +491,7 @@ export default function Feedback() {
           lineHeight: 1.7,
         }}
       >
-        <strong>Как это работает:</strong> создаёте тикет на сайте, support получает его в админке, отвечает через
-        анонимный системный чат, а вы продолжаете переписку уже внутри SafeGram на всех клиентах.
+        <strong>Как это работает:</strong> создаёте тикет, получаете ответы в чате «Техподдержка» и продолжаете переписку внутри SafeGram.
       </div>
     </div>
   );

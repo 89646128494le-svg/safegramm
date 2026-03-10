@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 	"safegram-server/internal/config"
 	"safegram-server/internal/crypto"
+	"safegram-server/internal/email"
 	"safegram-server/internal/models"
 )
 
@@ -154,6 +155,14 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		if session != nil {
 			resp["sessionId"] = session.ID
 		}
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			queueEmailJob("welcome_email", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendWelcomeEmail(emailAddress, user.Username, premiumAppURL())
+			})
+		}
 		c.JSON(http.StatusOK, resp)
 	}
 }
@@ -203,9 +212,9 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			// Если код email не предоставлен — 200 с флагом, чтобы не было 401 в сети
 			if req.EmailCode == "" {
 				c.JSON(http.StatusOK, gin.H{
-					"error":       "email_verification_required",
-					"message":     "Требуется подтверждение email",
-					"hasEmail":    true,
+					"error":        "email_verification_required",
+					"message":      "Требуется подтверждение email",
+					"hasEmail":     true,
 					"hasCloudCode": user.PinHash != "",
 				})
 				return
@@ -227,8 +236,8 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				cloudCode := strings.TrimSpace(req.CloudCode)
 				if cloudCode == "" {
 					c.JSON(http.StatusOK, gin.H{
-						"error":       "cloud_code_required",
-						"message":     "Требуется облачный код",
+						"error":        "cloud_code_required",
+						"message":      "Требуется облачный код",
 						"hasCloudCode": true,
 					})
 					return
@@ -244,8 +253,8 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				cloudCode := strings.TrimSpace(req.CloudCode)
 				if cloudCode == "" {
 					c.JSON(http.StatusOK, gin.H{
-						"error":       "cloud_code_required",
-						"message":     "Требуется облачный код",
+						"error":        "cloud_code_required",
+						"message":      "Требуется облачный код",
 						"hasCloudCode": true,
 					})
 					return
@@ -298,7 +307,20 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		if session != nil {
 			resp["sessionId"] = session.ID
 		}
+		recordSuspiciousActivity(db, user.ID, "new_login", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"login": login,
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			ip := c.ClientIP()
+			device := c.GetHeader("User-Agent")
+			queueEmailJob("login_notification", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+				"ip":     ip,
+			}, func() error {
+				return email.SendLoginNotification(emailAddress, user.Username, ip, device)
+			})
+		}
 		c.JSON(http.StatusOK, resp)
 	}
 }
-

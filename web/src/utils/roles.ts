@@ -158,10 +158,10 @@ export const ADMIN_TABS = [
   { id: 'users' as const, label: 'Пользователи', minRole: 'sysadmin' as const, section: 'users' as const },
   { id: 'feedback' as const, label: 'Фидбек', minRole: 'support' as const, section: 'users' as const },
   { id: 'recruit' as const, label: 'Набор (тестеры)', minRole: 'support' as const, section: 'users' as const },
-  { id: 'support' as const, label: 'Поддержка (тикеты)', minRole: 'support' as const, section: 'users' as const },
+  { id: 'support' as const, label: 'Техподдержка', minRole: 'support' as const, section: 'users' as const },
   { id: 'broadcast' as const, label: 'Рассылка', minRole: 'sysadmin' as const, section: 'users' as const },
   { id: 'messages' as const, label: 'Письма и тех. работы', minRole: 'sysadmin' as const, section: 'users' as const },
-  { id: 'anonymous_dm' as const, label: 'Написать анонимно', minRole: 'sysadmin' as const, section: 'users' as const },
+  { id: 'anonymous_dm' as const, label: 'Чат техподдержки', minRole: 'sysadmin' as const, section: 'users' as const },
   { id: 'security' as const, label: 'Security Dashboard', minRole: 'safety' as const, section: 'security' as const },
   { id: 'security_policy' as const, label: 'Безопасность и политики', minRole: 'safety' as const, section: 'security' as const },
   { id: 'logs' as const, label: 'Логи сервера', minRole: 'safety' as const, section: 'security' as const },
@@ -200,7 +200,7 @@ export function getRoleBadge(user: UserLike | null | undefined): RoleBadge | nul
   if (roles.includes('sysadmin') || roles.includes('admin')) return { icon: '🛡️', label: 'Админ', color: '#ef4444', glow: 'rgba(239,68,68,0.4)' };
   if (roles.includes('safety') || roles.includes('guardian')) return { icon: '🧿', label: 'Безопасность', color: '#3b82f6', glow: 'rgba(59,130,246,0.4)' };
   if (roles.includes('moderator')) return { icon: '🛡️', label: 'Модератор', color: '#22c55e', glow: 'rgba(34,197,94,0.35)' };
-  if (roles.includes('support')) return { icon: '🎫', label: 'Поддержка', color: '#8b5cf6', glow: 'rgba(139,92,246,0.3)' };
+  if (roles.includes('support')) return { icon: '🎫', label: 'Техподдержка', color: '#8b5cf6', glow: 'rgba(139,92,246,0.3)' };
   return null;
 }
 

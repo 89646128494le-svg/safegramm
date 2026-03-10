@@ -128,11 +128,11 @@ export default function PremiumApply() {
   useEffect(() => {
     if (!checkoutStatus) return;
     if (checkoutStatus === 'success') {
-      showToast('Checkout завершён. Обновляю premium status.', 'success');
+      showToast('Оформление завершено. Обновляю статус подписки.', 'success');
       loadBillingState();
     }
     if (checkoutStatus === 'cancel') {
-      showToast('Checkout был отменён.', 'warning');
+      showToast('Оформление отменено.', 'warning');
     }
   }, [checkoutStatus, loadBillingState]);
 
@@ -157,9 +157,9 @@ export default function PremiumApply() {
         await openExternalCheckout(response.checkoutUrl.trim());
         return;
       }
-      showToast('Checkout создан, но URL не вернулся.', 'warning');
+      showToast('Не удалось открыть страницу оформления.', 'warning');
     } catch (error) {
-      showToast(getErrorMessage(error, 'Не удалось запустить checkout.'), 'error');
+      showToast(getErrorMessage(error, 'Не удалось открыть оформление подписки.'), 'error');
     } finally {
       setActionPlanId('');
     }
@@ -236,10 +236,10 @@ export default function PremiumApply() {
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, color: '#b6c4ea', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 12 }}>
                 <Sparkles size={16} color="#6fc2ff" />
-                Premium control center
+                Premium
               </div>
               <h1 style={{ margin: 0, fontSize: 'clamp(32px, 5vw, 58px)', lineHeight: 0.98, letterSpacing: '-0.04em' }}>
-                Premium теперь живёт как нормальный billing flow.
+                Управление Premium
               </h1>
             </div>
             <div
@@ -252,15 +252,14 @@ export default function PremiumApply() {
                 minWidth: 240,
               }}
             >
-              <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9fb0d7' }}>Provider</div>
-              <div style={{ marginTop: 6, fontSize: 18, fontWeight: 800 }}>{premiumInfo?.provider || 'test'}</div>
-              <div style={{ marginTop: 4, color: 'rgba(224,232,255,0.68)' }}>Checkout mode: {premiumInfo?.checkoutMode || 'instant'}</div>
+              <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9fb0d7' }}>Статус</div>
+              <div style={{ marginTop: 6, fontSize: 18, fontWeight: 800 }}>{loading ? '...' : premiumInfo?.currentPlan?.name || (premiumInfo?.isPremium ? 'Premium' : 'Free')}</div>
+              <div style={{ marginTop: 4, color: 'rgba(224,232,255,0.68)' }}>{statusLabel(premiumInfo?.premiumStatus)}</div>
             </div>
           </div>
 
           <p style={{ margin: 0, maxWidth: 760, fontSize: 17, lineHeight: 1.7, color: 'rgba(224,232,255,0.76)' }}>
-            Здесь видны реальный premium status пользователя, срок действия, источник активации, платежная история и доступные планы.
-            Для desktop используется этот же billing screen, только внутри отдельного Electron-приложения.
+            Здесь можно посмотреть статус подписки, срок действия, историю оплат и доступные планы.
           </p>
         </div>
 
@@ -274,7 +273,7 @@ export default function PremiumApply() {
           <div style={{ padding: 24, borderRadius: 24, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#9fb0d7', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 12 }}>
               <Star size={16} color="#7c6cff" />
-              Current status
+              Текущий статус
             </div>
             <div style={{ marginTop: 12, fontSize: 28, fontWeight: 900 }}>
               {loading ? '...' : premiumInfo?.isPremium ? 'Premium' : 'Free'}
@@ -285,7 +284,7 @@ export default function PremiumApply() {
           <div style={{ padding: 24, borderRadius: 24, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#9fb0d7', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 12 }}>
               <CalendarClock size={16} color="#6fc2ff" />
-              Expires at
+              Действует до
             </div>
             <div style={{ marginTop: 12, fontSize: 20, fontWeight: 800 }}>{loading ? '...' : formatDate(premiumInfo?.premiumExpiresAt)}</div>
             <div style={{ marginTop: 8, color: 'rgba(224,232,255,0.72)' }}>Для ручного плана срок может быть не ограничен.</div>
@@ -294,10 +293,10 @@ export default function PremiumApply() {
           <div style={{ padding: 24, borderRadius: 24, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#9fb0d7', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 12 }}>
               <Shield size={16} color="#7cf2c4" />
-              Source
+              Источник
             </div>
             <div style={{ marginTop: 12, fontSize: 20, fontWeight: 800 }}>{loading ? '...' : premiumInfo?.premiumSource || '—'}</div>
-            <div style={{ marginTop: 8, color: 'rgba(224,232,255,0.72)' }}>Сервер хранит provider и срок действия в одном месте.</div>
+            <div style={{ marginTop: 8, color: 'rgba(224,232,255,0.72)' }}>Здесь отображается источник и срок действия подписки.</div>
           </div>
         </div>
 
@@ -379,7 +378,7 @@ export default function PremiumApply() {
                           opacity: busy ? 0.6 : 1,
                         }}
                       >
-                        {busy ? 'Подготовка...' : premiumInfo?.isPremium ? 'Продлить через checkout' : 'Купить через checkout'}
+                        {busy ? 'Подготовка...' : premiumInfo?.isPremium ? 'Продлить подписку' : 'Купить подписку'}
                       </button>
                       {highlighted ? (
                         <div
@@ -420,7 +419,7 @@ export default function PremiumApply() {
                 {premiumInfo?.subscription?.cancelAtPeriodEnd ? 'Продление выключено' : 'Продление активно'}
               </div>
               <div style={{ marginTop: 10, lineHeight: 1.7, color: 'rgba(224,232,255,0.74)' }}>
-                Это локальный server-side flag SafeGram. Для test-mode он даёт повторяемый сценарий управления статусом подписки без ручных правок в БД.
+                Здесь можно включить или отключить продление подписки для этого аккаунта.
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 18 }}>
                 <button
@@ -464,7 +463,7 @@ export default function PremiumApply() {
                 Дальше
               </div>
               <div style={{ marginTop: 12, lineHeight: 1.7, color: 'rgba(224,232,255,0.74)' }}>
-                Если provider не `test`, checkout откроется во внешнем браузере. После возврата сюда billing screen перечитает `/api/premium` и `/api/premium/history`.
+                Если для оформления нужен браузер, SafeGram откроет его автоматически. После возвращения статус подписки обновится.
               </div>
             </div>
           </section>
@@ -507,7 +506,7 @@ export default function PremiumApply() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700 }}>{item.planId}</div>
                     <div style={{ marginTop: 4, color: 'rgba(224,232,255,0.62)', fontSize: 14 }}>
-                      {item.provider} • {formatDate(item.createdAt)}
+                      {formatDate(item.createdAt)}
                     </div>
                   </div>
                   <div style={{ fontWeight: 800 }}>{item.amountLabel}</div>

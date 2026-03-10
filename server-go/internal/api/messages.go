@@ -44,22 +44,22 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 
 		var req struct {
-			ChatID        string  `json:"chatId"`
-			Text          string  `json:"text"`
-			Ciphertext    string  `json:"ciphertext"` // Зашифрованное сообщение (для E2EE групп)
-			AttachmentURL string  `json:"attachmentUrl"`
-			ReplyTo       string  `json:"replyTo"`
-			ForwardFrom   string  `json:"forwardFrom"` // ID сообщения для пересылки
-			Anonymous     bool    `json:"anonymous"`   // отправитель скрыт — получатель видит «Тень» (только в ЛС)
-			StickerID     string  `json:"stickerId"`
-			GifURL        string  `json:"gifUrl"`
+			ChatID        string   `json:"chatId"`
+			Text          string   `json:"text"`
+			Ciphertext    string   `json:"ciphertext"` // Зашифрованное сообщение (для E2EE групп)
+			AttachmentURL string   `json:"attachmentUrl"`
+			ReplyTo       string   `json:"replyTo"`
+			ForwardFrom   string   `json:"forwardFrom"` // ID сообщения для пересылки
+			Anonymous     bool     `json:"anonymous"`   // отправитель скрыт — получатель видит «Тень» (только в ЛС)
+			StickerID     string   `json:"stickerId"`
+			GifURL        string   `json:"gifUrl"`
 			LocationLat   *float64 `json:"locationLat"`
 			LocationLon   *float64 `json:"locationLon"`
-			ThreadID      string  `json:"threadId"`
-			ExpiresMs     *int64  `json:"expiresMs"` // Время жизни сообщения в миллисекундах
+			ThreadID      string   `json:"threadId"`
+			ExpiresMs     *int64   `json:"expiresMs"` // Время жизни сообщения в миллисекундах
 			// Новые типы сообщений
-			Poll          *struct {
-				Question string   `json:"question"`
+			Poll *struct {
+				Question string `json:"question"`
 				Options  []struct {
 					Text string `json:"text"`
 				} `json:"options"`
@@ -90,12 +90,12 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
 			return
 		}
-		
+
 		// Если chatId в URL, используем его
 		if chatIDFromURL := c.Param("id"); chatIDFromURL != "" && req.ChatID == "" {
 			req.ChatID = chatIDFromURL
 		}
-		
+
 		if req.ChatID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "chatId is required"})
 			return
@@ -191,7 +191,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 
 		messageID := uuid.New().String()
 		var pollID string
-		
+
 		// Обработка опроса
 		if req.Poll != nil && req.Poll.Question != "" && len(req.Poll.Options) > 0 {
 			pollID = uuid.New().String()
@@ -202,7 +202,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 				Question:  req.Poll.Question,
 				CreatedBy: userIDStr,
 			}
-			
+
 			// Создаем опции
 			for i, opt := range req.Poll.Options {
 				if opt.Text != "" {
@@ -214,16 +214,16 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 					})
 				}
 			}
-			
+
 			if err := db.Create(&poll).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "errorCode": "POLL_CREATE_FAILED"})
 				return
 			}
-			
+
 			// Сохраняем pollID в сообщении
 			req.Text = "" // Опрос не имеет текста
 		}
-		
+
 		// Обработка календарного события
 		var calendarEventJSON string
 		if req.CalendarEvent != nil && req.CalendarEvent.Title != "" {
@@ -231,7 +231,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 				calendarEventJSON = string(jsonData)
 			}
 		}
-		
+
 		// Обработка контакта
 		var contactJSON string
 		if req.Contact != nil && req.Contact.Name != "" {
@@ -239,7 +239,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 				contactJSON = string(jsonData)
 			}
 		}
-		
+
 		// Обработка документа
 		var documentJSON string
 		if req.Document != nil && req.Document.Name != "" {
@@ -247,7 +247,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 				documentJSON = string(jsonData)
 			}
 		}
-		
+
 		// E2EE audit: ключи шифрования не отправляются на сервер; расшифровка только на клиенте.
 		// При наличии ciphertext plaintext не сохраняется в БД и не логируется (ЛС и группы).
 		msgText := req.Text
@@ -255,26 +255,26 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			msgText = ""
 		}
 		message := models.Message{
-			ID:            messageID,
-			ChatID:        req.ChatID,
-			SenderID:      userIDStr,
-			Text:          msgText,
-			Ciphertext:    req.Ciphertext,
-			AttachmentURL: req.AttachmentURL,
-			ReplyTo:       req.ReplyTo,
-			ForwardFrom:   req.ForwardFrom,
-			Anonymous:     req.Anonymous,
-			ThreadID:      req.ThreadID,
-			StickerID:     req.StickerID,
-			GifURL:        req.GifURL,
-			LocationLat:   req.LocationLat,
-			LocationLon:   req.LocationLon,
-			PollID:        pollID,
+			ID:                messageID,
+			ChatID:            req.ChatID,
+			SenderID:          userIDStr,
+			Text:              msgText,
+			Ciphertext:        req.Ciphertext,
+			AttachmentURL:     req.AttachmentURL,
+			ReplyTo:           req.ReplyTo,
+			ForwardFrom:       req.ForwardFrom,
+			Anonymous:         req.Anonymous,
+			ThreadID:          req.ThreadID,
+			StickerID:         req.StickerID,
+			GifURL:            req.GifURL,
+			LocationLat:       req.LocationLat,
+			LocationLon:       req.LocationLon,
+			PollID:            pollID,
 			CalendarEventJSON: calendarEventJSON,
-			ContactJSON:   contactJSON,
-			DocumentJSON:  documentJSON,
+			ContactJSON:       contactJSON,
+			DocumentJSON:      documentJSON,
 		}
-		
+
 		// Устанавливаем время истечения, если указано
 		if req.ExpiresMs != nil && *req.ExpiresMs > 0 {
 			expiresAt := time.Now().Add(time.Duration(*req.ExpiresMs) * time.Millisecond)
@@ -410,7 +410,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 				}
 			}
 		}
-		
+
 		// Парсим JSON для календарного события, контакта и документа
 		var calendarEventParsed, contactParsed, documentParsed gin.H
 		if message.CalendarEventJSON != "" {
@@ -422,28 +422,28 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		if message.DocumentJSON != "" {
 			json.Unmarshal([]byte(message.DocumentJSON), &documentParsed)
 		}
-		
+
 		// Формируем ответ для API
 		response := gin.H{
-			"id":            message.ID,
-			"chatId":        message.ChatID,
-			"senderId":      message.SenderID,
-			"text":          message.Text,
-			"ciphertext":    message.Ciphertext,
-			"moderationStatus": message.ModerationStatus,
-			"moderationReason": message.ModerationReason,
-			"attachmentUrl":  message.AttachmentURL,
-			"replyTo":       message.ReplyTo,
-			"forwardFrom":   message.ForwardFrom,
+			"id":                message.ID,
+			"chatId":            message.ChatID,
+			"senderId":          message.SenderID,
+			"text":              message.Text,
+			"ciphertext":        message.Ciphertext,
+			"moderationStatus":  message.ModerationStatus,
+			"moderationReason":  message.ModerationReason,
+			"attachmentUrl":     message.AttachmentURL,
+			"replyTo":           message.ReplyTo,
+			"forwardFrom":       message.ForwardFrom,
 			"forwardFromChatId": forwardFromChatID,
-			"threadId":      message.ThreadID,
-			"stickerId":     message.StickerID,
-			"gifUrl":        message.GifURL,
-			"locationLat":   message.LocationLat,
-			"locationLon":    message.LocationLon,
-			"createdAt":     message.CreatedAt,
+			"threadId":          message.ThreadID,
+			"stickerId":         message.StickerID,
+			"gifUrl":            message.GifURL,
+			"locationLat":       message.LocationLat,
+			"locationLon":       message.LocationLon,
+			"createdAt":         message.CreatedAt,
 		}
-		
+
 		// Добавляем новые типы сообщений
 		if pollData != nil {
 			response["pollId"] = message.PollID
@@ -458,7 +458,7 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		if documentParsed != nil {
 			response["document"] = documentParsed
 		}
-		
+
 		// Добавляем историю редактирования (если есть)
 		if message.EditHistoryJSON != "" {
 			var editHistory []gin.H
@@ -493,14 +493,14 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		if message.Anonymous {
 			// Автору в ответе API показываем, что это его сообщение; получателям — только «Тень»
 			response["sender"] = gin.H{
-				"id":       message.Sender.ID,
-				"username": message.Sender.Username,
+				"id":        message.Sender.ID,
+				"username":  message.Sender.Username,
 				"avatarUrl": message.Sender.AvatarURL,
 			}
 		} else if message.Sender.ID != "" {
 			response["sender"] = gin.H{
-				"id":       message.Sender.ID,
-				"username": message.Sender.Username,
+				"id":        message.Sender.ID,
+				"username":  message.Sender.Username,
 				"avatarUrl": message.Sender.AvatarURL,
 			}
 		}
@@ -520,45 +520,66 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		// Отправляем push-уведомления всем участникам чата (кроме отправителя)
 		if message.ModerationStatus == "approved" {
 			go func() {
-			var members []models.ChatMember
-			if err := db.Where("chat_id = ? AND user_id != ?", req.ChatID, userIDStr).Find(&members).Error; err == nil {
-				for _, member := range members {
-					// Получаем информацию о чате для уведомления
-					var chat models.Chat
-					if err := db.First(&chat, "id = ?", req.ChatID).Error; err == nil {
-						chatName := chat.Name
-						if chat.Type == "dm" && !message.Anonymous {
-							var otherMember models.ChatMember
-							if err := db.Where("chat_id = ? AND user_id != ?", req.ChatID, member.UserID).First(&otherMember).Error; err == nil {
-								var otherUser models.User
-								if err := db.First(&otherUser, "id = ?", otherMember.UserID).Error; err == nil {
-									chatName = otherUser.Username
+				var members []models.ChatMember
+				if err := db.Where("chat_id = ? AND user_id != ?", req.ChatID, userIDStr).Find(&members).Error; err == nil {
+					for _, member := range members {
+						// Получаем информацию о чате для уведомления
+						var chat models.Chat
+						if err := db.First(&chat, "id = ?", req.ChatID).Error; err == nil {
+							chatName := chat.Name
+							if chat.Type == "dm" && !message.Anonymous {
+								var otherMember models.ChatMember
+								if err := db.Where("chat_id = ? AND user_id != ?", req.ChatID, member.UserID).First(&otherMember).Error; err == nil {
+									var otherUser models.User
+									if err := db.First(&otherUser, "id = ?", otherMember.UserID).Error; err == nil {
+										chatName = otherUser.Username
+									}
 								}
 							}
+							title := chatName
+							if message.Anonymous {
+								title = "Тень"
+							}
+							if title == "" {
+								title = "SafeGram"
+							}
+							body := message.Text
+							if body == "" {
+								body = "Новое сообщение"
+							}
+							if len(body) > 100 {
+								body = body[:100] + "..."
+							}
+
+							SendPushNotification(db, member.UserID, title, body, map[string]interface{}{
+								"chatId":    req.ChatID,
+								"messageId": message.ID,
+								"url":       "/chats/" + req.ChatID,
+							})
 						}
-						title := chatName
-						if message.Anonymous {
-							title = "Тень"
-						}
-						if title == "" {
-							title = "SafeGram"
-						}
-						body := message.Text
-						if body == "" {
-							body = "Новое сообщение"
-						}
-						if len(body) > 100 {
-							body = body[:100] + "..."
-						}
-						
-						SendPushNotification(db, member.UserID, title, body, map[string]interface{}{
-							"chatId":    req.ChatID,
-							"messageId": message.ID,
-							"url":       "/chats/" + req.ChatID,
-						})
 					}
 				}
-			}
+			}()
+		}
+		if message.ModerationStatus == "approved" {
+			messageCopy := message
+			go func() {
+				var chatForEmail models.Chat
+				if err := db.Select("id", "type", "name").First(&chatForEmail, "id = ?", req.ChatID).Error; err != nil {
+					return
+				}
+				senderName := "Тень"
+				if !messageCopy.Anonymous {
+					senderName = strings.TrimSpace(messageCopy.Sender.Username)
+					if senderName == "" {
+						senderName = "Пользователь SafeGram"
+					}
+				}
+				chatName := strings.TrimSpace(chatForEmail.Name)
+				if chatForEmail.Type == "dm" || chatName == "" {
+					chatName = senderName
+				}
+				queueMessageEmailNotifications(db, &messageCopy, chatForEmail.Type, chatName, senderName)
 			}()
 		}
 
@@ -662,7 +683,7 @@ func EditMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 
 		now := time.Now()
-		
+
 		// Сохраняем историю редактирования
 		var editHistory []gin.H
 		if message.EditHistoryJSON != "" {
@@ -678,7 +699,7 @@ func EditMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			editHistory = editHistory[len(editHistory)-10:]
 		}
 		editHistoryJSON, _ := json.Marshal(editHistory)
-		
+
 		message.Text = req.Text
 		message.EditedAt = &now
 		message.EditHistoryJSON = string(editHistoryJSON)
@@ -690,15 +711,15 @@ func EditMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 
 		// Формируем данные для WebSocket
 		editData := gin.H{
-			"id":           message.ID,
-			"chatId":       message.ChatID,
-			"senderId":     message.SenderID,
-			"text":         message.Text,
+			"id":            message.ID,
+			"chatId":        message.ChatID,
+			"senderId":      message.SenderID,
+			"text":          message.Text,
 			"attachmentUrl": message.AttachmentURL,
-			"editedAt":     message.EditedAt,
-			"createdAt":    message.CreatedAt,
+			"editedAt":      message.EditedAt,
+			"createdAt":     message.CreatedAt,
 		}
-		
+
 		// Отправляем через WebSocket
 		editJSON, _ := json.Marshal(gin.H{
 			"type": "message:update",
@@ -762,8 +783,8 @@ func DeleteMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		deleteJSON, _ := json.Marshal(gin.H{
 			"type": "message:delete",
 			"data": gin.H{
-				"messageId": messageID,
-				"chatId":    message.ChatID,
+				"messageId":    messageID,
+				"chatId":       message.ChatID,
 				"deleteForAll": true, // Пока всегда true, можно добавить в запрос
 			},
 		})
@@ -856,7 +877,7 @@ func MarkChatRead(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		subquery := db.Model(&models.MessageReadReceipt{}).
 			Select("message_id").
 			Where("user_id = ?", userIDStr)
-		
+
 		db.Where("chat_id = ? AND sender_id != ? AND deleted_at IS NULL", chatID, userIDStr).
 			Where("id NOT IN (?)", subquery).
 			Find(&unreadMessages)
@@ -945,8 +966,8 @@ func GetMessageReadReceipts(db *gorm.DB) gin.HandlerFunc {
 				"userId": receipt.UserID,
 				"readAt": receipt.ReadAt,
 				"user": gin.H{
-					"id":       receipt.User.ID,
-					"username": receipt.User.Username,
+					"id":        receipt.User.ID,
+					"username":  receipt.User.Username,
 					"avatarUrl": receipt.User.AvatarURL,
 				},
 			}
@@ -1031,25 +1052,25 @@ func ForwardMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 
 		// Формируем ответ для API
 		response := gin.H{
-			"id":            forwardedMessage.ID,
-			"chatId":        forwardedMessage.ChatID,
-			"senderId":      forwardedMessage.SenderID,
-			"text":          forwardedMessage.Text,
-			"attachmentUrl": forwardedMessage.AttachmentURL,
-			"forwardFrom":   forwardedMessage.ForwardFrom,
+			"id":                forwardedMessage.ID,
+			"chatId":            forwardedMessage.ChatID,
+			"senderId":          forwardedMessage.SenderID,
+			"text":              forwardedMessage.Text,
+			"attachmentUrl":     forwardedMessage.AttachmentURL,
+			"forwardFrom":       forwardedMessage.ForwardFrom,
 			"forwardFromChatId": originalMessage.ChatID,
-			"stickerId":     forwardedMessage.StickerID,
-			"gifUrl":        forwardedMessage.GifURL,
-			"locationLat":   forwardedMessage.LocationLat,
-			"locationLon":   forwardedMessage.LocationLon,
-			"createdAt":     forwardedMessage.CreatedAt,
+			"stickerId":         forwardedMessage.StickerID,
+			"gifUrl":            forwardedMessage.GifURL,
+			"locationLat":       forwardedMessage.LocationLat,
+			"locationLon":       forwardedMessage.LocationLon,
+			"createdAt":         forwardedMessage.CreatedAt,
 			"forwardedMessage": gin.H{
 				"id":       originalMessage.ID,
 				"text":     originalMessage.Text,
 				"senderId": originalMessage.SenderID,
 				"sender": gin.H{
-					"id":       originalSender.ID,
-					"username": originalSender.Username,
+					"id":        originalSender.ID,
+					"username":  originalSender.Username,
 					"avatarUrl": originalSender.AvatarURL,
 				},
 				"attachmentUrl": originalMessage.AttachmentURL,
@@ -1058,8 +1079,8 @@ func ForwardMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 		if forwardedMessage.Sender.ID != "" {
 			response["sender"] = gin.H{
-				"id":       forwardedMessage.Sender.ID,
-				"username": forwardedMessage.Sender.Username,
+				"id":        forwardedMessage.Sender.ID,
+				"username":  forwardedMessage.Sender.Username,
 				"avatarUrl": forwardedMessage.Sender.AvatarURL,
 			}
 		}

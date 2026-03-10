@@ -31,13 +31,13 @@ func logAdminAudit(db *gorm.DB, adminID, targetID, action, details, ip, ua strin
 
 func logRoleBanHistory(db *gorm.DB, userID, adminID, action, oldVal, newVal, reason string) {
 	entry := models.RoleBanHistory{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		AdminID:   adminID,
-		Action:    action,
-		OldValue:  oldVal,
-		NewValue:  newVal,
-		Reason:    reason,
+		ID:       uuid.New().String(),
+		UserID:   userID,
+		AdminID:  adminID,
+		Action:   action,
+		OldValue: oldVal,
+		NewValue: newVal,
+		Reason:   reason,
 	}
 	db.Create(&entry)
 }
@@ -117,12 +117,17 @@ func GetAdminUsers(db *gorm.DB) gin.HandlerFunc {
 		result := make([]gin.H, len(users))
 		for i, user := range users {
 			result[i] = gin.H{
-				"id":        user.ID,
+				"id":       user.ID,
 				"username": user.Username,
-				"email":    func() string { if user.Email != nil { return *user.Email }; return "" }(),
-				"roles":    user.ParseRoles(),
-				"plan":     user.Plan,
-				"status":   user.Status,
+				"email": func() string {
+					if user.Email != nil {
+						return *user.Email
+					}
+					return ""
+				}(),
+				"roles":     user.ParseRoles(),
+				"plan":      user.Plan,
+				"status":    user.Status,
 				"avatarUrl": user.AvatarURL,
 				"createdAt": user.CreatedAt,
 				"lastSeen":  user.LastSeen,
@@ -167,6 +172,17 @@ func BlockUser(db *gorm.DB) gin.HandlerFunc {
 		adminIDStr, _ := currentUserID.(string)
 		logRoleBanHistory(db, userID, adminIDStr, "ban", string(oldRoles), "[]", "")
 		logAdminAudit(db, adminIDStr, userID, "block_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
+		recordSuspiciousActivity(db, user.ID, "account_locked", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"reason": "admin_block",
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			queueEmailJob("account_locked_admin", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendAccountLockedNotification(emailAddress, user.Username, "Доступ к аккаунту ограничен администрацией.", supportCenterURL())
+			})
+		}
 
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
@@ -453,7 +469,7 @@ func GetAdminRecruit(db *gorm.DB) gin.HandlerFunc {
 		}
 		out := make([]gin.H, len(list))
 		for i, a := range list {
-				out[i] = gin.H{"id": a.ID, "email": a.Email, "name": a.Name, "role": a.Role, "message": a.Message, "status": a.Status, "declineReason": a.DeclineReason, "createdAt": a.CreatedAt}
+			out[i] = gin.H{"id": a.ID, "email": a.Email, "name": a.Name, "role": a.Role, "message": a.Message, "status": a.Status, "declineReason": a.DeclineReason, "createdAt": a.CreatedAt}
 		}
 		c.JSON(http.StatusOK, out)
 	}
@@ -580,9 +596,9 @@ func GetAdminAnalytics(db *gorm.DB) gin.HandlerFunc {
 			var newUsers int64
 			db.Model(&models.User{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&newUsers)
 			chart = append(chart, gin.H{
-				"date":       start.Format("2006-01-02"),
-				"messages":   msgCount,
-				"newUsers":   newUsers,
+				"date":     start.Format("2006-01-02"),
+				"messages": msgCount,
+				"newUsers": newUsers,
 			})
 		}
 		c.JSON(http.StatusOK, gin.H{

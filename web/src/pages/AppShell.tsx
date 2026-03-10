@@ -319,7 +319,7 @@ export default function AppShell() {
             <Link to="/app/profile" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Профиль" aria-label="Профиль">👤</Link>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link to="/app/support" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Ð¢ÐµÑ…Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°" aria-label="Ð¢ÐµÑ…Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°">ðŸŽ§ ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°</Link>
+            <Link to="/app/support" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Техподдержка" aria-label="Техподдержка">🎧 Техподдержка</Link>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link to="/premium-apply" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Premium" aria-label="Premium">Premium</Link>

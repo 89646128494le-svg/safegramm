@@ -110,6 +110,19 @@ func ResetPassword(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
+		recordSuspiciousActivity(db, user.ID, "password_change", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"source": "recovery",
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			ip := c.ClientIP()
+			queueEmailJob("password_changed_recovery", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+				"ip":     ip,
+			}, func() error {
+				return email.SendPasswordChangedNotification(emailAddress, user.Username, ip)
+			})
+		}
 		logger.Info("ResetPassword: password changed", map[string]interface{}{"userId": user.ID})
 		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Пароль успешно изменён. Войдите с новым паролем."})
 	}
