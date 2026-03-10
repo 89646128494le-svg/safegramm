@@ -28,9 +28,11 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.EmailTemplate{}, &models.ScheduledBroadcast{}, &models.DomainAllowBlock{},
 		&models.SystemLimit{}, &models.FeatureFlag{}, &models.SecurityPolicy{},
 		&models.SafetyAlert{}, &models.SuspiciousActivity{}, &models.GlobalInviteLink{},
-		&models.Payment{},
+		&models.Payment{}, &models.Subscription{},
 	)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	// Одноразовая миграция: включить показ в поиске для существующих пользователей (поиск для обычных пользователей)
 	db.Exec("CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)")
@@ -55,7 +57,9 @@ func AutoMigrate(db *gorm.DB) error {
 
 func CreateIndexes(db *gorm.DB) error {
 	log.Println("Creating database indexes...")
-	if db.Dialector.Name() == "postgres" { db.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS idx_users_email") }
+	if db.Dialector.Name() == "postgres" {
+		db.Exec("ALTER TABLE users DROP CONSTRAINT IF EXISTS idx_users_email")
+	}
 	db.Exec("DROP INDEX IF EXISTS idx_users_email")
 	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email) WHERE email IS NOT NULL AND email != ''")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)")
@@ -77,6 +81,8 @@ func CreateIndexes(db *gorm.DB) error {
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_messages_text_search ON messages(text)")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_payments_user_created ON payments(user_id, created_at DESC)")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_payments_provider_status ON payments(provider, status)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status ON subscriptions(user_id, status)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_subscriptions_period_end ON subscriptions(current_period_end)")
 	log.Println("Database indexes created successfully")
 	return nil
 }

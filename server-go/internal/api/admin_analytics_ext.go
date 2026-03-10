@@ -15,20 +15,28 @@ import (
 func GetAdminPremiumDashboard(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rangeQ := c.DefaultQuery("range", "30d")
+		since := time.Now().AddDate(0, 0, -30)
+		switch rangeQ {
+		case "7d":
+			since = time.Now().AddDate(0, 0, -7)
+		case "90d":
+			since = time.Now().AddDate(0, 0, -90)
+		}
 		var totalUsers, premiumUsers int64
 		db.Model(&models.User{}).Count(&totalUsers)
-		db.Model(&models.User{}).Where("plan = ?", "premium").Count(&premiumUsers)
+		activePremiumUsersQuery(db).Count(&premiumUsers)
 		conversion := 0.0
 		if totalUsers > 0 {
 			conversion = float64(premiumUsers) / float64(totalUsers) * 100
 		}
-		// Stub: churn and revenue would need payment/subscription tables
+		var revenue int64
+		db.Model(&models.Payment{}).Where("status = ? AND created_at >= ?", "succeeded", since).Select("COALESCE(SUM(amount), 0)").Scan(&revenue)
 		c.JSON(http.StatusOK, gin.H{
 			"totalUsers":   totalUsers,
 			"premiumUsers": premiumUsers,
 			"conversion":   conversion,
 			"churnRate":    0,
-			"revenue":      0,
+			"revenue":      revenue,
 			"range":        rangeQ,
 		})
 	}
@@ -51,16 +59,16 @@ func GetAdminChatStats(db *gorm.DB) gin.HandlerFunc {
 				continue
 			}
 			out = append(out, gin.H{
-				"chatId":   ch.ID,
-				"name":    ch.Name,
-				"type":    ch.Type,
+				"chatId":       ch.ID,
+				"name":         ch.Name,
+				"type":         ch.Type,
 				"messageCount": r.Count,
 			})
 		}
 		var modCount int64
 		db.Model(&models.ChatModerationSettings{}).Count(&modCount)
 		c.JSON(http.StatusOK, gin.H{
-			"activeChats":     out,
+			"activeChats":         out,
 			"chatsWithModeration": modCount,
 		})
 	}
@@ -90,10 +98,10 @@ func GetAdminReportsSummary(db *gorm.DB) gin.HandlerFunc {
 		db.Model(&models.Message{}).Where("moderation_status = ? AND created_at >= ? AND created_at <= ?", "approved", fromT, toT).Count(&approvedMsg)
 		db.Model(&models.Message{}).Where("moderation_status = ? AND created_at >= ? AND created_at <= ?", "rejected", fromT, toT).Count(&rejectedMsg)
 		c.JSON(http.StatusOK, gin.H{
-			"from":          fromT.Format("2006-01-02"),
-			"to":            toT.Format("2006-01-02"),
-			"feedbackCount": feedbackCount,
-			"pendingMessages": pendingMsg,
+			"from":             fromT.Format("2006-01-02"),
+			"to":               toT.Format("2006-01-02"),
+			"feedbackCount":    feedbackCount,
+			"pendingMessages":  pendingMsg,
 			"approvedMessages": approvedMsg,
 			"rejectedMessages": rejectedMsg,
 		})

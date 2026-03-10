@@ -29,7 +29,13 @@ func ExportChat(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		if user.Plan != "premium" {
+		state, err := syncUserPremiumState(db, &user)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+
+		if !state.IsPremium {
 			c.JSON(http.StatusPaymentRequired, gin.H{
 				"error":   "premium_required",
 				"message": "Экспорт истории доступен только для Premium пользователей",
@@ -123,9 +129,9 @@ func ExportChat(db *gorm.DB) gin.HandlerFunc {
 				"description": chat.Description,
 				"createdAt":   chat.CreatedAt.Unix() * 1000,
 			},
-			"exportedAt": time.Now().Unix() * 1000,
+			"exportedAt":   time.Now().Unix() * 1000,
 			"messageCount": len(messages),
-			"messages": make([]gin.H, len(messages)),
+			"messages":     make([]gin.H, len(messages)),
 		}
 
 		for i, msg := range messages {
@@ -138,8 +144,8 @@ func ExportChat(db *gorm.DB) gin.HandlerFunc {
 
 			if msg.Sender.ID != "" {
 				msgData["sender"] = gin.H{
-					"id":       msg.Sender.ID,
-					"username": msg.Sender.Username,
+					"id":        msg.Sender.ID,
+					"username":  msg.Sender.Username,
 					"avatarUrl": msg.Sender.AvatarURL,
 				}
 			}
@@ -164,8 +170,8 @@ func ExportChat(db *gorm.DB) gin.HandlerFunc {
 				reactions := make([]gin.H, len(msg.Reactions))
 				for j, r := range msg.Reactions {
 					reactions[j] = gin.H{
-						"emoji":   r.Emoji,
-						"userId":  r.UserID,
+						"emoji":     r.Emoji,
+						"userId":    r.UserID,
 						"createdAt": r.CreatedAt.Unix() * 1000,
 					}
 				}
@@ -186,4 +192,3 @@ func ExportChat(db *gorm.DB) gin.HandlerFunc {
 		c.Data(http.StatusOK, "application/json", jsonData)
 	}
 }
-

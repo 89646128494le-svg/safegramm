@@ -36,7 +36,7 @@ func TestEmailTemplates(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var err error
-		appURL := "https://safegram.app"
+		appURL := "https://safegram-hazel.vercel.app"
 
 		switch req.Template {
 		case "verification":
@@ -61,12 +61,31 @@ func TestEmailTemplates(db *gorm.DB) gin.HandlerFunc {
 			err = email.SendPremiumActivated(req.Email, username, appURL)
 		case "backup":
 			err = email.SendBackupCodes(req.Email, username, "SAFE-111111\nSAFE-222222\nSAFE-333333\nSAFE-444444\nSAFE-555555")
+		case "backup_regenerated":
+			err = email.SendBackupCodesRegenerated(req.Email, username, "SAFE-888111\nSAFE-888222\nSAFE-888333\nSAFE-888444\nSAFE-888555")
+		case "email_change_verify":
+			err = email.SendEmailChangeVerification(req.Email, username, "908112")
+		case "email_changed":
+			err = email.SendEmailChangedNotification(req.Email, username, req.Email)
+		case "premium_receipt":
+			err = email.SendPremiumReceipt(req.Email, username, "SafeGram Premium", "$9.99", "09.03.2026 23:30")
+		case "premium_expiring":
+			err = email.SendPremiumExpiring(req.Email, username, "SafeGram Premium", "16.03.2026 23:59", appURL+"/app/settings/billing")
+		case "export_ready":
+			err = email.SendAccountExportReady(req.Email, username, appURL+"/download/export/demo", "24 часа")
+		case "account_deleted":
+			err = email.SendAccountDeletedConfirmation(req.Email, username, appURL+"/support")
+		case "digest":
+			err = email.SendUnreadDigest(req.Email, username, 4, 19, appURL+"/app/chats")
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": "unknown_template",
 				"available": []string{
 					"verification", "welcome", "login", "reset", "changed", "message",
 					"group_invite", "security", "locked", "premium", "backup",
+					"backup_regenerated", "email_change_verify", "email_changed",
+					"premium_receipt", "premium_expiring", "export_ready",
+					"account_deleted", "digest",
 				},
 			})
 			return
@@ -80,4 +99,3 @@ func TestEmailTemplates(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
-

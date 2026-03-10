@@ -319,6 +319,13 @@ export default function AppShell() {
             <Link to="/app/profile" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Профиль" aria-label="Профиль">👤</Link>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/app/support" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Ð¢ÐµÑ…Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°" aria-label="Ð¢ÐµÑ…Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°">ðŸŽ§ ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°</Link>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link to="/premium-apply" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Premium" aria-label="Premium">Premium</Link>
+          </motion.div>
+
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link to="/app/settings" className="btn btn-ghost" style={{ textDecoration: 'none' }} title="Настройки" aria-label="Настройки">⚙️</Link>
           </motion.div>
 
@@ -352,7 +359,8 @@ export default function AppShell() {
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
               <Route path="sessions" element={<SessionsPage />} />
-              <Route path="feedback" element={<Feedback />} />
+              <Route path="support" element={<Feedback />} />
+              <Route path="feedback" element={<Navigate to="/app/support" replace />} />
               <Route path="admin" element={<Admin />} />
             </Routes>
           </AnimatePresence>
@@ -482,3 +490,4 @@ export default function AppShell() {
     </motion.div>
   );
 }
+

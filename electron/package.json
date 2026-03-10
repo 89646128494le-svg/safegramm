@@ -69,6 +69,7 @@
     },
     "nsis": {
       "oneClick": false,
+      "license": "build/installer-license.html",
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true

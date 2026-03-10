@@ -7,6 +7,7 @@ import MaintenanceBanner from './components/MaintenanceBanner';
 import DesktopTitlebar, { DESKTOP_TITLEBAR_HEIGHT } from './components/DesktopTitlebar';
 import Landing from './pages/Landing';
 import AppShell from './pages/AppShell';
+import Feedback from './pages/Feedback';
 
 const Features = lazy(() => import('./pages/Features'));
 const Pricing = lazy(() => import('./pages/Pricing'));
@@ -142,6 +143,8 @@ export default function App() {
               } />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
+              <Route path="/support" element={<Feedback />} />
+              <Route path="/feedback" element={<Navigate to="/support" replace />} />
               <Route path="/premium-apply" element={isAuthenticated ? <PremiumApply /> : <Navigate to="/login" replace />} />
               <Route path="/join" element={isAuthenticated ? <JoinRecruit /> : <Navigate to="/login" replace />} />
               <Route path="/invite/:code" element={<InvitePage />} />
@@ -169,6 +172,8 @@ export default function App() {
         <Route path="/about" element={<About />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/support" element={<Feedback />} />
+        <Route path="/feedback" element={<Navigate to="/support" replace />} />
         <Route path="/login" element={
           isAuthenticated ? <Navigate to="/app/chats" replace /> : <Login onDone={handleAuthSuccess} />
         } />

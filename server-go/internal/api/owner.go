@@ -69,7 +69,7 @@ func GetOwnerDashboard(db *gorm.DB) gin.HandlerFunc {
 		var premiumUsers int64
 		var activeUsers int64
 		db.Model(&models.User{}).Count(&totalUsers)
-		db.Model(&models.User{}).Where("plan = ?", "premium").Count(&premiumUsers)
+		activePremiumUsersQuery(db).Count(&premiumUsers)
 		db.Model(&models.User{}).Where("last_seen > ?", time.Now().Add(-7*24*time.Hour)).Count(&activeUsers)
 
 		// Статистика чатов
@@ -98,8 +98,13 @@ func GetOwnerDashboard(db *gorm.DB) gin.HandlerFunc {
 			recentUsersData[i] = gin.H{
 				"id":       u.ID,
 				"username": u.Username,
-				"email":    func() string { if u.Email != nil { return *u.Email }; return "" }(),
-				"plan":     u.Plan,
+				"email": func() string {
+					if u.Email != nil {
+						return *u.Email
+					}
+					return ""
+				}(),
+				"plan":      u.Plan,
 				"createdAt": u.CreatedAt.Unix() * 1000,
 			}
 		}
@@ -112,13 +117,13 @@ func GetOwnerDashboard(db *gorm.DB) gin.HandlerFunc {
 				"recent":  recentUsersData,
 			},
 			"chats": gin.H{
-				"total":   totalChats,
-				"groups":  groupChats,
+				"total":    totalChats,
+				"groups":   groupChats,
 				"channels": channelChats,
 			},
 			"messages": gin.H{
-				"total":      totalMessages,
-				"last24h":    messagesLast24h,
+				"total":   totalMessages,
+				"last24h": messagesLast24h,
 			},
 			"servers": gin.H{
 				"total": totalServers,
@@ -154,13 +159,28 @@ func SetUserPlan(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		user.Plan = req.Plan
+		if req.Plan == "free" {
+			if err := db.Transaction(func(tx *gorm.DB) error {
+				return cancelPremiumOverride(tx, user.ID)
+			}); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"ok": true, "plan": "free"})
+			return
+		}
+
+		user.Plan = "premium"
+		now := time.Now().UTC()
+		user.PremiumExpiresAt = nil
+		user.PremiumSource = "admin"
+		user.PremiumUpdatedAt = &now
 		if err := db.Save(&user).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"ok": true, "plan": user.Plan})
+		c.JSON(http.StatusOK, gin.H{"ok": true, "plan": user.Plan, "premiumSource": user.PremiumSource})
 	}
 }
 
@@ -259,11 +279,11 @@ func GetSystemSettings(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// В будущем можно хранить в отдельной таблице
 		settings := gin.H{
-			"maintenance": false,
+			"maintenance":         false,
 			"registrationEnabled": true,
-			"maxFileSize": 100 * 1024 * 1024, // 100MB
-			"maxChatMembers": 200000,
-			"premiumPrice": 299, // рублей в месяц
+			"maxFileSize":         100 * 1024 * 1024, // 100MB
+			"maxChatMembers":      200000,
+			"premiumPrice":        299, // рублей в месяц
 			"premiumFeatures": []string{
 				"Увеличенный лимит загрузки файлов",
 				"Приоритетная поддержка",
@@ -281,11 +301,11 @@ func GetSystemSettings(db *gorm.DB) gin.HandlerFunc {
 func UpdateSystemSettings(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Maintenance         *bool `json:"maintenance"`
-			RegistrationEnabled *bool `json:"registrationEnabled"`
+			Maintenance         *bool  `json:"maintenance"`
+			RegistrationEnabled *bool  `json:"registrationEnabled"`
 			MaxFileSize         *int64 `json:"maxFileSize"`
-			MaxChatMembers      *int `json:"maxChatMembers"`
-			PremiumPrice        *int `json:"premiumPrice"`
+			MaxChatMembers      *int   `json:"maxChatMembers"`
+			PremiumPrice        *int   `json:"premiumPrice"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -408,4 +428,3 @@ func SendLogReportToTelegram() gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "sent": len(records)})
 	}
 }
-

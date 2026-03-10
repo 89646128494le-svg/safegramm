@@ -20,6 +20,11 @@ func GetCurrentUser(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 			return
 		}
+		premiumState, err := syncUserPremiumState(db, &user)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
 
 		roles := user.ParseRoles()
 		status := user.Status
@@ -34,6 +39,10 @@ func GetCurrentUser(db *gorm.DB) gin.HandlerFunc {
 			"username":         user.Username,
 			"roles":            roles,
 			"plan":             user.Plan,
+			"isPremium":        premiumState.IsPremium,
+			"premiumStatus":    premiumState.Status,
+			"premiumSource":    user.PremiumSource,
+			"premiumExpiresAt": user.PremiumExpiresAt,
 			"avatarUrl":        user.AvatarURL,
 			"about":            user.About,
 			"status":           status,

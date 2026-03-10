@@ -55,6 +55,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// Платежи: вебхуки (без авторизации, проверка подписи внутри)
 	api.POST("/webhooks/stripe", StripeWebhook(db))
 	api.POST("/webhooks/yookassa", YooKassaWebhook(db))
+	api.GET("/plans", GetPlans(db))
 
 	// Защищенные маршруты (требуют аутентификации)
 	protected := api.Group("")
@@ -267,6 +268,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/admin/maintenance", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminMaintenance(db))
 	protected.GET("/admin/system/health", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetSystemHealth(db))
 	protected.GET("/admin/feedback", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminFeedback(db))
+	protected.PATCH("/admin/feedback/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminFeedback(db))
 	protected.GET("/admin/recruit", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminRecruit(db))
 	protected.POST("/admin/recruit/:id/approve", RequireAdmin(db), RequireAdmin2FA(db, cfg), ApproveRecruitApplication(db))
 	protected.POST("/admin/recruit/:id/decline", RequireAdmin(db), RequireAdmin2FA(db, cfg), DeclineRecruitApplication(db))
@@ -355,8 +357,11 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/owner/send-log-report", RequireOwner(db), SendLogReportToTelegram())
 
 	// Премиум подписка и тарифы
-	protected.GET("/premium", GetPremiumInfo(db))                                    // Информация о премиум подписке текущего пользователя
-	protected.GET("/plans", GetPlans(db))                                            // Список тарифов для страницы «Тарифы»
+	protected.GET("/premium", GetPremiumInfo(db)) // Информация о премиум подписке текущего пользователя
+	protected.GET("/premium/history", GetPremiumHistory(db))
+	protected.POST("/premium/checkout", CheckoutPremium(db))
+	protected.POST("/premium/cancel", CancelPremiumRenewal(db))
+	protected.POST("/premium/resume", ResumePremiumRenewal(db))
 	protected.POST("/premium/subscribe/:id", RequireOwner(db), SubscribePremium(db)) // Активировать премиум (только владелец)
 
 	// Управление сервисами (для admin и owner)
@@ -381,6 +386,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/admin/maintenance/disable", RequireAdmin(db), RequireAdmin2FA(db, cfg), DisableMaintenance(db))
 
 	// Обратная связь и заявки на премиум (отправка — авторизованный пользователь)
+	protected.GET("/feedback", GetMyFeedback(db))
 	protected.POST("/feedback", SubmitFeedback(db))
 
 	// Webhook настройки (для admin и owner)

@@ -8,6 +8,11 @@ interface User {
   status?: 'online' | 'offline';
   email?: string;
   bio?: string;
+  plan?: string;
+  isPremium?: boolean;
+  premiumStatus?: string;
+  premiumExpiresAt?: string | null;
+  premiumSource?: string;
 }
 
 interface UIState {

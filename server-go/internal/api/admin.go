@@ -302,15 +302,31 @@ func GetAdminStats(db *gorm.DB) gin.HandlerFunc {
 func GetAdminFeedback(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var list []models.Feedback
-		if err := db.Order("created_at DESC").Limit(500).Find(&list).Error; err != nil {
+		q := db.Model(&models.Feedback{})
+		if status := strings.TrimSpace(c.Query("status")); status != "" {
+			q = q.Where("status = ?", normalizeSupportStatus(status))
+		}
+		if category := strings.TrimSpace(c.Query("category")); category != "" {
+			q = q.Where("category = ?", normalizeSupportCategory(category))
+		}
+		if err := q.Order("updated_at DESC, created_at DESC").Limit(500).Find(&list).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		usersByID, err := mapFeedbackUsers(db, list)
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
 		out := make([]gin.H, len(list))
 		for i, f := range list {
-			out[i] = gin.H{"id": f.ID, "userId": f.UserID, "subject": f.Subject, "body": f.Body, "createdAt": f.CreatedAt}
+			var user *models.User
+			if resolved, ok := usersByID[f.UserID]; ok {
+				user = &resolved
+			}
+			out[i] = serializeFeedbackTicket(f, user)
 		}
-		c.JSON(http.StatusOK, out)
+		c.JSON(http.StatusOK, gin.H{"tickets": out})
 	}
 }
 
@@ -324,24 +340,78 @@ func SubmitFeedback(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		var req struct {
-			Subject string `json:"subject" binding:"required"`
-			Body    string `json:"body" binding:"required"`
+			Subject      string `json:"subject" binding:"required"`
+			Body         string `json:"body" binding:"required"`
+			Category     string `json:"category"`
+			Priority     string `json:"priority"`
+			ContactEmail string `json:"contactEmail"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "subject and body required"})
 			return
 		}
+		subject := strings.TrimSpace(req.Subject)
+		body := strings.TrimSpace(req.Body)
+		if subject == "" || body == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "subject and body required"})
+			return
+		}
+		var user models.User
+		if err := db.Select("id", "username", "email").First(&user, "id = ?", userIDStr).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		chat, _, err := getOrCreateAnonymousSupportChat(db, userIDStr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		contactEmail := strings.TrimSpace(req.ContactEmail)
+		if contactEmail == "" && user.Email != nil {
+			contactEmail = strings.TrimSpace(*user.Email)
+		}
 		fb := models.Feedback{
-			ID:      uuid.New().String(),
-			UserID:  userIDStr,
-			Subject: req.Subject,
-			Body:    req.Body,
+			ID:           uuid.New().String(),
+			UserID:       userIDStr,
+			Subject:      subject,
+			Body:         body,
+			Category:     normalizeSupportCategory(req.Category),
+			Priority:     normalizeSupportPriority(req.Priority),
+			Status:       "open",
+			ContactEmail: contactEmail,
+			ChatID:       chat.ID,
 		}
 		if err := db.Create(&fb).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"ok": true, "id": fb.ID})
+		ticketText := strings.Join([]string{
+			"[Support ticket #" + fb.ID[:8] + "]",
+			"Category: " + fb.Category,
+			"Priority: " + fb.Priority,
+			"Subject: " + fb.Subject,
+			"",
+			fb.Body,
+		}, "\n")
+		msg := models.Message{
+			ID:               uuid.New().String(),
+			ChatID:           chat.ID,
+			SenderID:         userIDStr,
+			Text:             ticketText,
+			ModerationStatus: "approved",
+		}
+		if err := db.Create(&msg).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		_ = db.Model(&models.Feedback{}).Where("id = ?", fb.ID).Update("last_message_at", msg.CreatedAt).Error
+		fb.LastMessageAt = msg.CreatedAt
+		c.JSON(http.StatusOK, gin.H{
+			"ok":     true,
+			"id":     fb.ID,
+			"chatId": chat.ID,
+			"ticket": serializeFeedbackTicket(fb, &user),
+		})
 	}
 }
 

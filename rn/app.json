@@ -5,12 +5,27 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "splash": { "backgroundColor": "#0a0e1a" },
-    "assetBundlePatterns": ["**/*"],
-    "ios": { "supportsTablet": true, "bundleIdentifier": "app.safegram" },
-    "android": { "adaptiveIcon": { "backgroundColor": "#0a0e1a" }, "package": "app.safegram" },
+    "splash": {
+      "backgroundColor": "#0a0e1a"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.safegram"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0e1a"
+      },
+      "package": "app.safegram"
+    },
     "extra": {
-      "apiUrl": "https://141.8.198.152.nip.io"
+      "apiUrl": "https://141.8.198.152.nip.io",
+      "eas": {
+        "projectId": "971166e8-2e19-4b40-98ca-0376437cc2a6"
+      }
     }
   }
 }

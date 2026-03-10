@@ -12,6 +12,47 @@ const DEFAULT_API_BASE = 'https://141.8.198.152.nip.io';
 export interface AuthUser {
   id: string;
   username: string;
+  plan?: string;
+  isPremium?: boolean;
+  premiumStatus?: string;
+  premiumExpiresAt?: string | null;
+  premiumSource?: string;
+}
+
+export interface BillingPlan {
+  id: string;
+  name: string;
+  plan: string;
+  description: string;
+  price: number;
+  priceLabel: string;
+  currency: string;
+  period: string;
+  billingCycle: string;
+  durationDays: number;
+  features: string[];
+  badge?: string;
+  checkoutReady?: boolean;
+}
+
+export interface PremiumInfo {
+  isPremium: boolean;
+  plan: string;
+  premiumStatus: string;
+  premiumSource?: string;
+  premiumExpiresAt?: string | null;
+  provider: string;
+  checkoutMode: string;
+  currentPlanId?: string;
+  currentPlan?: BillingPlan;
+  subscription?: {
+    provider?: string;
+    status?: string;
+    cancelAtPeriodEnd?: boolean;
+    currentPeriodEnd?: string | null;
+  } | null;
+  features?: string[];
+  billingUrl?: string;
 }
 
 export interface LoginChallengeResult {
@@ -58,6 +99,21 @@ export interface MessageItem {
   ciphertext?: string;
   attachmentUrl?: string;
   createdAt?: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  userId: string;
+  subject: string;
+  body: string;
+  category?: string;
+  priority?: string;
+  status?: string;
+  statusLabel?: string;
+  chatId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastReplyAt?: string;
 }
 
 export interface UploadAttachmentInput {
@@ -234,6 +290,58 @@ export async function sendLoginEmailCode(
   };
 }
 
+export async function getCurrentUser(apiBase: string, token: string): Promise<AuthUser> {
+  return apiRequest<AuthUser>('/api/users/me', {
+    method: 'GET',
+    token,
+    apiBase,
+  });
+}
+
+export async function getPremiumInfo(apiBase: string, token: string): Promise<PremiumInfo> {
+  return apiRequest<PremiumInfo>('/api/premium', {
+    method: 'GET',
+    token,
+    apiBase,
+  });
+}
+
+export async function getBillingPlans(apiBase: string): Promise<BillingPlan[]> {
+  const data = await apiRequest<{ plans?: BillingPlan[] }>('/api/plans', {
+    method: 'GET',
+    apiBase,
+  });
+  return data.plans || [];
+}
+
+export async function checkoutPremium(
+  apiBase: string,
+  token: string,
+  planId: string,
+  links?: {
+    successUrl?: string;
+    cancelUrl?: string;
+  }
+): Promise<{
+  ok?: boolean;
+  activated?: boolean;
+  provider?: string;
+  checkoutMode?: string;
+  checkoutUrl?: string;
+  premiumExpiresAt?: string | null;
+}> {
+  return apiRequest('/api/premium/checkout', {
+    method: 'POST',
+    token,
+    apiBase,
+    body: {
+      planId,
+      ...(links?.successUrl ? { successUrl: links.successUrl } : {}),
+      ...(links?.cancelUrl ? { cancelUrl: links.cancelUrl } : {}),
+    },
+  });
+}
+
 export async function getChats(apiBase: string, token: string): Promise<ChatSummary[]> {
   const data = await apiRequest<{ chats?: ChatSummary[] }>('/api/chats?limit=100', {
     method: 'GET',
@@ -303,6 +411,34 @@ export async function sendMessage(
   }
 ): Promise<MessageItem> {
   return apiRequest<MessageItem>('/api/messages', {
+    method: 'POST',
+    token,
+    apiBase,
+    body: payload,
+  });
+}
+
+export async function getSupportTickets(apiBase: string, token: string): Promise<SupportTicket[]> {
+  const data = await apiRequest<{ tickets?: SupportTicket[] }>('/api/feedback', {
+    method: 'GET',
+    token,
+    apiBase,
+  });
+  return data.tickets || [];
+}
+
+export async function createSupportTicket(
+  apiBase: string,
+  token: string,
+  payload: {
+    subject: string;
+    body: string;
+    category?: string;
+    priority?: string;
+    contactEmail?: string;
+  }
+): Promise<{ ok?: boolean; id?: string; chatId?: string; ticket?: SupportTicket }> {
+  return apiRequest('/api/feedback', {
     method: 'POST',
     token,
     apiBase,

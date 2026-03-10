@@ -8,11 +8,13 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
-    "build:android:apk": "npx eas build -p android --profile preview",
-    "build:android:aab": "npx eas build -p android --profile production"
+    "eas:login": "npm exec --yes eas-cli -- login",
+    "build:android:apk": "npm exec --yes eas-cli -- build -p android --profile preview",
+    "build:android:aab": "npm exec --yes eas-cli -- build -p android --profile production"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "babel-preset-expo": "~55.0.8",
     "expo": "~55.0.5",
     "expo-crypto": "~15.0.7",
     "expo-document-picker": "~14.0.7",

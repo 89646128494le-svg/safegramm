@@ -7,6 +7,10 @@ export interface User {
   avatarUrl?: string;
   roles?: string;
   plan?: string;
+  isPremium?: boolean;
+  premiumStatus?: string;
+  premiumExpiresAt?: string | null;
+  premiumSource?: string;
 }
 
 interface AuthState {

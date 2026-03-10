@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, getErrorMessage } from '../../services/api';
 import { getSocket } from '../../services/websocket';
 import EnhancedChatWindow from '../../components/EnhancedChatWindow';
@@ -72,6 +72,7 @@ type ChatDensity = 'comfortable' | 'compact';
 
 export default function Chats() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { ui, setSidebarOpen, maintenance, setToken, setUser } = useStore();
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string>('');
@@ -99,6 +100,7 @@ export default function Chats() {
     if (typeof window === 'undefined') return 'comfortable';
     return localStorage.getItem('safegram_chat_density') === 'compact' ? 'compact' : 'comfortable';
   });
+  const [pendingDeepLinkChatId, setPendingDeepLinkChatId] = useState('');
   const chatListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -116,6 +118,22 @@ export default function Chats() {
       setSidebarOpen(false);
     }
   }, [setSidebarOpen]);
+
+  useEffect(() => {
+    const chatId = new URLSearchParams(location.search).get('chat') || '';
+    setPendingDeepLinkChatId(chatId.trim());
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!pendingDeepLinkChatId) return;
+    const targetChat = chats.find((chat) => chat.id === pendingDeepLinkChatId);
+    if (!targetChat) return;
+    setSelectedChatId(targetChat.id);
+    setPendingDeepLinkChatId('');
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
+  }, [chats, pendingDeepLinkChatId, setSidebarOpen]);
 
   useEffect(() => {
     loadUser();

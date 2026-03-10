@@ -1537,7 +1537,8 @@ function PremiumApplicationsTab() {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     api('/api/admin/feedback')
-      .then((all: any[]) => Array.isArray(all) ? all.filter((f: any) => (f.subject || '').includes('Заявка на тариф')) : [])
+      .then((response: any) => Array.isArray(response?.tickets) ? response.tickets : [])
+      .then((all: any[]) => all.filter((f: any) => f.category === 'premium' || (f.subject || '').includes('Заявка на тариф')))
       .catch(() => [])
       .then(setList)
       .finally(() => setLoading(false));
@@ -1754,7 +1755,7 @@ function FeedbackTab() {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     api('/api/admin/feedback')
-      .then(setList)
+      .then((response: any) => setList(Array.isArray(response?.tickets) ? response.tickets : []))
       .catch(() => setList([]))
       .finally(() => setLoading(false));
   }, []);

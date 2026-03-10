@@ -5,34 +5,56 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
+	"mime"
+	"mime/multipart"
+	"mime/quotedprintable"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
 
 // EmailConfig конфигурация для отправки email
 type EmailConfig struct {
-	Provider   string // gmail, sendgrid, mailgun, resend, smtp
-	SMTPHost   string
-	SMTPPort   string
-	SMTPUser   string
-	SMTPPass   string
-	FromEmail  string
-	FromName   string
-	APIKey     string // Для SendGrid, Mailgun, Resend
-	APIURL     string // Для Mailgun, Resend
+	Provider  string // gmail, sendgrid, mailgun, resend, smtp
+	SMTPHost  string
+	SMTPPort  string
+	SMTPUser  string
+	SMTPPass  string
+	FromEmail string
+	FromName  string
+	APIKey    string // Для SendGrid, Mailgun, Resend
+	APIURL    string // Для Mailgun, Resend
 }
+
+type EmailContent struct {
+	HTML string
+	Text string
+}
+
+var (
+	reStripHead      = regexp.MustCompile(`(?is)<(head|style|script)[^>]*>.*?</(head|style|script)>`)
+	reBreaks         = regexp.MustCompile(`(?i)<\s*br\s*/?>`)
+	reBlockClose     = regexp.MustCompile(`(?i)</(p|div|h1|h2|h3|h4|li|tr|table|section)>`)
+	reListOpen       = regexp.MustCompile(`(?i)<li[^>]*>`)
+	reTags           = regexp.MustCompile(`(?s)<[^>]+>`)
+	reMultipleNL     = regexp.MustCompile(`\n{3,}`)
+	reMultipleSpaces = regexp.MustCompile(`[ \t]{2,}`)
+)
 
 // LoadConfig загружает конфигурацию из переменных окружения
 func LoadConfig() *EmailConfig {
 	provider := getEnv("EMAIL_PROVIDER", "gmail")
-	
+
 	config := &EmailConfig{
 		Provider:  provider,
 		FromEmail: getEnv("EMAIL_FROM", ""),
@@ -102,11 +124,18 @@ func IsEmailConfigured() (bool, string) {
 	return true, "ok"
 }
 
-// SendEmail отправляет email через выбранный провайдер
+// SendEmail sends an email with HTML and an automatically generated plain-text fallback.
 func SendEmail(to, subject, body string) error {
+	content := EmailContent{
+		HTML: body,
+		Text: htmlToPlainText(body),
+	}
+	return sendEmailContent(to, subject, content)
+}
+
+func sendEmailContent(to, subject string, content EmailContent) error {
 	config := LoadConfig()
 
-	// Если провайдер не настроен — возвращаем ошибку, чтобы API не врал «письмо отправлено»
 	if config.Provider == "" || (config.SMTPUser == "" && config.APIKey == "") {
 		err := fmt.Errorf("email not configured: set EMAIL_PROVIDER and credentials (e.g. GMAIL_USER, GMAIL_APP_PASSWORD) in .env")
 		log.Printf("[email] SendEmail failed: %v", err)
@@ -117,13 +146,13 @@ func SendEmail(to, subject, body string) error {
 	var err error
 	switch config.Provider {
 	case "gmail", "smtp":
-		err = sendViaSMTP(config, to, subject, body)
+		err = sendViaSMTP(config, to, subject, content)
 	case "sendgrid":
-		err = sendViaSendGrid(config, to, subject, body)
+		err = sendViaSendGrid(config, to, subject, content)
 	case "mailgun":
-		err = sendViaMailgun(config, to, subject, body)
+		err = sendViaMailgun(config, to, subject, content)
 	case "resend":
-		err = sendViaResend(config, to, subject, body)
+		err = sendViaResend(config, to, subject, content)
 	default:
 		err = fmt.Errorf("unsupported email provider: %s", config.Provider)
 	}
@@ -133,6 +162,38 @@ func SendEmail(to, subject, body string) error {
 	}
 	log.Printf("[email] Sent successfully to %s", maskEmailForLog(to))
 	return nil
+}
+
+func htmlToPlainText(input string) string {
+	plain := reStripHead.ReplaceAllString(input, "")
+	plain = reBreaks.ReplaceAllString(plain, "\n")
+	plain = reBlockClose.ReplaceAllString(plain, "\n")
+	plain = reListOpen.ReplaceAllString(plain, "- ")
+	plain = reTags.ReplaceAllString(plain, "")
+	plain = html.UnescapeString(plain)
+	plain = strings.ReplaceAll(plain, "\r", "")
+	lines := strings.Split(plain, "\n")
+	for i, line := range lines {
+		lines[i] = reMultipleSpaces.ReplaceAllString(strings.TrimSpace(line), " ")
+	}
+	plain = strings.Join(lines, "\n")
+	plain = reMultipleNL.ReplaceAllString(plain, "\n\n")
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return "SafeGram"
+	}
+	return plain
+}
+
+func formatFromAddress(name, address string) string {
+	if strings.TrimSpace(name) == "" {
+		return address
+	}
+	return (&mail.Address{Name: name, Address: address}).String()
+}
+
+func encodeSubject(subject string) string {
+	return mime.QEncoding.Encode("UTF-8", subject)
 }
 
 // maskEmailForLog скрывает часть email в логах (безопасность)
@@ -149,8 +210,8 @@ func maskEmailForLog(email string) string {
 
 const smtpDialTimeout = 15 * time.Second
 
-// sendViaSMTP отправляет email через SMTP с таймаутом подключения (избегаем зависания).
-func sendViaSMTP(config *EmailConfig, to, subject, body string) error {
+// sendViaSMTP sends an email via SMTP with multipart text/plain and text/html bodies.
+func sendViaSMTP(config *EmailConfig, to, subject string, content EmailContent) error {
 	addr := fmt.Sprintf("%s:%s", config.SMTPHost, config.SMTPPort)
 	conn, err := net.DialTimeout("tcp", addr, smtpDialTimeout)
 	if err != nil {
@@ -181,18 +242,18 @@ func sendViaSMTP(config *EmailConfig, to, subject, body string) error {
 	if err := client.Rcpt(to); err != nil {
 		return fmt.Errorf("smtp rcpt: %w", err)
 	}
+
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("smtp data: %w", err)
 	}
-	msg := []byte(fmt.Sprintf("From: %s <%s>\r\n", config.FromName, config.FromEmail) +
-		fmt.Sprintf("To: %s\r\n", to) +
-		fmt.Sprintf("Subject: %s\r\n", subject) +
-		"MIME-Version: 1.0\r\n" +
-		"Content-Type: text/html; charset=UTF-8\r\n" +
-		"\r\n" +
-		body + "\r\n")
-	if _, err := w.Write(msg); err != nil {
+	defer w.Close()
+
+	message, err := buildSMTPMessage(config, to, subject, content)
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(message); err != nil {
 		return fmt.Errorf("smtp write: %w", err)
 	}
 	if err := w.Close(); err != nil {
@@ -201,8 +262,56 @@ func sendViaSMTP(config *EmailConfig, to, subject, body string) error {
 	return nil
 }
 
-// sendViaSendGrid отправляет email через SendGrid API
-func sendViaSendGrid(config *EmailConfig, to, subject, body string) error {
+func buildSMTPMessage(config *EmailConfig, to, subject string, content EmailContent) ([]byte, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	body.WriteString(fmt.Sprintf("From: %s\r\n", formatFromAddress(config.FromName, config.FromEmail)))
+	body.WriteString(fmt.Sprintf("To: %s\r\n", to))
+	body.WriteString(fmt.Sprintf("Subject: %s\r\n", encodeSubject(subject)))
+	body.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
+	body.WriteString("MIME-Version: 1.0\r\n")
+	body.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=%q\r\n", writer.Boundary()))
+	body.WriteString("\r\n")
+
+	plainHeader := textproto.MIMEHeader{}
+	plainHeader.Set("Content-Type", "text/plain; charset=UTF-8")
+	plainHeader.Set("Content-Transfer-Encoding", "quoted-printable")
+	plainPart, err := writer.CreatePart(plainHeader)
+	if err != nil {
+		return nil, fmt.Errorf("smtp multipart plain part: %w", err)
+	}
+	plainWriter := quotedprintable.NewWriter(plainPart)
+	if _, err := plainWriter.Write([]byte(content.Text)); err != nil {
+		return nil, fmt.Errorf("smtp plain write: %w", err)
+	}
+	if err := plainWriter.Close(); err != nil {
+		return nil, fmt.Errorf("smtp plain close: %w", err)
+	}
+
+	htmlHeader := textproto.MIMEHeader{}
+	htmlHeader.Set("Content-Type", "text/html; charset=UTF-8")
+	htmlHeader.Set("Content-Transfer-Encoding", "quoted-printable")
+	htmlPart, err := writer.CreatePart(htmlHeader)
+	if err != nil {
+		return nil, fmt.Errorf("smtp multipart html part: %w", err)
+	}
+	htmlWriter := quotedprintable.NewWriter(htmlPart)
+	if _, err := htmlWriter.Write([]byte(content.HTML)); err != nil {
+		return nil, fmt.Errorf("smtp html write: %w", err)
+	}
+	if err := htmlWriter.Close(); err != nil {
+		return nil, fmt.Errorf("smtp html close: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("smtp multipart close: %w", err)
+	}
+	return body.Bytes(), nil
+}
+
+// sendViaSendGrid sends an email via SendGrid API.
+func sendViaSendGrid(config *EmailConfig, to, subject string, content EmailContent) error {
 	type SendGridPayload struct {
 		Personalizations []struct {
 			To []struct {
@@ -225,15 +334,9 @@ func sendViaSendGrid(config *EmailConfig, to, subject, body string) error {
 			To []struct {
 				Email string `json:"email"`
 			} `json:"to"`
-		}{
-			{
-				To: []struct {
-					Email string `json:"email"`
-				}{
-					{Email: to},
-				},
-			},
-		},
+		}{{To: []struct {
+			Email string `json:"email"`
+		}{{Email: to}}}},
 		From: struct {
 			Email string `json:"email"`
 			Name  string `json:"name"`
@@ -246,10 +349,8 @@ func sendViaSendGrid(config *EmailConfig, to, subject, body string) error {
 			Type  string `json:"type"`
 			Value string `json:"value"`
 		}{
-			{
-				Type:  "text/html",
-				Value: body,
-			},
+			{Type: "text/plain", Value: content.Text},
+			{Type: "text/html", Value: content.HTML},
 		},
 	}
 
@@ -258,10 +359,7 @@ func sendViaSendGrid(config *EmailConfig, to, subject, body string) error {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
+	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("POST", config.APIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -284,18 +382,16 @@ func sendViaSendGrid(config *EmailConfig, to, subject, body string) error {
 	return nil
 }
 
-// sendViaMailgun отправляет email через Mailgun API
-func sendViaMailgun(config *EmailConfig, to, subject, body string) error {
+// sendViaMailgun sends an email via Mailgun API.
+func sendViaMailgun(config *EmailConfig, to, subject string, content EmailContent) error {
 	data := url.Values{}
-	data.Set("from", fmt.Sprintf("%s <%s>", config.FromName, config.FromEmail))
+	data.Set("from", formatFromAddress(config.FromName, config.FromEmail))
 	data.Set("to", to)
 	data.Set("subject", subject)
-	data.Set("html", body)
+	data.Set("text", content.Text)
+	data.Set("html", content.HTML)
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
+	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("POST", config.APIURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -318,20 +414,22 @@ func sendViaMailgun(config *EmailConfig, to, subject, body string) error {
 	return nil
 }
 
-// sendViaResend отправляет email через Resend API
-func sendViaResend(config *EmailConfig, to, subject, body string) error {
+// sendViaResend sends an email via Resend API.
+func sendViaResend(config *EmailConfig, to, subject string, content EmailContent) error {
 	type ResendPayload struct {
 		From    string   `json:"from"`
 		To      []string `json:"to"`
 		Subject string   `json:"subject"`
+		Text    string   `json:"text"`
 		HTML    string   `json:"html"`
 	}
 
 	payload := ResendPayload{
-		From:    fmt.Sprintf("%s <%s>", config.FromName, config.FromEmail),
+		From:    formatFromAddress(config.FromName, config.FromEmail),
 		To:      []string{to},
 		Subject: subject,
-		HTML:    body,
+		Text:    content.Text,
+		HTML:    content.HTML,
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -339,10 +437,7 @@ func sendViaResend(config *EmailConfig, to, subject, body string) error {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
+	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("POST", config.APIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -426,7 +521,7 @@ func SendVerificationCode(to, code string) error {
 	return SendVerificationCodeWithUsername(to, code, "")
 }
 
-// SendVerificationCodeWithUsername отправляет код подтверждения с именем пользователя
+// SendVerificationCodeWithUsername sends a verification code with an optional username.
 func SendVerificationCodeWithUsername(to, code, username string) error {
 	subject := "Код подтверждения SafeGram"
 	data := EmailTemplateData{
@@ -434,73 +529,67 @@ func SendVerificationCodeWithUsername(to, code, username string) error {
 		Code:      code,
 		ExpiresIn: "10 минут",
 	}
-	htmlBody := TemplateVerificationCode(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateVerificationCode(data))
 }
 
-// SendWelcomeEmail отправляет приветственное письмо
+// SendWelcomeEmail sends a welcome email after the first confirmed login.
 func SendWelcomeEmail(to, username, appURL string) error {
-	subject := "Добро пожаловать в SafeGram! 🎉"
-	data := EmailTemplateData{
-		Username: username,
-		Link:     appURL,
-	}
-	htmlBody := TemplateWelcome(data)
-	return SendEmail(to, subject, htmlBody)
+	subject := "Добро пожаловать в SafeGram"
+	data := EmailTemplateData{Username: username, Link: appURL}
+	return SendEmail(to, subject, TemplateWelcome(data))
 }
 
-// SendLoginNotification отправляет уведомление о входе
+// SendLoginNotification sends a security notification about a new login.
 func SendLoginNotification(to, username, ip, device string) error {
 	subject := "Новый вход в аккаунт SafeGram"
 	data := EmailTemplateData{
 		Username:  username,
 		IP:        ip,
 		Device:    device,
-		Timestamp: time.Now().Format("02.01.2006 в 15:04"),
+		Timestamp: time.Now().Format("02.01.2006 15:04"),
+		Link:      "https://safegram-hazel.vercel.app/app/settings",
 	}
-	htmlBody := TemplateLoginNotification(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateLoginNotification(data))
 }
 
-// SendPasswordResetCode отправляет код восстановления пароля
+// SendPasswordResetCode sends a password reset code.
 func SendPasswordResetCode(to, username, code string) error {
 	subject := "Восстановление пароля SafeGram"
 	data := EmailTemplateData{
 		Username:  username,
 		Code:      code,
 		ExpiresIn: "15 минут",
+		Link:      "https://safegram-hazel.vercel.app/reset-password",
 	}
-	htmlBody := TemplatePasswordReset(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplatePasswordReset(data))
 }
 
-// SendPasswordChangedNotification отправляет уведомление об изменении пароля
+// SendPasswordChangedNotification confirms that the password was changed.
 func SendPasswordChangedNotification(to, username, ip string) error {
-	subject := "Пароль изменён — SafeGram"
+	subject := "Пароль SafeGram изменен"
 	data := EmailTemplateData{
 		Username:  username,
 		IP:        ip,
-		Timestamp: time.Now().Format("02.01.2006 в 15:04"),
+		Timestamp: time.Now().Format("02.01.2006 15:04"),
+		Link:      "https://safegram-hazel.vercel.app/app/settings",
 	}
-	htmlBody := TemplatePasswordChanged(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplatePasswordChanged(data))
 }
 
-// SendNewMessageNotification отправляет уведомление о новом сообщении
+// SendNewMessageNotification sends an email notification about a new message.
 func SendNewMessageNotification(to, username, senderName, message, chatName, chatURL string) error {
-	subject := fmt.Sprintf("Новое сообщение от %s", senderName)
+	subject := fmt.Sprintf("%s написал вам в SafeGram", senderName)
 	data := EmailTemplateData{
-		Username:  username,
+		Username:   username,
 		SenderName: senderName,
-		Message:   message,
-		ChatName:  chatName,
-		Link:      chatURL,
+		Message:    message,
+		ChatName:   chatName,
+		Link:       chatURL,
 	}
-	htmlBody := TemplateNewMessage(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateNewMessage(data))
 }
 
-// SendGroupInvite отправляет приглашение в группу
+// SendGroupInvite sends a group invitation email.
 func SendGroupInvite(to, username, inviterName, groupName, groupURL string) error {
 	subject := fmt.Sprintf("Приглашение в группу %s", groupName)
 	data := EmailTemplateData{
@@ -509,93 +598,98 @@ func SendGroupInvite(to, username, inviterName, groupName, groupURL string) erro
 		GroupName:   groupName,
 		Link:        groupURL,
 	}
-	htmlBody := TemplateGroupInvite(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateGroupInvite(data))
 }
 
-// SendSecurityAlert отправляет уведомление о безопасности
+// SendSecurityAlert sends a security alert email.
 func SendSecurityAlert(to, username, message, settingsURL string) error {
-	subject := "⚠️ Уведомление безопасности SafeGram"
+	subject := "Важное уведомление безопасности SafeGram"
 	data := EmailTemplateData{
 		Username: username,
 		Message:  message,
 		Link:     settingsURL,
 	}
-	htmlBody := TemplateSecurityAlert(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateSecurityAlert(data))
 }
 
-// SendAccountLockedNotification отправляет уведомление о блокировке аккаунта
+// SendAccountLockedNotification sends a notification that an account was temporarily locked.
 func SendAccountLockedNotification(to, username, reason, supportURL string) error {
-	subject := "🔒 Аккаунт временно заблокирован"
+	subject := "Аккаунт SafeGram временно ограничен"
 	data := EmailTemplateData{
 		Username: username,
-		Message:  reason,
+		Reason:   reason,
 		Link:     supportURL,
 	}
-	htmlBody := TemplateAccountLocked(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateAccountLocked(data))
 }
 
-// SendPremiumActivated отправляет уведомление об активации премиум
+// SendPremiumActivated sends a premium activation email.
 func SendPremiumActivated(to, username, appURL string) error {
-	subject := "✨ Премиум активирован!"
+	subject := "SafeGram Premium активирован"
 	data := EmailTemplateData{
 		Username: username,
+		PlanName: "SafeGram Premium",
 		Link:     appURL,
 	}
-	htmlBody := TemplatePremiumActivated(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplatePremiumActivated(data))
 }
 
-// SendBackupCodes отправляет резервные коды восстановления
+// SendBackupCodes sends backup recovery codes.
 func SendBackupCodes(to, username, codes string) error {
 	subject := "Резервные коды восстановления SafeGram"
 	data := EmailTemplateData{
 		Username: username,
-		Code:     codes,
+		Codes:    codes,
+		Link:     "https://safegram-hazel.vercel.app/app/settings",
 	}
-	htmlBody := TemplateBackupCode(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateBackupCode(data))
 }
 
-// SendAdminMessage отправляет персональное сообщение от администрации
+// SendBackupCodesRegenerated sends a new set of backup codes after rotation.
+func SendBackupCodesRegenerated(to, username, codes string) error {
+	subject := "Резервные коды SafeGram обновлены"
+	data := EmailTemplateData{
+		Username: username,
+		Codes:    codes,
+		Link:     "https://safegram-hazel.vercel.app/app/settings",
+	}
+	return SendEmail(to, subject, TemplateBackupCode(data))
+}
+
+// SendAdminMessage sends a custom admin email to a user.
 func SendAdminMessage(to, username, message, actionText, actionLink string) error {
-	subject := "Сообщение от администрации SafeGram"
+	subject := "Сообщение от команды SafeGram"
 	data := EmailTemplateData{
 		Username:   username,
 		Message:    message,
 		ActionText: actionText,
 		Link:       actionLink,
 	}
-	htmlBody := TemplateAdminMessage(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateAdminMessage(data))
 }
 
-// SendMaintenanceNotification отправляет уведомление о технических работах
+// SendMaintenanceNotification sends a maintenance notification.
 func SendMaintenanceNotification(to, username, timestamp, message string) error {
-	subject := "⚠️ Плановые технические работы SafeGram"
+	subject := "Плановые технические работы SafeGram"
 	data := EmailTemplateData{
 		Username:  username,
 		Timestamp: timestamp,
 		Message:   message,
+		Link:      "https://safegram-hazel.vercel.app/status",
 	}
-	htmlBody := TemplateMaintenanceNotification(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateMaintenanceNotification(data))
 }
 
-// SendRecruitApproved отправляет письмо «Поздравляем, вы приняты»
+// SendRecruitApproved sends an approval email for a recruit application.
 func SendRecruitApproved(to, name string) error {
-	subject := "🎉 SafeGram: ваша заявка одобрена"
+	subject := "Ваша заявка в SafeGram одобрена"
 	if name == "" {
 		name = "пользователь"
 	}
-	data := EmailTemplateData{Username: name}
-	htmlBody := TemplateRecruitApproved(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateRecruitApproved(EmailTemplateData{Username: name, Link: "https://safegram-hazel.vercel.app"}))
 }
 
-// SendRecruitDeclined отправляет письмо об отклонении заявки с причиной
+// SendRecruitDeclined sends a rejection email for a recruit application.
 func SendRecruitDeclined(to, name, reason string) error {
 	subject := "SafeGram: результат рассмотрения заявки"
 	if name == "" {
@@ -604,9 +698,89 @@ func SendRecruitDeclined(to, name, reason string) error {
 	if reason == "" {
 		reason = "Причина не указана."
 	}
-	data := EmailTemplateData{Username: name, Message: reason}
-	htmlBody := TemplateRecruitDeclined(data)
-	return SendEmail(to, subject, htmlBody)
+	return SendEmail(to, subject, TemplateRecruitDeclined(EmailTemplateData{Username: name, Reason: reason, Link: "https://safegram-hazel.vercel.app"}))
+}
+
+// SendEmailChangeVerification sends a code to confirm a new email address.
+func SendEmailChangeVerification(to, username, code string) error {
+	subject := "Подтвердите новый email для SafeGram"
+	data := EmailTemplateData{
+		Username:  username,
+		Code:      code,
+		ExpiresIn: "10 минут",
+		Link:      "https://safegram-hazel.vercel.app/app/settings",
+	}
+	return SendEmail(to, subject, TemplateEmailChangeVerification(data))
+}
+
+// SendEmailChangedNotification confirms that the email address was changed.
+func SendEmailChangedNotification(to, username, newEmail string) error {
+	subject := "Email для SafeGram обновлен"
+	data := EmailTemplateData{
+		Username:  username,
+		Email:     newEmail,
+		Timestamp: time.Now().Format("02.01.2006 15:04"),
+		Link:      "https://safegram-hazel.vercel.app/app/settings",
+	}
+	return SendEmail(to, subject, TemplateEmailChanged(data))
+}
+
+// SendPremiumReceipt sends a payment confirmation for a premium plan.
+func SendPremiumReceipt(to, username, planName, amount, timestamp string) error {
+	subject := "Подтверждение оплаты SafeGram"
+	data := EmailTemplateData{
+		Username:  username,
+		PlanName:  planName,
+		Amount:    amount,
+		Timestamp: timestamp,
+		Link:      "https://safegram-hazel.vercel.app/app/settings/billing",
+	}
+	return SendEmail(to, subject, TemplatePremiumReceipt(data))
+}
+
+// SendPremiumExpiring warns that a premium plan is about to expire.
+func SendPremiumExpiring(to, username, planName, expiresAt, billingURL string) error {
+	subject := "Подписка SafeGram скоро закончится"
+	data := EmailTemplateData{
+		Username:  username,
+		PlanName:  planName,
+		ExpiresAt: expiresAt,
+		Link:      billingURL,
+	}
+	return SendEmail(to, subject, TemplatePremiumExpiring(data))
+}
+
+// SendAccountExportReady sends a secure export-ready notification.
+func SendAccountExportReady(to, username, exportURL, expiresIn string) error {
+	subject := "Экспорт данных SafeGram готов"
+	data := EmailTemplateData{
+		Username:  username,
+		ExpiresIn: expiresIn,
+		Link:      exportURL,
+	}
+	return SendEmail(to, subject, TemplateAccountExportReady(data))
+}
+
+// SendAccountDeletedConfirmation confirms account deletion.
+func SendAccountDeletedConfirmation(to, username, supportURL string) error {
+	subject := "Аккаунт SafeGram удален"
+	data := EmailTemplateData{
+		Username: username,
+		Link:     supportURL,
+	}
+	return SendEmail(to, subject, TemplateAccountDeleted(data))
+}
+
+// SendUnreadDigest sends an opt-in digest email for unread activity.
+func SendUnreadDigest(to, username string, unreadChatsCount, messagesCount int, appURL string) error {
+	subject := "Сводка активности SafeGram"
+	data := EmailTemplateData{
+		Username:         username,
+		UnreadChatsCount: unreadChatsCount,
+		MessagesCount:    messagesCount,
+		Link:             appURL,
+	}
+	return SendEmail(to, subject, TemplateUnreadDigest(data))
 }
 
 func getEnv(key, defaultValue string) string {

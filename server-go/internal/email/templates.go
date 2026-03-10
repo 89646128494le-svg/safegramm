@@ -2,665 +2,905 @@ package email
 
 import (
 	"fmt"
+	"html"
+	"strconv"
+	"strings"
 	"time"
 )
 
-// EmailTemplateData данные для шаблона
+// EmailTemplateData contains all variables used across email templates.
 type EmailTemplateData struct {
-	Username    string
-	Code        string
-	Link        string
-	Message     string
-	ActionText  string
-	ExpiresIn   string
-	IP          string
-	Device      string
-	Timestamp   string
-	ChatName    string
-	SenderName  string
-	GroupName   string
-	InviterName string
+	Username            string
+	Email               string
+	Code                string
+	Codes               string
+	Link                string
+	SecondaryLink       string
+	Message             string
+	ActionText          string
+	SecondaryActionText string
+	ExpiresIn           string
+	ExpiresAt           string
+	IP                  string
+	Device              string
+	Timestamp           string
+	ChatName            string
+	SenderName          string
+	GroupName           string
+	InviterName         string
+	Reason              string
+	PlanName            string
+	Amount              string
+	UnreadChatsCount    int
+	MessagesCount       int
 }
 
-// GetBaseTemplate возвращает базовый HTML шаблон
-func GetBaseTemplate(title, content string) string {
+type emailTone string
+
+const (
+	toneDefault  emailTone = "default"
+	toneSuccess  emailTone = "success"
+	toneSecurity emailTone = "security"
+	tonePremium  emailTone = "premium"
+)
+
+type emailTheme struct {
+	OuterBg      string
+	PanelBg      string
+	PanelBorder  string
+	HeroBg       string
+	Accent       string
+	AccentSoft   string
+	BadgeBg      string
+	BadgeText    string
+	ButtonBg     string
+	ButtonShadow string
+	TitleColor   string
+	TextColor    string
+	MutedColor   string
+}
+
+type emailLayout struct {
+	Tone       emailTone
+	Title      string
+	Preheader  string
+	Eyebrow    string
+	Headline   string
+	Intro      string
+	BodyHTML   string
+	CTAHref    string
+	CTALabel   string
+	FooterNote string
+}
+
+func themeForTone(tone emailTone) emailTheme {
+	switch tone {
+	case toneSuccess:
+		return emailTheme{
+			OuterBg:      "#07131f",
+			PanelBg:      "#081521",
+			PanelBorder:  "#1b3b33",
+			HeroBg:       "#0d1d1b",
+			Accent:       "#39d98a",
+			AccentSoft:   "#15372d",
+			BadgeBg:      "#10291f",
+			BadgeText:    "#7df3b7",
+			ButtonBg:     "#39d98a",
+			ButtonShadow: "rgba(57, 217, 138, 0.26)",
+			TitleColor:   "#f5fbff",
+			TextColor:    "#d8e6ef",
+			MutedColor:   "#8ea4b5",
+		}
+	case toneSecurity:
+		return emailTheme{
+			OuterBg:      "#0a0d17",
+			PanelBg:      "#10131d",
+			PanelBorder:  "#3c2f17",
+			HeroBg:       "#16120c",
+			Accent:       "#ffb547",
+			AccentSoft:   "#2c2313",
+			BadgeBg:      "#231c10",
+			BadgeText:    "#ffd897",
+			ButtonBg:     "#ffb547",
+			ButtonShadow: "rgba(255, 181, 71, 0.26)",
+			TitleColor:   "#fff8ee",
+			TextColor:    "#eadfcb",
+			MutedColor:   "#b7ab97",
+		}
+	case tonePremium:
+		return emailTheme{
+			OuterBg:      "#070c18",
+			PanelBg:      "#0b1222",
+			PanelBorder:  "#244463",
+			HeroBg:       "#0d1830",
+			Accent:       "#59c2ff",
+			AccentSoft:   "#132742",
+			BadgeBg:      "#102235",
+			BadgeText:    "#afddff",
+			ButtonBg:     "#59c2ff",
+			ButtonShadow: "rgba(89, 194, 255, 0.28)",
+			TitleColor:   "#f3f9ff",
+			TextColor:    "#d9e8f8",
+			MutedColor:   "#95adc6",
+		}
+	default:
+		return emailTheme{
+			OuterBg:      "#07101f",
+			PanelBg:      "#0b1220",
+			PanelBorder:  "#223049",
+			HeroBg:       "#0e1729",
+			Accent:       "#6fa8ff",
+			AccentSoft:   "#132238",
+			BadgeBg:      "#102032",
+			BadgeText:    "#bcd7ff",
+			ButtonBg:     "#6fa8ff",
+			ButtonShadow: "rgba(111, 168, 255, 0.28)",
+			TitleColor:   "#f3f8ff",
+			TextColor:    "#d9e3f0",
+			MutedColor:   "#91a1b6",
+		}
+	}
+}
+
+func renderEmail(layout emailLayout) string {
+	theme := themeForTone(layout.Tone)
+	preheader := html.EscapeString(valueOr(layout.Preheader, "Сервисное письмо SafeGram"))
+	title := html.EscapeString(valueOr(layout.Title, "SafeGram"))
+	eyebrow := strings.ToUpper(html.EscapeString(valueOr(layout.Eyebrow, "SAFEGRAM")))
+	headline := html.EscapeString(valueOr(layout.Headline, "Уведомление SafeGram"))
+	intro := html.EscapeString(layout.Intro)
+	footerNote := html.EscapeString(valueOr(layout.FooterNote, "Это автоматическое письмо. Пожалуйста, не отвечайте на него."))
+
+	cta := ""
+	if strings.TrimSpace(layout.CTAHref) != "" && strings.TrimSpace(layout.CTALabel) != "" {
+		cta = fmt.Sprintf(`
+			<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 28px 0 0 0;">
+				<tr>
+					<td align="center" style="border-radius: 14px; background:%s; box-shadow: 0 14px 34px %s;">
+						<a href="%s" style="display:inline-block; padding: 15px 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 15px; font-weight: 700; line-height: 1; color: #06111e; text-decoration: none;">%s</a>
+					</td>
+				</tr>
+			</table>
+			<p style="margin: 16px 0 0 0; font-size: 12px; line-height: 1.6; color: %s;">Если кнопка не открывается, используйте ссылку: %s</p>
+		`,
+			theme.ButtonBg,
+			theme.ButtonShadow,
+			html.EscapeString(layout.CTAHref),
+			html.EscapeString(layout.CTALabel),
+			theme.MutedColor,
+			html.EscapeString(layout.CTAHref),
+		)
+	}
+
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html lang="ru">
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<title>%s</title>
-	<style>
-		* {
-			margin: 0;
-			padding: 0;
-			box-sizing: border-box;
-		}
-		body {
-			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-			background: linear-gradient(135deg, #0b1020 0%%, #1a1f35 100%%);
-			padding: 20px;
-			line-height: 1.6;
-		}
-		.email-container {
-			max-width: 600px;
-			margin: 0 auto;
-			background: rgba(11, 16, 32, 0.95);
-			border-radius: 20px;
-			overflow: hidden;
-			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(124, 108, 255, 0.2);
-		}
-		.email-header {
-			background: linear-gradient(135deg, #7c6cff 0%%, #3dd8ff 100%%);
-			padding: 40px 30px;
-			text-align: center;
-		}
-		.email-header h1 {
-			color: #0a0e1a;
-			font-size: 32px;
-			font-weight: 800;
-			margin: 0;
-			text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-		}
-		.email-body {
-			padding: 40px 30px;
-			color: #e9ecf5;
-		}
-		.email-body h2 {
-			color: #7c6cff;
-			font-size: 24px;
-			margin-bottom: 20px;
-			font-weight: 700;
-		}
-		.email-body p {
-			margin-bottom: 16px;
-			font-size: 16px;
-			color: rgba(233, 236, 245, 0.9);
-		}
-		.code-box {
-			background: rgba(124, 108, 255, 0.1);
-			border: 2px solid rgba(124, 108, 255, 0.3);
-			border-radius: 12px;
-			padding: 24px;
-			text-align: center;
-			margin: 30px 0;
-		}
-		.code {
-			font-size: 42px;
-			font-weight: 800;
-			color: #7c6cff;
-			letter-spacing: 12px;
-			font-family: 'Courier New', monospace;
-			text-shadow: 0 0 20px rgba(124, 108, 255, 0.5);
-		}
-		.button {
-			display: inline-block;
-			padding: 16px 32px;
-			background: linear-gradient(135deg, #7c6cff 0%%, #3dd8ff 100%%);
-			color: #0a0e1a;
-			text-decoration: none;
-			border-radius: 12px;
-			font-weight: 700;
-			font-size: 16px;
-			margin: 20px 0;
-			box-shadow: 0 12px 40px rgba(124, 108, 255, 0.4);
-			transition: transform 0.2s;
-		}
-		.button:hover {
-			transform: translateY(-2px);
-		}
-		.info-box {
-			background: rgba(61, 216, 255, 0.1);
-			border-left: 4px solid #3dd8ff;
-			padding: 16px;
-			margin: 20px 0;
-			border-radius: 8px;
-		}
-		.warning-box {
-			background: rgba(255, 193, 7, 0.1);
-			border-left: 4px solid #ffc107;
-			padding: 16px;
-			margin: 20px 0;
-			border-radius: 8px;
-		}
-		.email-footer {
-			background: rgba(255, 255, 255, 0.05);
-			padding: 30px;
-			text-align: center;
-			border-top: 1px solid rgba(255, 255, 255, 0.1);
-		}
-		.email-footer p {
-			color: rgba(233, 236, 245, 0.6);
-			font-size: 14px;
-			margin: 8px 0;
-		}
-		.divider {
-			height: 1px;
-			background: linear-gradient(90deg, transparent, rgba(124, 108, 255, 0.5), transparent);
-			margin: 30px 0;
-		}
-		.feature-list {
-			list-style: none;
-			padding: 0;
-		}
-		.feature-list li {
-			padding: 12px 0;
-			padding-left: 30px;
-			position: relative;
-			color: rgba(233, 236, 245, 0.9);
-		}
-		.feature-list li:before {
-			content: "✓";
-			position: absolute;
-			left: 0;
-			color: #7c6cff;
-			font-weight: bold;
-			font-size: 18px;
-		}
-		@media only screen and (max-width: 600px) {
-			.email-container {
-				border-radius: 0;
-			}
-			.email-header, .email-body, .email-footer {
-				padding: 20px;
-			}
-			.code {
-				font-size: 32px;
-				letter-spacing: 8px;
-			}
-		}
-	</style>
 </head>
-<body>
-	<div class="email-container">
-		<div class="email-header">
-			<h1>SafeGram</h1>
-		</div>
-		<div class="email-body">
-			%s
-		</div>
-		<div class="email-footer">
-			<p><strong>SafeGram</strong> — Безопасный мессенджер нового поколения</p>
-			<p>© %d SafeGram. Все права защищены.</p>
-			<p style="margin-top: 16px; font-size: 12px; color: rgba(233, 236, 245, 0.4);">
-				Это автоматическое письмо. Пожалуйста, не отвечайте на него.
-			</p>
-		</div>
-	</div>
+<body style="margin:0; padding:0; background:%s;">
+	<div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all;">%s</div>
+	<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="background:%s;">
+		<tr>
+			<td align="center" style="padding: 28px 12px;">
+				<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="max-width: 640px; background:%s; border: 1px solid %s; border-radius: 28px; overflow: hidden;">
+					<tr>
+						<td style="padding: 0;">
+							<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+								<tr>
+									<td style="padding: 18px 24px; background: #070d18; border-bottom: 1px solid rgba(255,255,255,0.06);">
+										<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%">
+											<tr>
+												<td align="left" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 18px; font-weight: 800; color: %s; letter-spacing: 0.3px;">SafeGram</td>
+												<td align="right"><span style="display:inline-block; padding: 7px 10px; border-radius: 999px; background:%s; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.7px; color:%s;">%s</span></td>
+											</tr>
+										</table>
+									</td>
+								</tr>
+								<tr>
+									<td style="padding: 0 24px 24px 24px; background:%s;">
+										<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="margin-top: 24px;">
+											<tr>
+												<td style="padding: 26px 28px; border-radius: 22px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); border: 1px solid rgba(255,255,255,0.06);">
+													<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; color:%s; margin-bottom: 14px;">%s</div>
+													<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 34px; line-height: 1.15; font-weight: 800; color:%s; margin: 0 0 14px 0;">%s</div>
+													<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 16px; line-height: 1.7; color:%s;">%s</div>
+												</td>
+											</tr>
+										</table>
+										<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="margin-top: 20px;">
+											<tr>
+												<td style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 15px; line-height: 1.75; color:%s;">%s%s</td>
+											</tr>
+										</table>
+									</td>
+								</tr>
+								<tr>
+									<td style="padding: 22px 24px 28px 24px; background: #080d18; border-top: 1px solid rgba(255,255,255,0.06);">
+										<p style="margin:0 0 10px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 13px; line-height: 1.7; color:%s;"><strong style="color:%s;">SafeGram</strong> — secure messenger with a privacy-first approach.</p>
+										<p style="margin:0 0 8px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; line-height: 1.7; color:%s;">%s</p>
+										<p style="margin:0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; line-height: 1.7; color:%s;">© %d SafeGram. Все права защищены.</p>
+									</td>
+								</tr>
+							</table>
+						</td>
+					</tr>
+				</table>
+			</td>
+		</tr>
+	</table>
 </body>
-</html>`, title, content, time.Now().Year())
+</html>`,
+		title,
+		theme.OuterBg,
+		preheader,
+		theme.OuterBg,
+		theme.PanelBg,
+		theme.PanelBorder,
+		theme.TitleColor,
+		theme.BadgeBg,
+		theme.BadgeText,
+		eyebrow,
+		theme.HeroBg,
+		theme.Accent,
+		eyebrow,
+		theme.TitleColor,
+		headline,
+		theme.TextColor,
+		intro,
+		theme.TextColor,
+		layout.BodyHTML,
+		cta,
+		theme.MutedColor,
+		theme.TitleColor,
+		theme.MutedColor,
+		footerNote,
+		theme.MutedColor,
+		time.Now().Year(),
+	)
 }
 
-// TemplateVerificationCode шаблон для кода подтверждения
+func valueOr(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
+}
+
+func greeting(username string) string {
+	if strings.TrimSpace(username) == "" {
+		return "Здравствуйте."
+	}
+	return "Здравствуйте, " + html.EscapeString(strings.TrimSpace(username)) + "."
+}
+
+func escapeText(value string) string {
+	return html.EscapeString(strings.TrimSpace(value))
+}
+
+func paragraph(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<p style="margin:0 0 16px 0;">%s</p>`, escapeText(text))
+}
+
+func richParagraph(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<p style="margin:0 0 16px 0;">%s</p>`, text)
+}
+
+func toneAccent(tone emailTone) string {
+	return themeForTone(tone).Accent
+}
+
+func cardHTML(tone emailTone, title string, innerHTML string) string {
+	theme := themeForTone(tone)
+	header := ""
+	if strings.TrimSpace(title) != "" {
+		header = fmt.Sprintf(`<div style="margin:0 0 12px 0; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color:%s;">%s</div>`, theme.Accent, html.EscapeString(title))
+	}
+	return fmt.Sprintf(`
+		<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%%" style="margin: 0 0 18px 0;">
+			<tr>
+				<td style="padding: 18px 18px 16px 18px; border-radius: 18px; background:%s; border: 1px solid rgba(255,255,255,0.06);">%s%s</td>
+			</tr>
+		</table>
+	`, theme.AccentSoft, header, innerHTML)
+}
+
+func noticeCard(tone emailTone, title string, message string) string {
+	return cardHTML(tone, title, richParagraph(escapeText(message)))
+}
+
+func codeCard(tone emailTone, title, code, caption string) string {
+	theme := themeForTone(tone)
+	return cardHTML(tone, title, fmt.Sprintf(`
+		<div style="margin: 0 0 12px 0; padding: 18px 16px; border-radius: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); text-align:center;">
+			<div style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 32px; line-height: 1.1; font-weight: 800; letter-spacing: 8px; color:%s;">%s</div>
+		</div>
+		<p style="margin:0; font-size: 13px; line-height: 1.7; color:%s;">%s</p>
+	`, theme.Accent, html.EscapeString(code), theme.MutedColor, html.EscapeString(caption)))
+}
+
+func listCard(tone emailTone, title string, items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	builder.WriteString(`<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">`)
+	for _, item := range items {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		builder.WriteString(fmt.Sprintf(`
+			<tr>
+				<td valign="top" style="padding: 0 0 10px 0; width: 24px; font-size: 16px; line-height: 1.6; color:%s;">•</td>
+				<td valign="top" style="padding: 0 0 10px 0; font-size: 14px; line-height: 1.7; color:#d9e3f0;">%s</td>
+			</tr>
+		`, toneAccent(tone), html.EscapeString(item)))
+	}
+	builder.WriteString(`</table>`)
+	return cardHTML(tone, title, builder.String())
+}
+
+func detailCard(tone emailTone, title string, rows map[string]string) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	order := []string{"Устройство", "IP-адрес", "Время", "Новый адрес", "Тариф", "Сумма", "Дата окончания", "Непрочитанные чаты", "Новые сообщения"}
+	seen := map[string]bool{}
+	var builder strings.Builder
+	builder.WriteString(`<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">`)
+	appendRow := func(label, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		builder.WriteString(fmt.Sprintf(`
+			<tr>
+				<td valign="top" style="padding: 0 0 10px 0; width: 145px; font-size: 13px; line-height: 1.7; color:#91a1b6;">%s</td>
+				<td valign="top" style="padding: 0 0 10px 0; font-size: 14px; line-height: 1.7; color:#f3f8ff; font-weight:600;">%s</td>
+			</tr>
+		`, html.EscapeString(label), html.EscapeString(value)))
+	}
+	for _, key := range order {
+		if value, ok := rows[key]; ok {
+			appendRow(key, value)
+			seen[key] = true
+		}
+	}
+	for label, value := range rows {
+		if seen[label] {
+			continue
+		}
+		appendRow(label, value)
+	}
+	builder.WriteString(`</table>`)
+	return cardHTML(tone, title, builder.String())
+}
+
+func codesCard(tone emailTone, title, caption, codes string) string {
+	formatted := strings.ReplaceAll(html.EscapeString(strings.TrimSpace(codes)), "\n", "<br>")
+	return cardHTML(tone, title, fmt.Sprintf(`
+		<div style="margin: 0 0 12px 0; padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 15px; line-height: 1.9; color:#f3f8ff;">%s</div>
+		<p style="margin:0; font-size: 13px; line-height: 1.7; color:#91a1b6;">%s</p>
+	`, formatted, html.EscapeString(caption)))
+}
+
+func supportBlock(tone emailTone, text string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return cardHTML(tone, "Если это были не вы", richParagraph(escapeText(text)))
+}
+
+func previewText(message string, limit int) string {
+	text := strings.TrimSpace(message)
+	if text == "" {
+		return "Откройте приложение, чтобы посмотреть сообщение безопасно."
+	}
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit]) + "…"
+}
+
+func countString(value int) string {
+	if value <= 0 {
+		return "0"
+	}
+	return strconv.Itoa(value)
+}
+
+func appLink(link string) string {
+	return valueOr(link, "https://safegram-hazel.vercel.app")
+}
+
+func supportLink(link string) string {
+	return valueOr(link, "https://safegram-hazel.vercel.app/support")
+}
+
 func TemplateVerificationCode(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Подтверждение email</h2>
-		<p>Здравствуйте%s!</p>
-		<p>Для подтверждения вашего email адреса используйте следующий код:</p>
-		<div class="code-box">
-			<div class="code">%s</div>
-		</div>
-		<p>Код действителен в течение <strong>%s</strong>.</p>
-		<div class="warning-box">
-			<p><strong>⚠️ Важно:</strong> Никому не сообщайте этот код. Если вы не запрашивали этот код, просто проигнорируйте это письмо.</p>
-		</div>
-	`,
-		func() string {
-			if data.Username != "" {
-				return ", " + data.Username
-			}
-			return ""
-		}(),
-		data.Code,
-		func() string {
-			if data.ExpiresIn != "" {
-				return data.ExpiresIn
-			}
-			return "10 минут"
-		}(),
-	)
-	return GetBaseTemplate("Подтверждение email", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Вы почти закончили настройку аккаунта SafeGram. Введите код ниже, чтобы подтвердить email и завершить действие."),
+		codeCard(toneDefault, "Код подтверждения", valueOr(data.Code, "000000"), "Код действует "+valueOr(data.ExpiresIn, "10 минут")+"."),
+		supportBlock(toneSecurity, "Никому не сообщайте этот код. Если запрос сделали не вы, просто проигнорируйте письмо."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneDefault,
+		Title:     "Подтвердите email",
+		Preheader: "Используйте код, чтобы подтвердить email и завершить действие в SafeGram.",
+		Eyebrow:   "Подтверждение email",
+		Headline:  "Подтвердите email",
+		Intro:     "SafeGram использует короткий одноразовый код для проверки доступа к адресу.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть SafeGram",
+	})
 }
 
-// TemplateWelcome шаблон приветственного письма
 func TemplateWelcome(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Добро пожаловать в SafeGram! 🎉</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Мы рады приветствовать вас в SafeGram — безопасном мессенджере нового поколения.</p>
-		<div class="info-box">
-			<p><strong>✨ Что вас ждёт:</strong></p>
-			<ul class="feature-list">
-				<li>End-to-End шифрование всех сообщений</li>
-				<li>Секретные чаты с автоматическим удалением</li>
-				<li>Группы и каналы с расширенными настройками</li>
-				<li>Голосовые и видеозвонки</li>
-				<li>Истории и медиа-галереи</li>
-				<li>И многое другое!</li>
-			</ul>
-		</div>
-		<p>Начните общение прямо сейчас — отправьте первое сообщение своим друзьям!</p>
-		<div style="text-align: center; margin: 30px 0;">
-			<a href="%s" class="button">Открыть SafeGram</a>
-		</div>
-		<div class="divider"></div>
-		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">
-			Если у вас возникнут вопросы, мы всегда готовы помочь. Просто напишите нам через форму обратной связи в приложении.
-		</p>
-	`,
-		data.Username,
-		func() string {
-			if data.Link != "" {
-				return data.Link
-			}
-			return "https://safegram.app"
-		}(),
-	)
-	return GetBaseTemplate("Добро пожаловать в SafeGram", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Аккаунт готов к работе. SafeGram уже можно использовать для личной и рабочей переписки."),
+		listCard(toneSuccess, "С чего начать", []string{
+			"Проверьте настройки защиты входа и резервного восстановления доступа.",
+			"Настройте приватность чатов и уведомлений под свой сценарий.",
+			"Создайте первый чат и протестируйте безопасный обмен сообщениями.",
+		}),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSuccess,
+		Title:     "Добро пожаловать в SafeGram",
+		Preheader: "Аккаунт настроен. Можно переходить к чатам и параметрам безопасности.",
+		Eyebrow:   "Новый аккаунт",
+		Headline:  "Добро пожаловать в SafeGram",
+		Intro:     "Спокойный старт: сначала безопасность, затем повседневная работа.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть SafeGram",
+	})
 }
 
-// TemplateLoginNotification шаблон уведомления о входе
 func TemplateLoginNotification(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Новый вход в аккаунт</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Мы обнаружили вход в ваш аккаунт SafeGram.</p>
-		<div class="info-box">
-			<p><strong>📱 Детали входа:</strong></p>
-			<p>Время: <strong>%s</strong></p>
-			%s
-			%s
-		</div>
-		<div class="warning-box">
-			<p><strong>⚠️ Если это были не вы:</strong></p>
-			<p>Немедленно измените пароль и включите двухфакторную аутентификацию в настройках безопасности.</p>
-		</div>
-		<p>Если это были вы, просто проигнорируйте это письмо.</p>
-	`,
-		data.Username,
-		func() string {
-			if data.Timestamp != "" {
-				return data.Timestamp
-			}
-			return time.Now().Format("02.01.2006 в 15:04")
-		}(),
-		func() string {
-			if data.IP != "" {
-				return fmt.Sprintf(`<p>IP-адрес: <strong>%s</strong></p>`, data.IP)
-			}
-			return ""
-		}(),
-		func() string {
-			if data.Device != "" {
-				return fmt.Sprintf(`<p>Устройство: <strong>%s</strong></p>`, data.Device)
-			}
-			return ""
-		}(),
-	)
-	return GetBaseTemplate("Новый вход в аккаунт", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Мы заметили вход в ваш аккаунт SafeGram с нового устройства или из новой сессии."),
+		detailCard(toneSecurity, "Детали входа", map[string]string{
+			"Устройство": valueOr(data.Device, "Не определено"),
+			"IP-адрес":   valueOr(data.IP, "Не определен"),
+			"Время":      valueOr(data.Timestamp, time.Now().Format("02.01.2006 15:04")),
+		}),
+		supportBlock(toneSecurity, "Если это были не вы, немедленно смените пароль, завершите активные сессии и проверьте настройки безопасности."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Новый вход в SafeGram",
+		Preheader: "Проверьте устройство и источник входа в ваш аккаунт.",
+		Eyebrow:   "Безопасность",
+		Headline:  "Обнаружен новый вход",
+		Intro:     "Это сервисное уведомление о доступе к вашему аккаунту.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Проверить безопасность",
+	})
 }
 
-// TemplatePasswordReset шаблон восстановления пароля
 func TemplatePasswordReset(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Восстановление пароля</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Вы запросили восстановление пароля для вашего аккаунта SafeGram.</p>
-		<div class="code-box">
-			<div class="code">%s</div>
-		</div>
-		<p>Используйте этот код для сброса пароля. Код действителен в течение <strong>%s</strong>.</p>
-		<div class="warning-box">
-			<p><strong>⚠️ Важно:</strong></p>
-			<p>Если вы не запрашивали восстановление пароля, немедленно свяжитесь с нашей службой поддержки и измените пароль в настройках безопасности.</p>
-		</div>
-	`,
-		data.Username,
-		data.Code,
-		func() string {
-			if data.ExpiresIn != "" {
-				return data.ExpiresIn
-			}
-			return "15 минут"
-		}(),
-	)
-	return GetBaseTemplate("Восстановление пароля", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Мы получили запрос на восстановление доступа к вашему аккаунту SafeGram."),
+		codeCard(toneSecurity, "Код для восстановления", valueOr(data.Code, "000000"), "Код действует "+valueOr(data.ExpiresIn, "15 минут")+"."),
+		supportBlock(toneSecurity, "Если вы не запрашивали восстановление, не используйте этот код и проверьте недавние попытки входа."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Восстановление доступа",
+		Preheader: "Используйте код, чтобы задать новый пароль и восстановить доступ.",
+		Eyebrow:   "Восстановление доступа",
+		Headline:  "Сбросьте пароль безопасно",
+		Intro:     "Одноразовый код подтверждает, что именно вы запрашиваете восстановление.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть экран восстановления",
+	})
 }
 
-// TemplatePasswordChanged шаблон уведомления об изменении пароля
 func TemplatePasswordChanged(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Пароль изменён</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Пароль для вашего аккаунта SafeGram был успешно изменён.</p>
-		<div class="info-box">
-			<p><strong>🕐 Время изменения:</strong> %s</p>
-			%s
-		</div>
-		<div class="warning-box">
-			<p><strong>⚠️ Если это были не вы:</strong></p>
-			<p>Немедленно восстановите доступ к аккаунту через функцию восстановления пароля и свяжитесь с нашей службой поддержки.</p>
-		</div>
-	`,
-		data.Username,
-		func() string {
-			if data.Timestamp != "" {
-				return data.Timestamp
-			}
-			return time.Now().Format("02.01.2006 в 15:04")
-		}(),
-		func() string {
-			if data.IP != "" {
-				return fmt.Sprintf(`<p><strong>📍 IP-адрес:</strong> %s</p>`, data.IP)
-			}
-			return ""
-		}(),
-	)
-	return GetBaseTemplate("Пароль изменён", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Пароль вашего аккаунта SafeGram был успешно изменен."),
+		detailCard(toneSecurity, "Что изменилось", map[string]string{
+			"Время":    valueOr(data.Timestamp, time.Now().Format("02.01.2006 15:04")),
+			"IP-адрес": valueOr(data.IP, "Не определен"),
+		}),
+		supportBlock(toneSecurity, "Если это были не вы, восстановите доступ немедленно и свяжитесь с поддержкой."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Пароль изменен",
+		Preheader: "Подтверждаем изменение пароля и даем следующий шаг, если это были не вы.",
+		Eyebrow:   "Безопасность аккаунта",
+		Headline:  "Пароль изменен",
+		Intro:     "Это подтверждение критического действия в вашем аккаунте.",
+		BodyHTML:  body,
+		CTAHref:   supportLink(data.Link),
+		CTALabel:  "Проверить безопасность",
+	})
 }
 
-// TemplateNewMessage шаблон уведомления о новом сообщении
 func TemplateNewMessage(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Новое сообщение</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>У вас новое сообщение от <strong>%s</strong>%s.</p>
-		<div class="info-box">
-			<p><strong>💬 Сообщение:</strong></p>
-			<p style="font-style: italic; color: rgba(233, 236, 245, 0.8);">%s</p>
-		</div>
-		<div style="text-align: center; margin: 30px 0;">
-			<a href="%s" class="button">Открыть чат</a>
-		</div>
-	`,
-		data.Username,
-		data.SenderName,
-		func() string {
-			if data.ChatName != "" {
-				return " в " + data.ChatName
-			}
-			return ""
-		}(),
-		func() string {
-			if data.Message != "" {
-				if len(data.Message) > 150 {
-					return data.Message[:150] + "..."
-				}
-				return data.Message
-			}
-			return "Новое сообщение"
-		}(),
-		func() string {
-			if data.Link != "" {
-				return data.Link
-			}
-			return "https://safegram.app/app/chats"
-		}(),
-	)
-	return GetBaseTemplate("Новое сообщение", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("В SafeGram появилось новое сообщение."),
+		detailCard(toneDefault, "Краткая сводка", map[string]string{
+			"Чат": valueOr(data.ChatName, "Личный чат"),
+		}),
+		cardHTML(toneDefault, "Отправитель", richParagraph(fmt.Sprintf(`<strong style="color:#f3f8ff;">%s</strong><br><span style="color:#91a1b6;">%s</span>`,
+			html.EscapeString(valueOr(data.SenderName, "Неизвестный отправитель")),
+			html.EscapeString(previewText(data.Message, 100)),
+		))),
+		noticeCard(toneSecurity, "Приватность", "Для защиты переписки полное содержимое сообщения по email не показывается."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneDefault,
+		Title:     "Новое сообщение",
+		Preheader: "У вас новое сообщение. Для чтения откройте приложение SafeGram.",
+		Eyebrow:   "Активность в чатах",
+		Headline:  "У вас новое сообщение",
+		Intro:     "Для приватности письмо содержит только безопасный краткий контекст.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть чат",
+	})
 }
 
-// TemplateGroupInvite шаблон приглашения в группу
 func TemplateGroupInvite(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Приглашение в группу</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p><strong>%s</strong> приглашает вас присоединиться к группе <strong>%s</strong>.</p>
-		<div class="info-box">
-			<p><strong>👥 Группа:</strong> %s</p>
-			<p><strong>👤 Пригласил:</strong> %s</p>
-		</div>
-		<div style="text-align: center; margin: 30px 0;">
-			<a href="%s" class="button">Присоединиться к группе</a>
-		</div>
-		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">
-			Если вы не хотите присоединяться к этой группе, просто проигнорируйте это письмо.
-		</p>
-	`,
-		data.Username,
-		data.InviterName,
-		data.GroupName,
-		data.GroupName,
-		data.InviterName,
-		func() string {
-			if data.Link != "" {
-				return data.Link
-			}
-			return "https://safegram.app/app/chats"
-		}(),
-	)
-	return GetBaseTemplate("Приглашение в группу", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Вас пригласили в группу SafeGram."),
+		detailCard(toneDefault, "Детали приглашения", map[string]string{
+			"Группа": valueOr(data.GroupName, "Без названия"),
+		}),
+		cardHTML(toneDefault, "Кто пригласил", richParagraph(fmt.Sprintf(`<strong style="color:#f3f8ff;">%s</strong>`, html.EscapeString(valueOr(data.InviterName, "Участник SafeGram"))))),
+		noticeCard(toneDefault, "Что дальше", "Откройте приложение, чтобы просмотреть подробности и принять решение о вступлении."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneDefault,
+		Title:     "Приглашение в группу",
+		Preheader: "Вас пригласили в группу. Откройте SafeGram, чтобы посмотреть детали.",
+		Eyebrow:   "Приглашение",
+		Headline:  "Вас пригласили в группу",
+		Intro:     "Принять приглашение можно только внутри приложения SafeGram.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть приглашение",
+	})
 }
 
-// TemplateSecurityAlert шаблон уведомления о безопасности
 func TemplateSecurityAlert(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>⚠️ Уведомление безопасности</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>%s</p>
-		<div class="warning-box">
-			<p><strong>🔒 Рекомендации по безопасности:</strong></p>
-			<ul class="feature-list">
-				<li>Используйте уникальный и надёжный пароль</li>
-				<li>Включите двухфакторную аутентификацию</li>
-				<li>Установите PIN-код для дополнительной защиты</li>
-				<li>Регулярно проверяйте активные сессии</li>
-				<li>Не переходите по подозрительным ссылкам</li>
-			</ul>
-		</div>
-		<div style="text-align: center; margin: 30px 0;">
-			<a href="%s" class="button">Настройки безопасности</a>
-		</div>
-	`,
-		data.Username,
-		func() string {
-			if data.Message != "" {
-				return data.Message
-			}
-			return "Мы обнаружили подозрительную активность, связанную с вашим аккаунтом."
-		}(),
-		func() string {
-			if data.Link != "" {
-				return data.Link
-			}
-			return "https://safegram.app/app/settings"
-		}(),
-	)
-	return GetBaseTemplate("Уведомление безопасности", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		noticeCard(toneSecurity, "Что произошло", valueOr(data.Message, "Мы обнаружили событие безопасности, которое требует вашего внимания.")),
+		listCard(toneSecurity, "Рекомендуем сделать сейчас", []string{
+			"Проверить активные сессии и недавние входы.",
+			"Сменить пароль, если есть сомнения в безопасности.",
+			"Обновить настройки защиты входа и резервного восстановления.",
+		}),
+		supportBlock(toneSecurity, "Если действие выполнили не вы, примите меры сразу. Чем быстрее вы закроете сессии и смените пароль, тем лучше."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Уведомление безопасности",
+		Preheader: "Обнаружено важное security-событие. Проверьте аккаунт.",
+		Eyebrow:   "Security alert",
+		Headline:  "Требуется проверка безопасности",
+		Intro:     "Это письмо отправлено автоматически, чтобы вы быстро увидели важное событие в аккаунте.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Проверить безопасность",
+	})
 }
 
-// TemplateAccountLocked шаблон уведомления о блокировке аккаунта
 func TemplateAccountLocked(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>🔒 Аккаунт временно заблокирован</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Ваш аккаунт SafeGram был временно заблокирован по соображениям безопасности.</p>
-		<div class="warning-box">
-			<p><strong>📋 Причина блокировки:</strong></p>
-			<p>%s</p>
-		</div>
-		<p>Если вы считаете, что это ошибка, пожалуйста, свяжитесь с нашей службой поддержки.</p>
-		<div style="text-align: center; margin: 30px 0;">
-			<a href="%s" class="button">Связаться с поддержкой</a>
-		</div>
-	`,
-		data.Username,
-		func() string {
-			if data.Message != "" {
-				return data.Message
-			}
-			return "Обнаружена подозрительная активность"
-		}(),
-		func() string {
-			if data.Link != "" {
-				return data.Link
-			}
-			return "https://safegram.app/feedback"
-		}(),
-	)
-	return GetBaseTemplate("Аккаунт заблокирован", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Доступ к вашему аккаунту SafeGram был временно ограничен."),
+		noticeCard(toneSecurity, "Причина", valueOr(data.Reason, valueOr(data.Message, "Причина не указана."))),
+		noticeCard(toneDefault, "Что делать дальше", "Если вы считаете, что ограничение сработало ошибочно, обратитесь в поддержку и укажите email аккаунта."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Доступ временно ограничен",
+		Preheader: "Сообщаем о временном ограничении доступа и даем следующий шаг.",
+		Eyebrow:   "Ограничение доступа",
+		Headline:  "Аккаунт временно ограничен",
+		Intro:     "Ограничение применяется, когда система видит риск для безопасности или нарушение правил доступа.",
+		BodyHTML:  body,
+		CTAHref:   supportLink(data.Link),
+		CTALabel:  "Связаться с поддержкой",
+	})
 }
 
-// TemplatePremiumActivated шаблон активации премиум
 func TemplatePremiumActivated(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>✨ Премиум активирован!</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Поздравляем! Премиум подписка SafeGram успешно активирована.</p>
-		<div class="info-box">
-			<p><strong>🎁 Теперь вам доступно:</strong></p>
-			<ul class="feature-list">
-				<li>Неограниченное хранилище для медиа</li>
-				<li>Приоритетная поддержка</li>
-				<li>Расширенные настройки приватности</li>
-				<li>Эксклюзивные темы и стикеры</li>
-				<li>Увеличенный лимит участников в группах</li>
-				<li>И многое другое!</li>
-			</ul>
-		</div>
-		<div style="text-align: center; margin: 30px 0;">
-			<a href="%s" class="button">Начать использовать</a>
-		</div>
-		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">
-			Спасибо за выбор SafeGram Premium!
-		</p>
-	`,
-		data.Username,
-		func() string {
-			if data.Link != "" {
-				return data.Link
-			}
-			return "https://safegram.app/app/chats"
-		}(),
-	)
-	return GetBaseTemplate("Премиум активирован", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Премиум-доступ для вашего аккаунта SafeGram уже активирован."),
+		detailCard(tonePremium, "Детали тарифа", map[string]string{
+			"Тариф": valueOr(data.PlanName, "SafeGram Premium"),
+		}),
+		listCard(tonePremium, "Что теперь доступно", []string{
+			"Расширенные сценарии использования и приоритетная поддержка.",
+			"Больше контроля над приватностью и дополнительными возможностями аккаунта.",
+			"Премиальные функции без необходимости дополнительной настройки.",
+		}),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      tonePremium,
+		Title:     "Премиум активирован",
+		Preheader: "Ваш премиум-доступ активен. Все возможности уже доступны в аккаунте.",
+		Eyebrow:   "Premium",
+		Headline:  "Премиум активирован",
+		Intro:     "Тариф применен к вашему аккаунту и готов к использованию.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть SafeGram",
+	})
 }
 
-// TemplateBackupCode шаблон для резервных кодов
 func TemplateBackupCode(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Резервные коды восстановления</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Ваши резервные коды восстановления для двухфакторной аутентификации:</p>
-		<div class="code-box">
-			<div style="font-family: 'Courier New', monospace; font-size: 16px; line-height: 2; color: #e9ecf5;">
-				%s
-			</div>
-		</div>
-		<div class="warning-box">
-			<p><strong>⚠️ ВАЖНО:</strong></p>
-			<p>Сохраните эти коды в безопасном месте. Они понадобятся вам, если вы потеряете доступ к устройству с двухфакторной аутентификацией.</p>
-			<p><strong>Каждый код можно использовать только один раз!</strong></p>
-		</div>
-	`,
-		data.Username,
-		func() string {
-			if data.Code != "" {
-				return data.Code
-			}
-			return "Коды не были сгенерированы"
-		}(),
-	)
-	return GetBaseTemplate("Резервные коды", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Для вашего аккаунта подготовлены резервные коды восстановления."),
+		codesCard(toneSecurity, "Recovery codes", "Храните коды отдельно от устройства и не пересылайте их через обычную почту или чаты.", valueOr(data.Codes, data.Code)),
+		supportBlock(toneSecurity, "Каждый код используется только один раз. Если вы создаете новый набор, старый перестает действовать."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Резервные коды восстановления",
+		Preheader: "Сохраните recovery codes в безопасном месте.",
+		Eyebrow:   "Резервный доступ",
+		Headline:  "Сохраните резервные коды",
+		Intro:     "Эти коды нужны только на случай, если основной способ входа будет недоступен.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть настройки безопасности",
+	})
 }
 
-// TemplateAdminMessage шаблон для персонального сообщения от администрации
 func TemplateAdminMessage(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>📨 Сообщение от администрации SafeGram</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>У нас есть для вас важное сообщение:</p>
-		<div class="info-box" style="background: rgba(124, 108, 255, 0.15); border-left: 4px solid #7c6cff;">
-			<div style="font-size: 16px; line-height: 1.8; color: #e9ecf5; white-space: pre-wrap;">%s</div>
-		</div>
-		%s
-		<div class="divider"></div>
-		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">
-			Если у вас есть вопросы, вы можете связаться с нами через форму обратной связи в приложении.
-		</p>
-	`,
-		data.Username,
-		func() string {
-			if data.Message != "" {
-				return data.Message
-			}
-			return "Персональное сообщение от администрации"
-		}(),
-		func() string {
-			if data.Link != "" && data.ActionText != "" {
-				return fmt.Sprintf(`<div style="text-align: center; margin: 30px 0;">
-					<a href="%s" class="button">%s</a>
-				</div>`, data.Link, data.ActionText)
-			}
-			return ""
-		}(),
-	)
-	return GetBaseTemplate("Сообщение от администрации", content)
+	actionText := valueOr(data.ActionText, "Открыть SafeGram")
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		cardHTML(toneDefault, "Сообщение", richParagraph(strings.ReplaceAll(html.EscapeString(valueOr(data.Message, "У вас новое сообщение от команды SafeGram.")), "\n", "<br>"))),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneDefault,
+		Title:     "Сообщение от команды SafeGram",
+		Preheader: "Персональное сервисное письмо от команды SafeGram.",
+		Eyebrow:   "Команда SafeGram",
+		Headline:  "Персональное сообщение",
+		Intro:     "Это сервисное письмо отправлено администрацией SafeGram.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  actionText,
+	})
 }
 
-// TemplateMaintenanceNotification шаблон уведомления о технических работах
 func TemplateMaintenanceNotification(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>🔧 Плановые технические работы</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Уведомляем вас о запланированных технических работах на платформе SafeGram.</p>
-		<div class="warning-box">
-			<p><strong>⏰ Время проведения работ:</strong></p>
-			<p style="font-size: 18px; font-weight: 600;">%s</p>
-		</div>
-		<div class="info-box">
-			<p><strong>ℹ️ Что это значит:</strong></p>
-			<p>%s</p>
-		</div>
-		<p>Мы приносим извинения за временные неудобства и благодарим за понимание.</p>
-		<div class="divider"></div>
-		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">
-			После завершения работ все функции будут восстановлены в полном объёме.
-		</p>
-	`,
-		data.Username,
-		func() string {
-			if data.Timestamp != "" {
-				return data.Timestamp
-			}
-			return "Время будет объявлено дополнительно"
-		}(),
-		func() string {
-			if data.Message != "" {
-				return data.Message
-			}
-			return "Во время работ доступ к сервису может быть ограничен или временно недоступен."
-		}(),
-	)
-	return GetBaseTemplate("Технические работы", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Заранее сообщаем о плановых технических работах в SafeGram."),
+		detailCard(toneSecurity, "Окно работ", map[string]string{
+			"Время": valueOr(data.Timestamp, "Будет объявлено дополнительно"),
+		}),
+		noticeCard(toneDefault, "Комментарий", valueOr(data.Message, "Во время работ часть функций может работать нестабильно или быть временно недоступна.")),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Плановые технические работы",
+		Preheader: "Предупреждаем о технических работах и возможных временных ограничениях сервиса.",
+		Eyebrow:   "Service status",
+		Headline:  "Плановые технические работы",
+		Intro:     "Мы предупреждаем заранее, чтобы вы могли спланировать работу без неожиданностей.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть SafeGram",
+	})
 }
 
-// TemplateRecruitApproved шаблон «Поздравляем, вы приняты»
 func TemplateRecruitApproved(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>🎉 Поздравляем!</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>Ваша заявка рассмотрена. Мы рады сообщить, что вы приняты в команду SafeGram.</p>
-		<p>Скоро с вами свяжутся по дальнейшим шагам.</p>
-		<div class="divider"></div>
-		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">С уважением, команда SafeGram</p>
-	`, data.Username)
-	return GetBaseTemplate("Вы приняты", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Ваша заявка была одобрена."),
+		noticeCard(toneSuccess, "Следующий шаг", "Дальнейшие инструкции будут доступны внутри системы или придут отдельным сервисным сообщением."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSuccess,
+		Title:     "Заявка одобрена",
+		Preheader: "Подтверждаем одобрение заявки и сообщаем, что будет дальше.",
+		Eyebrow:   "Результат заявки",
+		Headline:  "Заявка одобрена",
+		Intro:     "Спасибо за интерес к SafeGram. Следующий шаг уже подготовлен.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть SafeGram",
+	})
 }
 
-// TemplateRecruitDeclined шаблон отклонения заявки с причиной
 func TemplateRecruitDeclined(data EmailTemplateData) string {
-	content := fmt.Sprintf(`
-		<h2>Уведомление по заявке</h2>
-		<p>Здравствуйте, <strong>%s</strong>!</p>
-		<p>К сожалению, ваша заявка не была одобрена.</p>
-		<div class="info-box">
-			<p><strong>Причина:</strong></p>
-			<p>%s</p>
-		</div>
-		<p>Вы можете подать новую заявку позже, если условия изменятся.</p>
-		<div class="divider"></div>
-		<p style="font-size: 14px; color: rgba(233, 236, 245, 0.7);">С уважением, команда SafeGram</p>
-	`, data.Username, data.Message)
-	return GetBaseTemplate("Результат рассмотрения заявки", content)
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("По итогам рассмотрения ваша заявка сейчас не была одобрена."),
+		noticeCard(toneDefault, "Комментарий", valueOr(data.Reason, valueOr(data.Message, "Причина не указана."))),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneDefault,
+		Title:     "Результат рассмотрения заявки",
+		Preheader: "Сообщаем результат рассмотрения заявки и, при наличии, комментарий.",
+		Eyebrow:   "Результат заявки",
+		Headline:  "Статус заявки обновлен",
+		Intro:     "Спасибо за уделенное время и интерес к проекту SafeGram.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Перейти на сайт SafeGram",
+	})
+}
+
+func TemplateEmailChangeVerification(data EmailTemplateData) string {
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Вы запросили смену email для аккаунта SafeGram."),
+		codeCard(toneSecurity, "Код подтверждения нового email", valueOr(data.Code, "000000"), "Код действует "+valueOr(data.ExpiresIn, "10 минут")+"."),
+		supportBlock(toneSecurity, "Если вы не отправляли этот запрос, не используйте код и проверьте настройки безопасности."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Подтвердите новый email",
+		Preheader: "Используйте код, чтобы завершить смену email в SafeGram.",
+		Eyebrow:   "Смена email",
+		Headline:  "Подтвердите новый адрес",
+		Intro:     "SafeGram просит отдельное подтверждение для критичных изменений аккаунта.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Подтвердить email",
+	})
+}
+
+func TemplateEmailChanged(data EmailTemplateData) string {
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Контактный email аккаунта SafeGram был изменен."),
+		detailCard(toneSecurity, "Подтвержденные изменения", map[string]string{
+			"Новый адрес": valueOr(data.Email, "Не указан"),
+			"Время":       valueOr(data.Timestamp, time.Now().Format("02.01.2006 15:04")),
+		}),
+		supportBlock(toneSecurity, "Если это были не вы, срочно восстановите доступ и свяжитесь с поддержкой."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Email изменен",
+		Preheader: "Подтверждаем изменение адреса и даем следующий шаг на случай риска.",
+		Eyebrow:   "Изменение аккаунта",
+		Headline:  "Email обновлен",
+		Intro:     "Это подтверждение критического изменения в вашем аккаунте.",
+		BodyHTML:  body,
+		CTAHref:   supportLink(data.Link),
+		CTALabel:  "Проверить аккаунт",
+	})
+}
+
+func TemplatePremiumReceipt(data EmailTemplateData) string {
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Мы получили оплату по подписке SafeGram."),
+		detailCard(tonePremium, "Детали платежа", map[string]string{
+			"Тариф": valueOr(data.PlanName, "SafeGram Premium"),
+			"Сумма": valueOr(data.Amount, "Не указана"),
+			"Время": valueOr(data.Timestamp, time.Now().Format("02.01.2006 15:04")),
+		}),
+		noticeCard(toneDefault, "Нужна проверка?", "Если платеж выглядит неожиданным, проверьте активные подписки и историю действий в аккаунте."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      tonePremium,
+		Title:     "Оплата подтверждена",
+		Preheader: "Подтверждаем получение платежа по подписке SafeGram.",
+		Eyebrow:   "Billing",
+		Headline:  "Оплата подтверждена",
+		Intro:     "Сохраняем сервисную информацию по платежу для вашего учета.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть биллинг",
+	})
+}
+
+func TemplatePremiumExpiring(data EmailTemplateData) string {
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Премиум-подписка SafeGram скоро закончится."),
+		detailCard(tonePremium, "Что истекает", map[string]string{
+			"Тариф":          valueOr(data.PlanName, "SafeGram Premium"),
+			"Дата окончания": valueOr(data.ExpiresAt, "Не указана"),
+		}),
+		noticeCard(toneDefault, "Чтобы избежать перерыва", "Проверьте настройки продления заранее, если хотите сохранить доступ к премиум-возможностям без паузы."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      tonePremium,
+		Title:     "Подписка скоро закончится",
+		Preheader: "Напоминаем о скором окончании премиум-подписки.",
+		Eyebrow:   "Premium",
+		Headline:  "Срок подписки подходит к концу",
+		Intro:     "Это напоминание помогает не потерять доступ к важным функциям в неподходящий момент.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Продлить подписку",
+	})
+}
+
+func TemplateAccountExportReady(data EmailTemplateData) string {
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Запрошенный экспорт данных SafeGram готов."),
+		noticeCard(toneDefault, "Срок доступа", "Ссылка на скачивание действует "+valueOr(data.ExpiresIn, "ограниченное время")+". Используйте ее только на доверенном устройстве."),
+		supportBlock(toneSecurity, "Если вы не запрашивали экспорт, немедленно проверьте безопасность аккаунта."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneDefault,
+		Title:     "Экспорт данных готов",
+		Preheader: "Архив данных можно скачать ограниченное время.",
+		Eyebrow:   "Экспорт данных",
+		Headline:  "Экспорт готов",
+		Intro:     "Файл доступен для безопасной загрузки в течение ограниченного периода.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Скачать экспорт",
+	})
+}
+
+func TemplateAccountDeleted(data EmailTemplateData) string {
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("Удаление аккаунта SafeGram завершено."),
+		supportBlock(toneSecurity, "Если вы не инициировали удаление, свяжитесь с поддержкой как можно быстрее."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneSecurity,
+		Title:     "Аккаунт удален",
+		Preheader: "Подтверждаем завершение удаления аккаунта SafeGram.",
+		Eyebrow:   "Подтверждение удаления",
+		Headline:  "Аккаунт удален",
+		Intro:     "Это финальное сервисное уведомление по операции удаления.",
+		BodyHTML:  body,
+		CTAHref:   supportLink(data.Link),
+		CTALabel:  "Связаться с поддержкой",
+	})
+}
+
+func TemplateUnreadDigest(data EmailTemplateData) string {
+	body := strings.Join([]string{
+		paragraph(greeting(data.Username)),
+		paragraph("За выбранный период в SafeGram появилась новая активность."),
+		detailCard(toneDefault, "Краткая сводка", map[string]string{
+			"Непрочитанные чаты": countString(data.UnreadChatsCount),
+			"Новые сообщения":    countString(data.MessagesCount),
+		}),
+		noticeCard(toneSecurity, "Приватность", "Для защиты переписки письмо не содержит полного содержания сообщений. Детали доступны только в приложении."),
+	}, "")
+	return renderEmail(emailLayout{
+		Tone:      toneDefault,
+		Title:     "Сводка непрочитанной активности",
+		Preheader: "Кратко собрали новую активность без раскрытия чувствительных деталей.",
+		Eyebrow:   "Digest",
+		Headline:  "Что вы пропустили",
+		Intro:     "Эта сводка предназначена только для пользователей, которые сами включили email-уведомления по активности.",
+		BodyHTML:  body,
+		CTAHref:   appLink(data.Link),
+		CTALabel:  "Открыть SafeGram",
+	})
 }

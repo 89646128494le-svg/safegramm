@@ -206,7 +206,7 @@ export default function Privacy() {
         }}>
           <p style={{ margin: 0, fontSize: '14px', color: '#94a3b8' }}>
             По вопросам конфиденциальности обращайтесь через{' '}
-            <Link to="/feedback" style={{ color: '#7c6cff', textDecoration: 'underline' }}>форму обратной связи</Link>
+            <Link to="/support" style={{ color: '#7c6cff', textDecoration: 'underline' }}>центр поддержки</Link>
           </p>
         </div>
       </div>
