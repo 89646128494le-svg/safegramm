@@ -33,6 +33,19 @@ export default function Login({ onDone }: LoginProps) {
   const redirectTo = searchParams.get('redirect') || '';
   const { setToken, setUser } = useStore();
 
+  const resolvePostLoginPath = (payload: any) => {
+    if (redirectTo) return redirectTo;
+    if (payload?.entryServerId) {
+      const query = payload?.entryVoiceChannelId
+        ? `?channel=${encodeURIComponent(String(payload.entryVoiceChannelId))}`
+        : payload?.entryTextChannelId
+          ? `?channel=${encodeURIComponent(String(payload.entryTextChannelId))}`
+          : '';
+      return `/app/servers/${payload.entryServerId}${query}`;
+    }
+    return '/app/chats';
+  };
+
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const t = setInterval(() => setResendCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
@@ -102,7 +115,7 @@ export default function Login({ onDone }: LoginProps) {
         localStorage.setItem('policiesAccepted', '1');
         if (res.sessionId) localStorage.setItem('safegram_session_id', res.sessionId);
         if (onDone) onDone();
-        nav(redirectTo || '/app/chats');
+        nav(resolvePostLoginPath(res));
         return;
       } else if (res?.error === 'email_verification_required') {
         // Требуется подтверждение email — переходим на шаг ввода кода и отправляем код

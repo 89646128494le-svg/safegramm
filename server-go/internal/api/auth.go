@@ -142,6 +142,7 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		}
 
 		session, _ := CreateSession(db, user.ID, tokenString, c.ClientIP(), c.GetHeader("User-Agent"))
+		lobbyEntry, _ := EnsureCommunityLobbyForUser(db, user.ID, user.Username)
 		resp := gin.H{
 			"token":    tokenString,
 			"mnemonic": mnemonicResponse,
@@ -154,6 +155,15 @@ func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		}
 		if session != nil {
 			resp["sessionId"] = session.ID
+		}
+		if lobbyEntry != nil {
+			resp["entryServerId"] = lobbyEntry.ServerID
+			if lobbyEntry.EntryTextChannelID != "" {
+				resp["entryTextChannelId"] = lobbyEntry.EntryTextChannelID
+			}
+			if lobbyEntry.EntryVoiceChannelID != "" {
+				resp["entryVoiceChannelId"] = lobbyEntry.EntryVoiceChannelID
+			}
 		}
 		if emailAddress := userEmailValue(&user); emailAddress != "" {
 			queueEmailJob("welcome_email", map[string]interface{}{
@@ -293,6 +303,7 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
+		lobbyEntry, _ := EnsureCommunityLobbyForUser(db, user.ID, user.Username)
 
 		roles := user.ParseRoles()
 		resp := gin.H{
@@ -306,6 +317,15 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		}
 		if session != nil {
 			resp["sessionId"] = session.ID
+		}
+		if lobbyEntry != nil {
+			resp["entryServerId"] = lobbyEntry.ServerID
+			if lobbyEntry.EntryTextChannelID != "" {
+				resp["entryTextChannelId"] = lobbyEntry.EntryTextChannelID
+			}
+			if lobbyEntry.EntryVoiceChannelID != "" {
+				resp["entryVoiceChannelId"] = lobbyEntry.EntryVoiceChannelID
+			}
 		}
 		recordSuspiciousActivity(db, user.ID, "new_login", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
 			"login": login,

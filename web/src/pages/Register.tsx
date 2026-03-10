@@ -49,10 +49,24 @@ export default function Register() {
   const [twoFASecret, setTwoFASecret] = useState<{ secret: string; url: string } | null>(null);
   const [twoFACode, setTwoFACode] = useState('');
   const [twoFAEnabling, setTwoFAEnabling] = useState(false);
+  const [postAuthPath, setPostAuthPath] = useState('/app/chats');
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '';
   const { setToken, setUser } = useStore();
+
+  const resolvePostAuthPath = (payload?: any) => {
+    if (redirectTo) return redirectTo;
+    if (payload?.entryServerId) {
+      const query = payload?.entryVoiceChannelId
+        ? `?channel=${encodeURIComponent(String(payload.entryVoiceChannelId))}`
+        : payload?.entryTextChannelId
+          ? `?channel=${encodeURIComponent(String(payload.entryTextChannelId))}`
+          : '';
+      return `/app/servers/${payload.entryServerId}${query}`;
+    }
+    return '/app/chats';
+  };
 
   const updateField = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -249,6 +263,8 @@ export default function Register() {
         needsCloudCode: hasEmail && formData.needsCloudCode,
         pin: formData.pin.trim().length >= 4 && formData.pin.trim().length <= 12 ? formData.pin.trim() : undefined
       });
+      const nextPath = resolvePostAuthPath(res);
+      setPostAuthPath(nextPath);
 
       const tokenVal = res.token;
       setToken(tokenVal);
@@ -270,7 +286,7 @@ export default function Register() {
         }, 1500);
       } else {
         setShowSuccess(true);
-        setTimeout(() => nav(redirectTo || '/app/chats'), 2500);
+        setTimeout(() => nav(nextPath), 2500);
       }
     } catch (e: any) {
       setErr(humanFriendlyMessage(e?.message) || 'Регистрация не удалась. Проверьте данные и попробуйте снова.');
@@ -289,7 +305,7 @@ export default function Register() {
       setTwoFASecret(null);
       setTwoFACode('');
       setShowSuccess(true);
-      setTimeout(() => nav(redirectTo || '/app/chats'), 2000);
+      setTimeout(() => nav(postAuthPath), 2000);
     } catch (e: any) {
       setErr(humanFriendlyMessage(e?.message) || 'Неверный код приложения. Проверьте и введите код снова.');
     } finally {
@@ -362,7 +378,7 @@ export default function Register() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => { setShow2FAModal(false); setTwoFASecret(null); nav(redirectTo || '/app/chats'); }}
+                  onClick={() => { setShow2FAModal(false); setTwoFASecret(null); nav(postAuthPath); }}
                   style={{
                     flex: 1,
                     padding: '12px',

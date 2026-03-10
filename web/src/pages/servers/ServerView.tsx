@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { showToast } from '../../components/Toast';
 import { ConfirmModal, PromptModal } from '../../components/Modal';
@@ -54,6 +54,7 @@ interface Member {
 export default function ServerView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useStore();
   const [server, setServer] = useState<Server | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -77,12 +78,21 @@ export default function ServerView() {
 
   useEffect(() => {
     if (id) {
+      setSelectedChannelId('');
       loadServer();
       loadChannels();
       loadCategories();
       loadMembers();
     }
   }, [id]);
+
+  useEffect(() => {
+    const requestedChannelId = searchParams.get('channel');
+    if (!requestedChannelId || channels.length === 0) return;
+    if (channels.some((channel) => channel.id === requestedChannelId)) {
+      setSelectedChannelId(requestedChannelId);
+    }
+  }, [channels, searchParams]);
 
   const loadVoiceState = async () => {
     if (!id) return;
@@ -117,7 +127,12 @@ export default function ServerView() {
       const data = await api(`/api/servers/${id}/channels`);
       setChannels(data.channels || []);
       if (data.channels && data.channels.length > 0 && !selectedChannelId) {
-        setSelectedChannelId(data.channels[0].id);
+        const requestedChannelId = searchParams.get('channel');
+        const requested = requestedChannelId
+          ? data.channels.find((channel: Channel) => channel.id === requestedChannelId)
+          : null;
+        const preferredText = data.channels.find((channel: Channel) => channel.type === 'text') || data.channels[0];
+        setSelectedChannelId((requested || preferredText).id);
       }
     } catch (e: any) {
       console.error('Failed to load channels:', e);
@@ -260,6 +275,9 @@ export default function ServerView() {
   const categoriesSorted = categories.slice().sort((a, b) => a.position - b.position);
   const uncategorized = textChannels.filter(c => !c.categoryId);
   const currentUserRole = members.find(m => m.id === user?.id)?.role || 'member';
+  const isLobbyServer = server.inviteLink === 'safegram-lobby' || server.name === 'SafeGram Lobby';
+  const generalTextChannel = textChannels.find((channel) => channel.name.toLowerCase() === 'general') || textChannels[0] || null;
+  const generalVoiceChannel = voiceChannels.find((channel) => channel.name.toLowerCase() === 'общий') || voiceChannels[0] || null;
 
   return (
     <div className="container">
@@ -490,8 +508,50 @@ export default function ServerView() {
         </div>
       </div>
 
-      <div className="main" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {selectedChannelId ? (
+        <div className="main" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {isLobbyServer && (
+            <div
+              style={{
+                margin: '0 0 16px',
+                padding: '16px 18px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, rgba(79,124,255,0.2), rgba(34,197,94,0.14))',
+                border: '1px solid rgba(96,165,250,0.24)',
+              }}
+            >
+              <div style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>Стартуйте сразу</div>
+              <div className="small" style={{ color: 'var(--subtle, #9ca3af)', marginBottom: '12px', lineHeight: 1.6 }}>
+                Откройте общий чат для знакомства или сразу заходите в голосовой канал.
+              </div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {generalTextChannel && (
+                  <button
+                    onClick={() => setSelectedChannelId(generalTextChannel.id)}
+                    style={{ padding: '10px 14px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    Открыть #general
+                  </button>
+                )}
+                {generalVoiceChannel && (
+                  <button
+                    onClick={() => setSelectedChannelId(generalVoiceChannel.id)}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(96,165,250,0.28)',
+                      background: 'rgba(37,99,235,0.2)',
+                      color: 'var(--fg, #e5e7eb)',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Зайти в голосовой «{generalVoiceChannel.name}»
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {selectedChannelId ? (
           <div style={{
             padding: '24px',
             background: 'var(--panel, rgba(31, 41, 55, 0.6))',

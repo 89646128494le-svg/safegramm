@@ -347,7 +347,7 @@ export default function AppShell() {
         <div className={showServerStrip ? 'app-content app-content-inner' : 'app-content'} style={showServerStrip ? undefined : { flex: 1 }}>
           <AnimatePresence mode="wait">
             <Routes>
-              <Route path="/" element={<Navigate to="/app/chats" replace />} />
+              <Route path="/" element={<Navigate to="/app/servers" replace />} />
               <Route path="chats" element={<Chats />} />
               <Route path="join/:link" element={<JoinChat />} />
               <Route path="servers" element={<Servers />} />

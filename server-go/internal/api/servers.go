@@ -62,9 +62,9 @@ func CreateServer(db *gorm.DB) gin.HandlerFunc {
 		// Создаем чат для канала по умолчанию (уникальный InviteLink)
 		channelChat := models.Chat{
 			ID:         uuid.New().String(),
-			Type:      "channel",
-			Name:      "general",
-			CreatedBy: userIDStr,
+			Type:       "channel",
+			Name:       "general",
+			CreatedBy:  userIDStr,
 			InviteLink: "ch:" + uuid.New().String(),
 		}
 		db.Create(&channelChat)
@@ -157,6 +157,11 @@ func GetServers(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		var currentUser models.User
+		if err := db.Select("id", "username").First(&currentUser, "id = ?", userIDStr).Error; err == nil {
+			_, _ = EnsureCommunityLobbyForUser(db, currentUser.ID, currentUser.Username)
+		}
+
 		var members []models.ServerMember
 		db.Where("user_id = ?", userIDStr).Find(&members)
 
@@ -199,4 +204,3 @@ func GetServer(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"server": server})
 	}
 }
-
