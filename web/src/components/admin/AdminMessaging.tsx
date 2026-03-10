@@ -277,7 +277,7 @@ function MaintenanceForm() {
 
   const handleActivateMaintenance = async () => {
     if (!timestamp || !message) {
-      showToast('Заполните все поля', 'warning');
+      showToast('????????? ??? ????', 'warning');
       return;
     }
 
@@ -289,18 +289,20 @@ function MaintenanceForm() {
         sendEmail,
       });
 
-      showToast(`Режим технических работ активирован!${sendEmail ? ' Письма отправлены.' : ''}`, 'success');
-      
+      showToast(`????? ??????????? ????? ???????????!${sendEmail ? ' ?????? ??????????.' : ''}`, 'success');
       if (sendEmail && response.emailsSent) {
-        showToast(`Отправлено писем: ${response.emailsSent}`, 'info');
+        showToast(`?????????? ?????: ${response.emailsSent}`, 'info');
       }
-      
-      // Очищаем форму
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('maintenance-updated'));
+        window.dispatchEvent(new Event('system-banner-updated'));
+      }
+
       setTimestamp('');
       setMessage('');
       setSendEmail(false);
     } catch (error: any) {
-      showToast('Ошибка активации: ' + error.message, 'error');
+      showToast('?????? ?????????: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -310,14 +312,17 @@ function MaintenanceForm() {
     setLoading(true);
     try {
       await api('/api/admin/maintenance/disable', 'POST');
-      showToast('Режим технических работ отключён', 'success');
+      showToast('????? ??????????? ????? ????????', 'success');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('maintenance-updated'));
+        window.dispatchEvent(new Event('system-banner-updated'));
+      }
     } catch (error: any) {
-      showToast('Ошибка отключения: ' + error.message, 'error');
+      showToast('?????? ??????????: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -511,3 +516,5 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
+
+

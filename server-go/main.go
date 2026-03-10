@@ -97,7 +97,7 @@ func main() {
 	if cfg.NodeEnv != "production" {
 		router.Use(gin.Logger())
 	}
-	router.Use(corsMiddleware()) // первым, чтобы preflight OPTIONS всегда получал CORS-заголовки
+	router.Use(corsMiddleware())         // первым, чтобы preflight OPTIONS всегда получал CORS-заголовки
 	router.Use(api.SecurityMiddleware()) // DDoS: блоклист IP, глобальный rate limit, лимит тела
 	router.Use(gzipMiddleware())
 	if cfg.NodeEnv == "production" {
@@ -225,6 +225,17 @@ func metricsMiddleware() gin.HandlerFunc {
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
+		allowHeaders := mergeHeaderValues(
+			[]string{
+				"Content-Type",
+				"Authorization",
+				"Accept",
+				"Accept-Language",
+				"X-Requested-With",
+				"X-Admin-2FA-Token",
+			},
+			c.GetHeader("Access-Control-Request-Headers"),
+		)
 
 		// Разрешаем все локальные адреса, Vercel и бэкенд nip.io
 		allowedOrigins := []string{
@@ -297,7 +308,7 @@ func corsMiddleware() gin.HandlerFunc {
 				strings.HasPrefix(origin, "http://172.31.") {
 				isLocalIP = true
 			}
-			
+
 			// Разрешаем любые IP адреса с портом 5173 (Vite dev server) для разработки
 			// Это позволяет подключаться с любого IP адреса на порту 5173
 			if strings.Contains(origin, ":5173") && strings.HasPrefix(origin, "http://") {
@@ -343,7 +354,7 @@ func corsMiddleware() gin.HandlerFunc {
 
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Accept-Language, X-Requested-With")
+		c.Header("Access-Control-Allow-Headers", allowHeaders)
 		c.Header("Access-Control-Max-Age", "86400")
 		c.Header("Vary", "Origin")
 
@@ -358,7 +369,7 @@ func corsMiddleware() gin.HandlerFunc {
 
 func gzipMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.Method == "OPTIONS" || !strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") {
+		if c.Request.Method == "OPTIONS" || isWebSocketUpgrade(c.Request) || !strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") {
 			c.Next()
 			return
 		}
@@ -377,5 +388,46 @@ type gzipResponseWriter struct {
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) { return w.gz.Write(b) }
-func (w *gzipResponseWriter) Flush()                      { w.gz.Flush(); if f, ok := w.ResponseWriter.(http.Flusher); ok { f.Flush() } }
+func (w *gzipResponseWriter) Flush() {
+	w.gz.Flush()
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
 
+func mergeHeaderValues(defaults []string, requested string) string {
+	seen := make(map[string]struct{}, len(defaults))
+	values := make([]string, 0, len(defaults)+4)
+
+	for _, value := range defaults {
+		key := strings.ToLower(strings.TrimSpace(value))
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		values = append(values, value)
+	}
+
+	for _, value := range strings.Split(requested, ",") {
+		value = strings.TrimSpace(value)
+		key := strings.ToLower(value)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		values = append(values, value)
+	}
+
+	return strings.Join(values, ", ")
+}
+
+func isWebSocketUpgrade(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket") &&
+		strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
+}

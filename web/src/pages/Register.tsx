@@ -274,6 +274,11 @@ export default function Register() {
         api('/api/users/me').then((me) => setUser(me)).catch(() => {});
       }
       localStorage.setItem('policiesAccepted', '1');
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('safegram_beta_notice_pending', '1');
+        localStorage.removeItem('safegram_beta_notice_dismissed');
+        window.dispatchEvent(new Event('system-banner-updated'));
+      }
 
       if (formData.setup2FAAfter && tokenVal) {
         setShowSuccess(true);
