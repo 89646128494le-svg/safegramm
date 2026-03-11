@@ -173,6 +173,9 @@ export default function Login({ onDone }: LoginProps) {
       }
       if (serverError === 'invalid_email_code' || errorMsg === 'invalid_email_code') {
         setErr('Неверный код подтверждения');
+      } else if (serverError === 'maintenance_active' || errorMsg === 'maintenance_active') {
+        nav('/status');
+        return;
       } else if (serverError === 'invalid_cloud_code' || errorMsg === 'invalid_cloud_code') {
         setErr('Неверный облачный код');
       } else if (serverError === 'bad_creds' || errorMsg === 'bad_creds') {
@@ -706,3 +709,5 @@ export default function Login({ onDone }: LoginProps) {
     </motion.div>
   );
 }
+
+

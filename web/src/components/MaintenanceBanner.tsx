@@ -7,7 +7,6 @@ import { useStore } from '../store/useStore';
 import type { MaintenanceStatus } from '../store/useStore';
 
 const POLL_INTERVAL_MS = 20_000;
-const DISMISSED_MAINTENANCE_KEY = 'dismissedMaintenanceId';
 const PENDING_BETA_NOTICE_KEY = 'safegram_beta_notice_pending';
 const DISMISSED_BETA_NOTICE_KEY = 'safegram_beta_notice_dismissed';
 const SYSTEM_BANNER_EVENT = 'system-banner-updated';
@@ -60,12 +59,10 @@ export default function MaintenanceBanner() {
   const location = useLocation();
   const { setMaintenance } = useStore();
   const [maintenanceData, setMaintenanceData] = useState<MaintenanceStatus | null>(null);
-  const [dismissedMaintenanceId, setDismissedMaintenanceId] = useState<string | null>(null);
   const [betaDismissed, setBetaDismissed] = useState(false);
 
   const syncDismissState = useCallback(() => {
     if (typeof window === 'undefined') return;
-    setDismissedMaintenanceId(localStorage.getItem(DISMISSED_MAINTENANCE_KEY));
     setBetaDismissed(localStorage.getItem(DISMISSED_BETA_NOTICE_KEY) === '1');
   }, []);
 
@@ -114,7 +111,7 @@ export default function MaintenanceBanner() {
   }, [location.key, syncDismissState]);
 
   const activeNotice = useMemo<BannerNotice | null>(() => {
-    if (maintenanceData?.isActive && maintenanceData.id && dismissedMaintenanceId !== maintenanceData.id) {
+    if (maintenanceData?.isActive && maintenanceData.id) {
       return {
         kind: 'maintenance',
         id: maintenanceData.id,
@@ -129,7 +126,7 @@ export default function MaintenanceBanner() {
     }
 
     return null;
-  }, [betaDismissed, dismissedMaintenanceId, maintenanceData]);
+  }, [betaDismissed, maintenanceData]);
 
   const palette = activeNotice?.kind === 'maintenance'
     ? {
@@ -151,12 +148,7 @@ export default function MaintenanceBanner() {
 
   const dismissNotice = useCallback(() => {
     if (typeof window === 'undefined' || !activeNotice) return;
-
-    if (activeNotice.kind === 'maintenance') {
-      localStorage.setItem(DISMISSED_MAINTENANCE_KEY, activeNotice.id);
-      setDismissedMaintenanceId(activeNotice.id);
-      return;
-    }
+    if (activeNotice.kind === 'maintenance') return;
 
     localStorage.setItem(DISMISSED_BETA_NOTICE_KEY, '1');
     sessionStorage.removeItem(PENDING_BETA_NOTICE_KEY);
@@ -305,26 +297,28 @@ export default function MaintenanceBanner() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={dismissNotice}
-            aria-label={CLOSE_LABEL}
-            style={{
-              flexShrink: 0,
-              width: 36,
-              height: 36,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 12,
-              border: `1px solid ${palette.border}`,
-              background: palette.badgeBackground,
-              color: palette.foreground,
-              cursor: 'pointer',
-            }}
-          >
-            <X size={18} />
-          </button>
+          {activeNotice.kind === 'beta' && (
+            <button
+              type="button"
+              onClick={dismissNotice}
+              aria-label={CLOSE_LABEL}
+              style={{
+                flexShrink: 0,
+                width: 36,
+                height: 36,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 12,
+                border: `1px solid ${palette.border}`,
+                background: palette.badgeBackground,
+                color: palette.foreground,
+                cursor: 'pointer',
+              }}
+            >
+              <X size={18} />
+            </button>
+          )}
         </div>
       </motion.div>
     </AnimatePresence>

@@ -38,6 +38,10 @@ type LoginRequest struct {
 // Register обрабатывает регистрацию пользователя
 func Register(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !ensurePublicMaintenanceDisabled(c, db) {
+			return
+		}
+
 		var req RegisterRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": err.Error()})
@@ -196,6 +200,9 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_creds"})
 			return
 		}
+		if !ensurePublicMaintenanceAllowed(c, db, login) {
+			return
+		}
 
 		q := db
 		if strings.Contains(login, "@") {
@@ -230,8 +237,9 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 
-			// Проверяем код email
-			valid, err := VerifyEmailCode(*user.Email, req.EmailCode)
+			// Проверяем код email без удаления.
+			// Иначе он сгорает до завершения шага с cloud PIN.
+			valid, err := CheckEmailCode(*user.Email, req.EmailCode)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 				return
@@ -257,6 +265,7 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 					return
 				}
 			}
+			ConsumeEmailCode(*user.Email)
 		} else {
 			// Если email нет, вход без подтверждения
 			if user.PinHash != "" {

@@ -35,6 +35,13 @@ func ForgotPassword(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "Укажите email или имя пользователя"})
 			return
 		}
+		login := username
+		if login == "" {
+			login = emailStr
+		}
+		if !ensurePublicMaintenanceAllowed(c, db, login) {
+			return
+		}
 
 		var user models.User
 		if emailStr != "" {
@@ -84,6 +91,10 @@ type ResetPasswordRequest struct {
 // ResetPassword устанавливает новый пароль по коду из письма
 func ResetPassword(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !ensurePublicMaintenanceDisabled(c, db) {
+			return
+		}
+
 		var req ResetPasswordRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": err.Error()})

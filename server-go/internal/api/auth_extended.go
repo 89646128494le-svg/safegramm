@@ -103,6 +103,10 @@ func LoginExtended(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 // SendEmailCode отправляет код на email
 func SendEmailCode(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !ensurePublicMaintenanceDisabled(c, db) {
+			return
+		}
+
 		var req struct {
 			Email string `json:"email" binding:"required,email"`
 		}
@@ -162,6 +166,9 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 		}
 		if login == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": "username or email is required"})
+			return
+		}
+		if !ensurePublicMaintenanceAllowed(c, db, login) {
 			return
 		}
 

@@ -260,6 +260,7 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
           else if (j.error === 'cannot_add_self') msg = 'Нельзя добавить себя в контакты';
           else if (j.error === 'user_not_found') msg = 'Пользователь не найден';
           else if (j.error === 'no_email') msg = 'К этому аккаунту не привязана почта. Добавьте email в настройках или обратитесь в поддержку.';
+          else if (j.error === 'maintenance_active') msg = j.message || '\u0421\u0435\u0439\u0447\u0430\u0441 \u0432\u0435\u0434\u0443\u0442\u0441\u044f \u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0435 \u0440\u0430\u0431\u043e\u0442\u044b. \u041e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443 \u0441\u0442\u0430\u0442\u0443\u0441\u0430 \u0438 \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043f\u043e\u0437\u0436\u0435.';
           else if (j.error === 'failed_to_send_email') msg = j.detail || 'Не удалось отправить письмо. Проверьте настройки почты на сервере или попробуйте позже.';
           else if (j.error === 'not_found') {
             if (path.includes('/users/')) msg = 'Пользователь не найден';
@@ -350,3 +351,4 @@ export function clearAdmin2FAToken(): void {
 
 /** Для обратной совместимости; при наличии прокси лучше использовать getApiBaseUrl(). */
 export const API_URL = DEFAULT_API;
+

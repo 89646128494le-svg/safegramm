@@ -62,9 +62,10 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected := api.Group("")
 	protected.Use(authMiddleware(cfg, db))
 	protected.Use(RateLimitMiddleware())
+	protected.Use(MaintenanceAccessMiddleware(db))
 
 	// WebSocket endpoint
-	router.GET("/ws", handleWebSocket(wsHub, cfg))
+	router.GET("/ws", handleWebSocket(wsHub, cfg, db))
 
 	// Контакты
 	protected.GET("/contacts/list", ListContacts(db))
@@ -93,6 +94,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/users/me/2fa/disable", Disable2FA(db))
 	protected.POST("/users/me/recovery", GenerateRecoveryCodes(db))
 	protected.POST("/users/me/pin", SetPIN(db))
+	protected.DELETE("/users/me/pin", RemovePIN(db))
 	protected.POST("/users/me/email/change/request", RequestEmailChange(db))
 	protected.POST("/users/me/email/change/confirm", ConfirmEmailChange(db))
 

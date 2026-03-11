@@ -8,6 +8,7 @@ import DesktopTitlebar, { DESKTOP_TITLEBAR_HEIGHT } from './components/DesktopTi
 import Landing from './pages/Landing';
 import AppShell from './pages/AppShell';
 import Feedback from './pages/Feedback';
+import Status from './pages/Status';
 
 const Features = lazy(() => import('./pages/Features'));
 const Pricing = lazy(() => import('./pages/Pricing'));
@@ -53,7 +54,7 @@ export default function App() {
     setErrorBoundaryKey((k) => k + 1);
     navigate('/login');
   };
-  const { token, setToken, setUser, user } = useStore();
+  const { token, setToken, setUser, user, maintenance } = useStore();
   const authChecked = useRef(false);
   const hasStoredToken = !!(token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null));
   const [authCheckDone, setAuthCheckDone] = useState(!hasStoredToken);
@@ -106,6 +107,11 @@ export default function App() {
 
   const isAuthenticated = !!user;
   const checkingAuth = hasStoredToken && !authCheckDone;
+  const isMaintenanceBypassUser = (username?: string | null) => {
+    const normalized = String(username || '').trim().toLowerCase();
+    return normalized === 'lev' || normalized === 'ra40k';
+  };
+  const appMaintenanceLocked = !!maintenance?.isActive && !isMaintenanceBypassUser(user?.username);
 
   if (checkingAuth) {
     return (
@@ -130,11 +136,14 @@ export default function App() {
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/" element={
-                isAuthenticated ? <Navigate to="/app/chats" replace /> : <Navigate to="/login" replace />
+                appMaintenanceLocked
+                  ? <Navigate to="/status" replace />
+                  : isAuthenticated ? <Navigate to="/app/chats" replace /> : <Navigate to="/login" replace />
               } />
               <Route path="/app/*" element={
-                isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
+                appMaintenanceLocked ? <Navigate to="/status" replace /> : isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
               } />
+              <Route path="/status" element={<Status />} />
               <Route path="/login" element={
                 isAuthenticated ? <Navigate to="/app/chats" replace /> : <Login onDone={handleAuthSuccess} />
               } />
@@ -148,7 +157,7 @@ export default function App() {
               <Route path="/premium-apply" element={isAuthenticated ? <PremiumApply /> : <Navigate to="/login" replace />} />
               <Route path="/join" element={isAuthenticated ? <JoinRecruit /> : <Navigate to="/login" replace />} />
               <Route path="/invite/:code" element={<InvitePage />} />
-              <Route path="*" element={<Navigate to={isAuthenticated ? '/app/chats' : '/login'} replace />} />
+              <Route path="*" element={<Navigate to={appMaintenanceLocked ? '/status' : isAuthenticated ? '/app/chats' : '/login'} replace />} />
             </Routes>
           </Suspense>
         </div>
@@ -162,11 +171,12 @@ export default function App() {
       <Suspense fallback={<PageFallback />}>
         <Routes>
         <Route path="/" element={
-          isAuthenticated ? <Navigate to="/app/chats" replace /> : <Landing />
+          appMaintenanceLocked ? <Status /> : isAuthenticated ? <Navigate to="/app/chats" replace /> : <Landing />
         } />
         <Route path="/app/*" element={
-          isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
+          appMaintenanceLocked ? <Navigate to="/status" replace /> : isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
         } />
+        <Route path="/status" element={<Status />} />
         <Route path="/features" element={<Features />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/about" element={<About />} />
@@ -183,7 +193,7 @@ export default function App() {
         <Route path="/premium-apply" element={<PremiumApply />} />
         <Route path="/join" element={<JoinRecruit />} />
         <Route path="/invite/:code" element={<InvitePage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={appMaintenanceLocked ? '/status' : '/'} replace />} />
         </Routes>
       </Suspense>
     </ErrorBoundary>

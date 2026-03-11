@@ -133,6 +133,11 @@ export default function Register() {
       setEmailCodeSent(true);
       setErr('');
     } catch (e: any) {
+      const serverError = e?.response?.error || e?.errorCode || '';
+      if (serverError === 'maintenance_active') {
+        nav('/status');
+        return;
+      }
       setErr(humanFriendlyMessage(e?.message) || 'Не удалось отправить код. Проверьте почту и попробуйте снова.');
     } finally {
       setSendingCode(false);
@@ -1113,3 +1118,4 @@ function SuccessAnimation() {
     </motion.div>
   );
 }
+

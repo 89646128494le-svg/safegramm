@@ -255,3 +255,58 @@ func SetPIN(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "PIN set"})
 	}
 }
+
+func RemovePIN(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, _ := c.Get("userID")
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+
+		var req struct {
+			Password string `json:"password" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request", "detail": err.Error()})
+			return
+		}
+
+		var user models.User
+		if err := db.First(&user, "id = ?", userIDStr).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		if bcrypt.CompareHashAndPassword([]byte(user.PassHash), []byte(req.Password)) != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_password"})
+			return
+		}
+		if strings.TrimSpace(user.PinHash) == "" {
+			c.JSON(http.StatusOK, gin.H{"ok": true, "message": "PIN already removed"})
+			return
+		}
+
+		if err := db.Model(&user).Updates(map[string]interface{}{
+			"pin_hash": "",
+			"pin_salt": "",
+		}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+
+		recordSuspiciousActivity(db, user.ID, "pin_removed", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
+			"source": "settings",
+		})
+		if emailAddress := userEmailValue(&user); emailAddress != "" {
+			queueEmailJob("security_alert_pin_removed", map[string]interface{}{
+				"userId": user.ID,
+				"email":  maskEmail(emailAddress),
+			}, func() error {
+				return email.SendSecurityAlert(emailAddress, user.Username, "Cloud PIN was removed from your SafeGram account.", settingsURL())
+			})
+		}
+
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "PIN removed"})
+	}
+}

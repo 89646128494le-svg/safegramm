@@ -3,10 +3,12 @@ package api
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	gorillaWS "github.com/gorilla/websocket"
+	"gorm.io/gorm"
 	"safegram-server/internal/config"
 	"safegram-server/internal/websocket"
 )
@@ -19,7 +21,7 @@ var upgrader = gorillaWS.Upgrader{
 }
 
 // handleWebSocket обрабатывает WebSocket подключения
-func handleWebSocket(hub *websocket.Hub, cfg *config.Config) gin.HandlerFunc {
+func handleWebSocket(hub *websocket.Hub, cfg *config.Config, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		var release func()
@@ -72,6 +74,22 @@ func handleWebSocket(hub *websocket.Hub, cfg *config.Config) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
+		username, _ := claims["username"].(string)
+		if maintenance, err := getActiveMaintenance(db); err == nil && maintenance != nil && !isMaintenanceBypassUsername(strings.TrimSpace(username)) {
+			release()
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":      "maintenance_active",
+				"message":    maintenance.Message,
+				"timestamp":  maintenance.Timestamp,
+				"id":         maintenance.ID,
+				"statusPage": "/status",
+			})
+			return
+		} else if err != nil {
+			release()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
 
 		// Обновляем соединение до WebSocket
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -91,4 +109,3 @@ func handleWebSocket(hub *websocket.Hub, cfg *config.Config) gin.HandlerFunc {
 		go client.ReadPump()
 	}
 }
-

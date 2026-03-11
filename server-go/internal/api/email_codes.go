@@ -83,6 +83,36 @@ func VerifyEmailCode(email, code string) (bool, error) {
 	return true, nil
 }
 
+// CheckEmailCode проверяет код без его удаления.
+// Это нужно для многошагового входа, где после email может запрашиваться cloud PIN.
+func CheckEmailCode(email, code string) (bool, error) {
+	key := normalizeEmail(email)
+	code = strings.TrimSpace(code)
+
+	emailCodeMutex.RLock()
+	stored, exists := emailCodeStorage[key]
+	if !exists {
+		emailCodeMutex.RUnlock()
+		return false, nil
+	}
+	expired := time.Now().After(stored.ExpiresAt)
+	storedCode := stored.Code
+	emailCodeMutex.RUnlock()
+
+	if expired {
+		emailCodeMutex.Lock()
+		delete(emailCodeStorage, key)
+		emailCodeMutex.Unlock()
+		return false, nil
+	}
+
+	return storedCode == code, nil
+}
+
+func ConsumeEmailCode(email string) {
+	DeleteEmailCode(email)
+}
+
 // DeleteEmailCode удаляет код (для очистки)
 func DeleteEmailCode(email string) {
 	emailCodeMutex.Lock()
