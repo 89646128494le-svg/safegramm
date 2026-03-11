@@ -112,10 +112,9 @@ func SendEmailCode(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Генерируем 6-значный код
-		code := generateRandomCode(6)
-		// Сохраняем код (действителен 10 минут)
-		StoreEmailCode(req.Email, code, 10*time.Minute)
+		// Генерируем 6-значный код. Если активный код уже есть, переиспользуем его,
+		// чтобы повторная отправка не ломала письмо, которое пользователь уже получил.
+		code := StoreOrReuseEmailCode(req.Email, generateRandomCode(6), 10*time.Minute)
 
 		// Отправляем email в фоне — ответ клиенту сразу
 		to, codeVal := req.Email, code
@@ -185,10 +184,9 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Генерируем 6-значный код
-		code := generateRandomCode(6)
-		// Сохраняем код (действителен 10 минут)
-		StoreEmailCode(*user.Email, code, 10*time.Minute)
+		// Генерируем 6-значный код. Если активный код уже есть, переиспользуем его,
+		// чтобы повторная отправка не инвалидировала уже полученное письмо.
+		code := StoreOrReuseEmailCode(*user.Email, generateRandomCode(6), 10*time.Minute)
 
 		// Отправляем email в фоне — ответ клиенту сразу (и в dev, и в production)
 		userEmail, codeVal := *user.Email, code

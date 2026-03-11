@@ -20,6 +20,30 @@ func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
+// StoreOrReuseEmailCode сохраняет новый код или переиспользует уже активный код для email.
+// Это защищает от ситуации, когда повторная отправка мгновенно инвалидирует письмо,
+// которое пользователь уже получил.
+func StoreOrReuseEmailCode(email, code string, expiresIn time.Duration) string {
+	emailCodeMutex.Lock()
+	defer emailCodeMutex.Unlock()
+
+	key := normalizeEmail(email)
+	now := time.Now()
+
+	if stored, exists := emailCodeStorage[key]; exists && now.Before(stored.ExpiresAt) && strings.TrimSpace(stored.Code) != "" {
+		stored.ExpiresAt = now.Add(expiresIn)
+		emailCodeStorage[key] = stored
+		return stored.Code
+	}
+
+	normalizedCode := strings.TrimSpace(code)
+	emailCodeStorage[key] = EmailCodeData{
+		Code:      normalizedCode,
+		ExpiresAt: now.Add(expiresIn),
+	}
+	return normalizedCode
+}
+
 // StoreEmailCode сохраняет код для email (email и code нормализуются)
 func StoreEmailCode(email, code string, expiresIn time.Duration) {
 	emailCodeMutex.Lock()
