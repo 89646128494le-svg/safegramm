@@ -19,7 +19,7 @@ export type LegalDocument = {
 function slugify(input: string) {
   return input
     .toLowerCase()
-    .replace(/[^a-zа-яё0-9]+/gi, '-')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
 }
@@ -32,27 +32,27 @@ function normalizeInlineBreaks(line: string) {
 }
 
 function isUpperHeadingFragment(line: string) {
-  return /^[A-ZА-ЯЁ0-9\s().&/-]+$/.test(line);
+  return /^[\p{Lu}0-9\s().&/-]+$/u.test(line);
 }
 
 function isSection(line: string) {
-  return /^\d+\.\s/.test(line);
+  return /^\d+\.\s/u.test(line);
 }
 
 function isSubsection(line: string) {
-  return /^\d+\.\d+\.\s/.test(line);
+  return /^\d+\.\d+\.\s/u.test(line);
 }
 
 function isBullet(line: string) {
-  return /^●\s/.test(line);
+  return /^[-•●]\s/u.test(line);
 }
 
 function isMeta(line: string) {
-  return /^Версия документа:|^Дата последнего обновления:/i.test(line);
+  return /^Версия документа:|^Дата последнего обновления:/iu.test(line);
 }
 
 function isPart(line: string) {
-  return /^ЧАСТЬ\s+[IVX]+\./i.test(line);
+  return /^ЧАСТЬ\s+[IVX]+\./iu.test(line);
 }
 
 function isNewBlock(line: string) {
@@ -138,7 +138,7 @@ export function parseLegalDocument(raw: string, fallbackTitle: string): LegalDoc
 
     if (isBullet(line)) {
       flushParagraph(paragraphBuffer, blocks);
-      let bullet = line.replace(/^●\s*/, '');
+      let bullet = line.replace(/^[-•●]\s*/u, '');
       if (next && !isNewBlock(next)) {
         bullet = `${bullet} ${next}`;
         i += 1;
@@ -152,7 +152,9 @@ export function parseLegalDocument(raw: string, fallbackTitle: string): LegalDoc
 
   flushParagraph(paragraphBuffer, blocks);
 
-  const introBlock = blocks.find((block) => block.type === 'paragraph') as Extract<LegalBlock, { type: 'paragraph' }> | undefined;
+  const introBlock = blocks.find(
+    (block): block is Extract<LegalBlock, { type: 'paragraph' }> => block.type === 'paragraph',
+  );
   intro = introBlock?.text;
 
   return {
