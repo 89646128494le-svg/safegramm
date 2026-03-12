@@ -110,6 +110,10 @@ func UnsubscribePush(db *gorm.DB) gin.HandlerFunc {
 // SendPushNotification отправляет push-уведомление пользователю
 // Это упрощенная версия - для полной реализации нужна библиотека web-push
 func SendPushNotification(db *gorm.DB, userID string, title string, body string, data map[string]interface{}) error {
+	if status, err := loadUserStatusByID(db, userID); err == nil && !canDeliverUserNotifications(status) {
+		return nil
+	}
+
 	// Получаем все подписки пользователя
 	var subscriptions []models.PushSubscription
 	if err := db.Where("user_id = ?", userID).Find(&subscriptions).Error; err != nil {
@@ -158,5 +162,4 @@ func TestPush(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Тестовое уведомление отправлено"})
 	}
 }
-
 

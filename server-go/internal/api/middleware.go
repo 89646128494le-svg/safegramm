@@ -63,14 +63,25 @@ func authMiddleware(cfg *config.Config, db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		var user models.User
+		if err := db.Select("id", "username", "status").First(&user, "id = ?", userID).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.Abort()
+			return
+		}
+		if isUserAccessBlockedStatus(user.Status) {
+			revokeUserSessions(db, userID)
+			rejectBlockedAccount(c, user.Status)
+			return
+		}
+
 		if time.Since(session.LastUsed) > 5*time.Minute {
 			db.Model(&session).Update("last_used", time.Now())
 		}
 
 		c.Set("userID", userID)
-		c.Set("username", claims["username"])
+		c.Set("username", user.Username)
 		c.Set("sessionId", session.ID)
 		c.Next()
 	}
 }
-

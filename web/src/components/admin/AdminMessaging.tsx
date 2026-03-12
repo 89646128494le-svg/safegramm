@@ -277,7 +277,7 @@ function MaintenanceForm() {
 
   const handleActivateMaintenance = async () => {
     if (!timestamp || !message) {
-      showToast('????????? ??? ????', 'warning');
+      showToast('Заполните дату и сообщение', 'warning');
       return;
     }
 
@@ -289,9 +289,9 @@ function MaintenanceForm() {
         sendEmail,
       });
 
-      showToast(`????? ??????????? ????? ???????????!${sendEmail ? ' ?????? ??????????.' : ''}`, 'success');
+      showToast(`Режим техработ успешно включён!${sendEmail ? ' Письма отправлены.' : ''}`, 'success');
       if (sendEmail && response.emailsSent) {
-        showToast(`?????????? ?????: ${response.emailsSent}`, 'info');
+        showToast(`Отправлено писем: ${response.emailsSent}`, 'info');
       }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('maintenance-updated'));
@@ -302,7 +302,7 @@ function MaintenanceForm() {
       setMessage('');
       setSendEmail(false);
     } catch (error: any) {
-      showToast('?????? ?????????: ' + error.message, 'error');
+      showToast('Ошибка включения: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -312,13 +312,13 @@ function MaintenanceForm() {
     setLoading(true);
     try {
       await api('/api/admin/maintenance/disable', 'POST');
-      showToast('????? ??????????? ????? ????????', 'success');
+      showToast('Режим техработ отключён', 'success');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('maintenance-updated'));
         window.dispatchEvent(new Event('system-banner-updated'));
       }
     } catch (error: any) {
-      showToast('?????? ??????????: ' + error.message, 'error');
+      showToast('Ошибка отключения: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }

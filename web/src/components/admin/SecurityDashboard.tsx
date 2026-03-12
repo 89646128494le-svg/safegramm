@@ -68,7 +68,7 @@ export default function SecurityDashboard() {
   if (loading) {
     return (
       <div style={{ padding: '48px', textAlign: 'center', minHeight: '420px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="empty">Загрузка Security Dashboard…</div>
+        <div className="empty">Загрузка панели безопасности…</div>
       </div>
     );
   }
@@ -77,10 +77,10 @@ export default function SecurityDashboard() {
     <div style={{ minHeight: '400px' }}>
       <h3 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
         <Shield size={28} />
-        Security Dashboard — Служба безопасности
+        Панель безопасности
       </h3>
       <p style={{ color: 'var(--subtle, #9ca3af)', marginBottom: '24px' }}>
-        Мониторинг подозрительных входов и сессий, алерты Safety AI, блокировка IP. Работа в паре с Safety AI.
+        Мониторинг подозрительных входов и сессий, сигналы Safety AI и управление защитными мерами.
       </p>
 
       {/* Алерты от ИИ */}

@@ -62,6 +62,14 @@ func fallbackUsernameFromEmail(address string) string {
 
 func queueEmailJob(label string, metadata map[string]interface{}, send func() error) {
 	go func() {
+		if metadata != nil {
+			if rawUserID, ok := metadata["userId"]; ok {
+				if userID, ok := rawUserID.(string); ok && !notificationAllowedForUser(userID) {
+					logger.Info("email job skipped for blocked account: "+label, metadata)
+					return
+				}
+			}
+		}
 		if err := send(); err != nil {
 			logger.Error("email job failed: "+label, err, metadata)
 			return

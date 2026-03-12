@@ -13,6 +13,7 @@ import (
 	"safegram-server/internal/email"
 	"safegram-server/internal/models"
 	"safegram-server/internal/redis"
+	sgws "safegram-server/internal/websocket"
 )
 
 func logAdminAudit(db *gorm.DB, adminID, targetID, action, details, ip, ua string) {
@@ -42,6 +43,13 @@ func logRoleBanHistory(db *gorm.DB, userID, adminID, action, oldVal, newVal, rea
 	db.Create(&entry)
 }
 
+func revokeRealtimeAccess(db *gorm.DB, wsHub *sgws.Hub, userID string) {
+	revokeUserSessions(db, userID)
+	if wsHub != nil {
+		wsHub.DisconnectUser(userID)
+	}
+}
+
 // getOnlineCount возвращает количество онлайн пользователей из Redis
 func getOnlineCount() int {
 	onlineUsers, err := redis.GetOnlineUsers()
@@ -51,41 +59,9 @@ func getOnlineCount() int {
 	return len(onlineUsers)
 }
 
-// RequireAdmin проверяет, что пользователь является админом
+// RequireAdmin проверяет, что пользователь относится к staff-ролям админ-панели.
 func RequireAdmin(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID, _ := c.Get("userID")
-		userIDStr, ok := userID.(string)
-		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
-			c.Abort()
-			return
-		}
-
-		var user models.User
-		if err := db.First(&user, "id = ?", userIDStr).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
-			c.Abort()
-			return
-		}
-
-		roles := user.ParseRoles()
-		isAdmin := false
-		for _, role := range roles {
-			if role == "admin" || role == "owner" || role == "sysadmin" {
-				isAdmin = true
-				break
-			}
-		}
-
-		if !isAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
-			c.Abort()
-			return
-		}
-
-		c.Next()
-	}
+	return RequireStaffRoles(db)
 }
 
 // GetAdminUsers возвращает список пользователей с фильтрами: plan, search, createdAfter, lastSeenAfter
@@ -138,7 +114,7 @@ func GetAdminUsers(db *gorm.DB) gin.HandlerFunc {
 }
 
 // BlockUser блокирует пользователя
-func BlockUser(db *gorm.DB) gin.HandlerFunc {
+func BlockUser(db *gorm.DB, wsHub *sgws.Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.Param("id")
 		currentUserID, _ := c.Get("userID")
@@ -169,6 +145,7 @@ func BlockUser(db *gorm.DB) gin.HandlerFunc {
 			"status": "banned",
 			"roles":  "[]",
 		})
+		revokeRealtimeAccess(db, wsHub, user.ID)
 		adminIDStr, _ := currentUserID.(string)
 		logRoleBanHistory(db, userID, adminIDStr, "ban", string(oldRoles), "[]", "")
 		logAdminAudit(db, adminIDStr, userID, "block_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
@@ -184,6 +161,80 @@ func BlockUser(db *gorm.DB) gin.HandlerFunc {
 			})
 		}
 
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// SuspendUser временно приостанавливает доступ к аккаунту без удаления ролей.
+func SuspendUser(db *gorm.DB, wsHub *sgws.Hub) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.Param("id")
+		currentUserID, _ := c.Get("userID")
+		if userID == currentUserID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot_suspend_self"})
+			return
+		}
+
+		var user models.User
+		if err := db.First(&user, "id = ?", userID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+		for _, role := range user.ParseRoles() {
+			if role == "owner" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "cannot_suspend_owner"})
+				return
+			}
+		}
+
+		if isUserSuspendedStatus(user.Status) {
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+			return
+		}
+		if isUserBannedStatus(user.Status) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user_banned"})
+			return
+		}
+
+		oldStatus := user.Status
+		if err := db.Model(&user).Update("status", userStatusSuspended).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		revokeRealtimeAccess(db, wsHub, user.ID)
+
+		adminIDStr, _ := currentUserID.(string)
+		logRoleBanHistory(db, userID, adminIDStr, "suspend", oldStatus, userStatusSuspended, "")
+		logAdminAudit(db, adminIDStr, userID, "suspend_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// UnsuspendUser снимает временную приостановку аккаунта.
+func UnsuspendUser(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.Param("id")
+
+		var user models.User
+		if err := db.First(&user, "id = ?", userID).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
+			return
+		}
+
+		if !isUserSuspendedStatus(user.Status) {
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+			return
+		}
+
+		if err := db.Model(&user).Update("status", "online").Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+			return
+		}
+		currentUserID, _ := c.Get("userID")
+		if aid, ok := currentUserID.(string); ok {
+			logRoleBanHistory(db, userID, aid, "unsuspend", userStatusSuspended, "online", "")
+			logAdminAudit(db, aid, userID, "unsuspend_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }

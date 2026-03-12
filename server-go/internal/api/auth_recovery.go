@@ -60,6 +60,10 @@ func ForgotPassword(db *gorm.DB) gin.HandlerFunc {
 			}
 			emailStr = *user.Email
 		}
+		if isUserAccessBlockedStatus(user.Status) {
+			c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Если восстановление для этого аккаунта доступно, письмо уже отправлено"})
+			return
+		}
 
 		ok, _ := email.IsEmailConfigured()
 		if !ok {
@@ -101,14 +105,16 @@ func ResetPassword(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		emailStr := strings.TrimSpace(req.Email)
-		if !VerifyAndConsumePasswordResetCode(emailStr, req.Code) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_code", "detail": "Неверный или истёкший код"})
-			return
-		}
-
 		var user models.User
 		if err := db.Where("LOWER(email) = LOWER(?)", emailStr).First(&user).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user_not_found"})
+			return
+		}
+		if rejectBlockedAccount(c, user.Status) {
+			return
+		}
+		if !VerifyAndConsumePasswordResetCode(emailStr, req.Code) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_code", "detail": "Неверный или истёкший код"})
 			return
 		}
 

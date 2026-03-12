@@ -14,16 +14,16 @@ type ChatPeerResolver func(chatID string, excludeUserID string) []string
 
 // Hub поддерживает множество активных подключений и рассылает сообщения
 type Hub struct {
-	clients       map[*Client]bool
-	clientsMu     sync.RWMutex
-	register      chan *Client
-	unregister    chan *Client
-	broadcast     chan []byte
-	sendToChat    chan *ChatMessage
-	voiceRooms    map[string]map[string]bool
-	voiceRoomsMu  sync.RWMutex
-	voiceAction   chan *VoiceRoomAction
-	quit          chan struct{}
+	clients          map[*Client]bool
+	clientsMu        sync.RWMutex
+	register         chan *Client
+	unregister       chan *Client
+	broadcast        chan []byte
+	sendToChat       chan *ChatMessage
+	voiceRooms       map[string]map[string]bool
+	voiceRoomsMu     sync.RWMutex
+	voiceAction      chan *VoiceRoomAction
+	quit             chan struct{}
 	chatPeerResolver ChatPeerResolver
 }
 
@@ -44,7 +44,7 @@ func NewHub() *Hub {
 	return &Hub{
 		clients:     make(map[*Client]bool),
 		register:    make(chan *Client),
-		unregister: make(chan *Client),
+		unregister:  make(chan *Client),
 		broadcast:   make(chan []byte, 256),
 		sendToChat:  make(chan *ChatMessage, 256),
 		voiceRooms:  make(map[string]map[string]bool),
@@ -93,6 +93,22 @@ func (h *Hub) Register(client *Client) {
 	h.register <- client
 }
 
+// DisconnectUser принудительно закрывает все активные соединения пользователя.
+func (h *Hub) DisconnectUser(userID string) {
+	h.clientsMu.RLock()
+	targets := make([]*Client, 0)
+	for client := range h.clients {
+		if client.userID == userID {
+			targets = append(targets, client)
+		}
+	}
+	h.clientsMu.RUnlock()
+	for _, client := range targets {
+		_ = client.conn.Close()
+		h.unregister <- client
+	}
+}
+
 // Run запускает hub
 func (h *Hub) Run() {
 	for {
@@ -104,10 +120,10 @@ func (h *Hub) Run() {
 			h.clients[client] = true
 			h.clientsMu.Unlock()
 			log.Printf("Client connected: %s", client.userID)
-			
+
 			// Устанавливаем пользователя как онлайн в Redis
 			redis.SetOnline(client.userID, 5*time.Minute)
-			
+
 			// Отправляем событие presence всем клиентам
 			onlineUsers, _ := redis.GetOnlineUsers()
 			presenceJSON, _ := json.Marshal(map[string]interface{}{
@@ -176,11 +192,11 @@ func (h *Hub) Run() {
 					}
 				}
 				h.clientsMu.RUnlock()
-				
+
 				// Если нет других подключений, устанавливаем офлайн
 				if !hasOtherConnections {
 					redis.SetOffline(client.userID)
-					
+
 					// Отправляем событие presence
 					onlineUsers, _ := redis.GetOnlineUsers()
 					presenceJSON, _ := json.Marshal(map[string]interface{}{
@@ -235,7 +251,7 @@ func (h *Hub) Run() {
 				}
 				participantsJSON, _ := json.Marshal(map[string]interface{}{
 					"type":    "voice:participants",
-					"chatId": act.ChatID,
+					"chatId":  act.ChatID,
 					"members": members,
 				})
 				act.Client.send <- participantsJSON

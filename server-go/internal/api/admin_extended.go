@@ -12,14 +12,15 @@ import (
 	"gorm.io/gorm"
 	"safegram-server/internal/email"
 	"safegram-server/internal/models"
+	sgws "safegram-server/internal/websocket"
 )
 
-// AdminUsersBulk — массовые действия: block, unblock, promote, demote, set_plan
-func AdminUsersBulk(db *gorm.DB) gin.HandlerFunc {
+// AdminUsersBulk — массовые действия: block, unblock, suspend, unsuspend, promote, demote, set_plan
+func AdminUsersBulk(db *gorm.DB, wsHub *sgws.Hub) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			UserIDs []string `json:"userIds"`
-			Action  string   `json:"action"` // block, unblock, promote, demote, set_plan
+			Action  string   `json:"action"` // block, unblock, suspend, unsuspend, promote, demote, set_plan
 			Value   string   `json:"value"`  // для set_plan: free|premium
 		}
 		if err := c.ShouldBindJSON(&req); err != nil || len(req.UserIDs) == 0 || req.Action == "" {
@@ -53,6 +54,7 @@ func AdminUsersBulk(db *gorm.DB) gin.HandlerFunc {
 			switch req.Action {
 			case "block":
 				db.Model(&user).Updates(map[string]interface{}{"status": "banned", "roles": "[]"})
+				revokeRealtimeAccess(db, wsHub, user.ID)
 				logRoleBanHistory(db, userID, adminIDStr, "ban", oldRoles, "[]", "bulk")
 				logAdminAudit(db, adminIDStr, userID, "block_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
 				recordSuspiciousActivity(db, user.ID, "account_locked", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{
@@ -72,6 +74,21 @@ func AdminUsersBulk(db *gorm.DB) gin.HandlerFunc {
 				logRoleBanHistory(db, userID, adminIDStr, "unban", oldStatus, "online", "bulk")
 				logAdminAudit(db, adminIDStr, userID, "unblock_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
 				done++
+			case "suspend":
+				if !isUserSuspendedStatus(user.Status) && !isUserBannedStatus(user.Status) {
+					db.Model(&user).Update("status", userStatusSuspended)
+					revokeRealtimeAccess(db, wsHub, user.ID)
+					logRoleBanHistory(db, userID, adminIDStr, "suspend", oldStatus, userStatusSuspended, "bulk")
+					logAdminAudit(db, adminIDStr, userID, "suspend_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
+					done++
+				}
+			case "unsuspend":
+				if isUserSuspendedStatus(user.Status) {
+					db.Model(&user).Update("status", "online")
+					logRoleBanHistory(db, userID, adminIDStr, "unsuspend", oldStatus, "online", "bulk")
+					logAdminAudit(db, adminIDStr, userID, "unsuspend_user", "", c.ClientIP(), c.GetHeader("User-Agent"))
+					done++
+				}
 			case "promote":
 				hasAdmin := false
 				for _, r := range roles {

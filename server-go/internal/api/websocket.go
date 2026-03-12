@@ -4,12 +4,14 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	gorillaWS "github.com/gorilla/websocket"
 	"gorm.io/gorm"
 	"safegram-server/internal/config"
+	"safegram-server/internal/models"
 	"safegram-server/internal/websocket"
 )
 
@@ -75,6 +77,25 @@ func handleWebSocket(hub *websocket.Hub, cfg *config.Config, db *gorm.DB) gin.Ha
 			return
 		}
 		username, _ := claims["username"].(string)
+		var session models.Session
+		if err := db.Where("token = ? AND user_id = ? AND is_active = ? AND expires_at > ?",
+			tokenString, userID, true, time.Now()).First(&session).Error; err != nil {
+			release()
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "session_invalid"})
+			return
+		}
+		var user models.User
+		if err := db.Select("id", "status").First(&user, "id = ?", userID).Error; err != nil {
+			release()
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		if isUserAccessBlockedStatus(user.Status) {
+			revokeUserSessions(db, userID)
+			release()
+			rejectBlockedAccount(c, user.Status)
+			return
+		}
 		if maintenance, err := getActiveMaintenance(db); err == nil && maintenance != nil && !isMaintenanceBypassUsername(strings.TrimSpace(username)) {
 			release()
 			c.JSON(http.StatusServiceUnavailable, gin.H{

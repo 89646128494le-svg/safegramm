@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"safegram-server/internal/email"
 	"safegram-server/internal/models"
@@ -11,15 +10,12 @@ import (
 	"gorm.io/gorm"
 )
 
-func checkAdminOrOwnerAccess(userRoles string) bool {
-	var roles []string
-	if err := json.Unmarshal([]byte(userRoles), &roles); err != nil {
-		return userRoles == "admin" || userRoles == "owner"
-	}
-	for _, role := range roles {
-		if role == "admin" || role == "owner" { return true }
-	}
-	return false
+func canSendAdminEmails(user models.User) bool {
+	return userHasAnyNormalizedRole(user, RoleReleaseManager, RoleBillingManager, RoleSysadmin, RoleOwner)
+}
+
+func canManageMaintenance(user models.User) bool {
+	return userHasAnyNormalizedRole(user, RoleReleaseManager, RoleSysadmin, RoleOwner)
 }
 
 func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
@@ -30,8 +26,8 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
 		}
-		if !checkAdminOrOwnerAccess(user.Roles) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Admin or owner role required"})
+		if !canSendAdminEmails(user) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
 		var req struct {
@@ -53,6 +49,10 @@ func SendPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Target user has no email address"})
 			return
 		}
+		if !canDeliverUserNotifications(targetUser.Status) {
+			c.JSON(http.StatusOK, gin.H{"success": true, "message": "Аккаунт не принимает уведомления"})
+			return
+		}
 		to, uname, msg, atext, alink := *targetUser.Email, targetUser.Username, req.Message, req.ActionText, req.ActionLink
 		go func() { _ = email.SendAdminMessage(to, uname, msg, atext, alink) }()
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Email sent successfully", "to": to})
@@ -67,8 +67,8 @@ func BroadcastPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
 		}
-		if !checkAdminOrOwnerAccess(user.Roles) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Admin or owner role required"})
+		if !canSendAdminEmails(user) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
 		var req struct {
@@ -87,7 +87,7 @@ func BroadcastPersonalEmail(db *gorm.DB) gin.HandlerFunc {
 			if err := db.Where("id = ?", targetUserID).First(&targetUser).Error; err != nil {
 				continue
 			}
-			if targetUser.Email == nil {
+			if targetUser.Email == nil || !canDeliverUserNotifications(targetUser.Status) {
 				continue
 			}
 			to, uname := *targetUser.Email, targetUser.Username
@@ -105,8 +105,8 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
 		}
-		if !checkAdminOrOwnerAccess(user.Roles) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Admin or owner role required"})
+		if !canManageMaintenance(user) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
 		var req struct {
@@ -137,7 +137,7 @@ func SendMaintenanceNotificationToAll(db *gorm.DB) gin.HandlerFunc {
 			}
 			ts, msg := req.Timestamp, req.Message
 			for _, targetUser := range users {
-				if targetUser.Email == nil {
+				if targetUser.Email == nil || !canDeliverUserNotifications(targetUser.Status) {
 					continue
 				}
 				to, uname := *targetUser.Email, targetUser.Username
@@ -169,8 +169,8 @@ func DisableMaintenance(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
 		}
-		if !checkAdminOrOwnerAccess(user.Roles) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Admin or owner role required"})
+		if !canManageMaintenance(user) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
 		if err := db.Model(&models.MaintenanceMode{}).Where("is_active = ?", true).Update("is_active", false).Error; err != nil {

@@ -226,14 +226,20 @@ func SetUserRole(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		rolesJSON, _ := json.Marshal(req.Roles)
+		normalizedRoles, err := normalizeAssignableRoles(req.Roles)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": strings.TrimPrefix(err.Error(), "invalid_role:")})
+			return
+		}
+
+		rolesJSON, _ := json.Marshal(normalizedRoles)
 		user.Roles = string(rolesJSON)
 		if err := db.Save(&user).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"ok": true, "roles": req.Roles})
+		c.JSON(http.StatusOK, gin.H{"ok": true, "roles": normalizedRoles})
 	}
 }
 

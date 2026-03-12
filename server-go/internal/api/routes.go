@@ -11,6 +11,8 @@ import (
 
 // SetupRoutes настраивает все маршруты API
 func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *config.Config) {
+	setNotificationDB(db)
+
 	wsHub.SetChatPeerResolver(func(chatID, excludeUserID string) []string {
 		var members []models.ChatMember
 		if err := db.Where("chat_id = ? AND user_id != ? AND deleted_at IS NULL", chatID, excludeUserID).Find(&members).Error; err != nil {
@@ -258,93 +260,112 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.GET("/chats/:id/group-key/version", GetGroupKeyVersion(db))
 
 	// Админ панель (2FA: статус и верификация — без проверки кода; остальные роуты требуют код)
-	protected.GET("/admin/2fa-status", RequireAdmin(db), GetAdmin2FAStatus(db))
-	protected.POST("/admin/verify-2fa", RequireAdmin(db), PostAdminVerify2FA(db, cfg))
-	protected.GET("/admin/users", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminUsers(db))
-	protected.POST("/admin/users/:id/block", RequireAdmin(db), RequireAdmin2FA(db, cfg), BlockUser(db))
-	protected.POST("/admin/users/:id/unblock", RequireAdmin(db), RequireAdmin2FA(db, cfg), UnblockUser(db))
-	protected.POST("/admin/users/:id/promote", RequireAdmin(db), RequireAdmin2FA(db, cfg), PromoteUser(db))
-	protected.POST("/admin/users/:id/demote", RequireAdmin(db), RequireAdmin2FA(db, cfg), DemoteUser(db))
-	protected.GET("/admin/stats", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminStats(db))
-	protected.GET("/admin/analytics", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminAnalytics(db))
-	protected.GET("/admin/bans", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminBans(db))
-	protected.POST("/admin/bans", RequireAdmin(db), RequireAdmin2FA(db, cfg), CreateAdminBan(db))
-	protected.DELETE("/admin/bans/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), DeleteAdminBan(db))
-	protected.GET("/admin/maintenance", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminMaintenance(db))
-	protected.GET("/admin/system/health", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetSystemHealth(db))
-	protected.GET("/admin/feedback", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminFeedback(db))
-	protected.PATCH("/admin/feedback/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminFeedback(db))
-	protected.GET("/admin/recruit", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminRecruit(db))
-	protected.POST("/admin/recruit/:id/approve", RequireAdmin(db), RequireAdmin2FA(db, cfg), ApproveRecruitApplication(db))
-	protected.POST("/admin/recruit/:id/decline", RequireAdmin(db), RequireAdmin2FA(db, cfg), DeclineRecruitApplication(db))
-	protected.GET("/admin/reports", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminReports(db))
-	protected.GET("/admin/modqueue", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminModQueue(db))
-	protected.POST("/admin/approve/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), ApproveModItem(db))
+	allStaffRoles := []string{RoleSupportL1, RoleSupportLead, RoleModerator, RoleRiskAnalyst, RoleSafety, RoleBillingManager, RoleReleaseManager, RoleSysadmin, RoleOwner}
+	supportRoles := []string{RoleSupportL1, RoleSupportLead, RoleSysadmin, RoleOwner}
+	supportLeadRoles := []string{RoleSupportLead, RoleSysadmin, RoleOwner}
+	moderationRoles := []string{RoleModerator, RoleSafety, RoleSysadmin, RoleOwner}
+	riskRoles := []string{RoleRiskAnalyst, RoleSafety, RoleSysadmin, RoleOwner}
+	safetyRoles := []string{RoleSafety, RoleSysadmin, RoleOwner}
+	billingRoles := []string{RoleBillingManager, RoleSysadmin, RoleOwner}
+	releaseRoles := []string{RoleReleaseManager, RoleSysadmin, RoleOwner}
+	opsRoles := []string{RoleBillingManager, RoleReleaseManager, RoleSysadmin, RoleOwner}
+	sysadminRoles := []string{RoleSysadmin, RoleOwner}
+	adminEntry := func(roles []string, handler gin.HandlerFunc) []gin.HandlerFunc {
+		return []gin.HandlerFunc{RequireStaffRoles(db, roles...), handler}
+	}
+	adminProtected := func(roles []string, handler gin.HandlerFunc) []gin.HandlerFunc {
+		return []gin.HandlerFunc{RequireStaffRoles(db, roles...), RequireAdmin2FA(db, cfg), handler}
+	}
+
+	protected.GET("/admin/2fa-status", adminEntry(allStaffRoles, GetAdmin2FAStatus(db))...)
+	protected.POST("/admin/verify-2fa", adminEntry(allStaffRoles, PostAdminVerify2FA(db, cfg))...)
+	protected.GET("/admin/users", adminProtected(sysadminRoles, GetAdminUsers(db))...)
+	protected.POST("/admin/users/:id/block", adminProtected(sysadminRoles, BlockUser(db, wsHub))...)
+	protected.POST("/admin/users/:id/unblock", adminProtected(sysadminRoles, UnblockUser(db))...)
+	protected.POST("/admin/users/:id/suspend", adminProtected(sysadminRoles, SuspendUser(db, wsHub))...)
+	protected.POST("/admin/users/:id/unsuspend", adminProtected(sysadminRoles, UnsuspendUser(db))...)
+	protected.POST("/admin/users/:id/promote", adminProtected(sysadminRoles, PromoteUser(db))...)
+	protected.POST("/admin/users/:id/demote", adminProtected(sysadminRoles, DemoteUser(db))...)
+	protected.GET("/admin/stats", adminProtected(sysadminRoles, GetAdminStats(db))...)
+	protected.GET("/admin/analytics", adminProtected(sysadminRoles, GetAdminAnalytics(db))...)
+	protected.GET("/admin/bans", adminProtected(moderationRoles, GetAdminBans(db))...)
+	protected.POST("/admin/bans", adminProtected(moderationRoles, CreateAdminBan(db))...)
+	protected.DELETE("/admin/bans/:id", adminProtected(moderationRoles, DeleteAdminBan(db))...)
+	protected.GET("/admin/maintenance", adminProtected(releaseRoles, GetAdminMaintenance(db))...)
+	protected.GET("/admin/system/health", adminProtected(releaseRoles, GetSystemHealth(db))...)
+	protected.GET("/admin/feedback", adminProtected(supportRoles, GetAdminFeedback(db))...)
+	protected.PATCH("/admin/feedback/:id", adminProtected(supportRoles, PatchAdminFeedback(db))...)
+	protected.GET("/admin/recruit", adminProtected(supportLeadRoles, GetAdminRecruit(db))...)
+	protected.POST("/admin/recruit/:id/approve", adminProtected(supportLeadRoles, ApproveRecruitApplication(db))...)
+	protected.POST("/admin/recruit/:id/decline", adminProtected(supportLeadRoles, DeclineRecruitApplication(db))...)
+	protected.GET("/admin/reports", adminProtected(moderationRoles, GetAdminReports(db))...)
+	protected.GET("/admin/modqueue", adminProtected(moderationRoles, GetAdminModQueue(db))...)
+	protected.POST("/admin/approve/:id", adminProtected(moderationRoles, ApproveModItem(db))...)
 
 	// Админ: пользователи (расширенные)
-	protected.POST("/admin/users/bulk", RequireAdmin(db), RequireAdmin2FA(db, cfg), AdminUsersBulk(db))
-	protected.GET("/admin/users/export", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminUsersExport(db))
-	protected.GET("/admin/users/:id/history", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminUserHistory(db))
-	protected.GET("/admin/users/:id/recovery-codes", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminUserRecoveryCodes(db))
-	protected.POST("/admin/users/:id/recovery-codes/reset", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminUserRecoveryCodesReset(db))
-	protected.GET("/admin/users/:id/sessions", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminUserSessions(db))
-	protected.DELETE("/admin/users/:id/sessions/:sid", RequireAdmin(db), RequireAdmin2FA(db, cfg), DeleteAdminUserSession(db))
+	protected.POST("/admin/users/bulk", adminProtected(sysadminRoles, AdminUsersBulk(db, wsHub))...)
+	protected.GET("/admin/users/export", adminProtected(sysadminRoles, GetAdminUsersExport(db))...)
+	protected.GET("/admin/users/:id/history", adminProtected(sysadminRoles, GetAdminUserHistory(db))...)
+	protected.GET("/admin/users/:id/recovery-codes", adminProtected(sysadminRoles, GetAdminUserRecoveryCodes(db))...)
+	protected.POST("/admin/users/:id/recovery-codes/reset", adminProtected(sysadminRoles, PostAdminUserRecoveryCodesReset(db))...)
+	protected.GET("/admin/users/:id/sessions", adminProtected(sysadminRoles, GetAdminUserSessions(db))...)
+	protected.DELETE("/admin/users/:id/sessions/:sid", adminProtected(sysadminRoles, DeleteAdminUserSession(db))...)
 
 	// Админ: модерация контента
-	protected.GET("/admin/messages/search", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminMessagesSearch(db))
-	protected.GET("/admin/media-queue", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminMediaQueue(db))
-	protected.POST("/admin/messages/:id/moderation", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminMessageModeration(db))
-	protected.GET("/admin/sticker-packs", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminStickerPacks(db))
-	protected.POST("/admin/sticker-packs/:id/approve", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminStickerPackApprove(db))
-	protected.POST("/admin/sticker-packs/:id/reject", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminStickerPackReject(db))
-	protected.GET("/admin/banned-words", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminBannedWords(db))
-	protected.POST("/admin/banned-words", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminBannedWord(db))
-	protected.PATCH("/admin/banned-words/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminBannedWord(db))
-	protected.DELETE("/admin/banned-words/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), DeleteAdminBannedWord(db))
+	protected.GET("/admin/messages/search", adminProtected(moderationRoles, GetAdminMessagesSearch(db))...)
+	protected.GET("/admin/media-queue", adminProtected(moderationRoles, GetAdminMediaQueue(db))...)
+	protected.POST("/admin/messages/:id/moderation", adminProtected(moderationRoles, PostAdminMessageModeration(db))...)
+	protected.GET("/admin/sticker-packs", adminProtected(moderationRoles, GetAdminStickerPacks(db))...)
+	protected.POST("/admin/sticker-packs/:id/approve", adminProtected(moderationRoles, PostAdminStickerPackApprove(db))...)
+	protected.POST("/admin/sticker-packs/:id/reject", adminProtected(moderationRoles, PostAdminStickerPackReject(db))...)
+	protected.GET("/admin/banned-words", adminProtected(moderationRoles, GetAdminBannedWords(db))...)
+	protected.POST("/admin/banned-words", adminProtected(moderationRoles, PostAdminBannedWord(db))...)
+	protected.PATCH("/admin/banned-words/:id", adminProtected(moderationRoles, PatchAdminBannedWord(db))...)
+	protected.DELETE("/admin/banned-words/:id", adminProtected(moderationRoles, DeleteAdminBannedWord(db))...)
 
 	// Админ: безопасность
-	protected.GET("/admin/suspicious-activity", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminSuspiciousActivity(db))
-	protected.GET("/admin/security-policy", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminSecurityPolicy(db))
-	protected.PATCH("/admin/security-policy", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminSecurityPolicy(db))
-	protected.GET("/admin/safety-alerts", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminSafetyAlerts(db))
-	protected.POST("/admin/safety-alerts/:id/resolve", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminSafetyAlertResolve(db))
+	protected.GET("/admin/suspicious-activity", adminProtected(riskRoles, GetAdminSuspiciousActivity(db))...)
+	protected.GET("/admin/security-policy", adminProtected(safetyRoles, GetAdminSecurityPolicy(db))...)
+	protected.PATCH("/admin/security-policy", adminProtected(safetyRoles, PatchAdminSecurityPolicy(db))...)
+	protected.GET("/admin/safety-alerts", adminProtected(safetyRoles, GetAdminSafetyAlerts(db))...)
+	protected.POST("/admin/safety-alerts/:id/resolve", adminProtected(safetyRoles, PostAdminSafetyAlertResolve(db))...)
 
 	// Админ: коммуникация
-	protected.GET("/admin/email-templates", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminEmailTemplates(db))
-	protected.POST("/admin/email-templates", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminEmailTemplate(db))
-	protected.PATCH("/admin/email-templates/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminEmailTemplate(db))
-	protected.GET("/admin/scheduled-broadcasts", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminScheduledBroadcasts(db))
-	protected.POST("/admin/scheduled-broadcasts", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminScheduledBroadcast(db))
-	protected.GET("/admin/domain-list", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminDomainList(db))
-	protected.POST("/admin/domain-list", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminDomainList(db))
-	protected.DELETE("/admin/domain-list/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), DeleteAdminDomainList(db))
-	protected.GET("/admin/invite-links", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminInviteLinks(db))
-	protected.POST("/admin/invite-links", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminInviteLink(db))
-	protected.PATCH("/admin/invite-links/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminInviteLink(db))
-	protected.DELETE("/admin/invite-links/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), DeleteAdminInviteLink(db))
+	protected.GET("/admin/email-templates", adminProtected(releaseRoles, GetAdminEmailTemplates(db))...)
+	protected.POST("/admin/email-templates", adminProtected(releaseRoles, PostAdminEmailTemplate(db))...)
+	protected.PATCH("/admin/email-templates/:id", adminProtected(releaseRoles, PatchAdminEmailTemplate(db))...)
+	protected.GET("/admin/scheduled-broadcasts", adminProtected(releaseRoles, GetAdminScheduledBroadcasts(db))...)
+	protected.POST("/admin/scheduled-broadcasts", adminProtected(releaseRoles, PostAdminScheduledBroadcast(db))...)
+	protected.GET("/admin/domain-list", adminProtected(releaseRoles, GetAdminDomainList(db))...)
+	protected.POST("/admin/domain-list", adminProtected(releaseRoles, PostAdminDomainList(db))...)
+	protected.DELETE("/admin/domain-list/:id", adminProtected(releaseRoles, DeleteAdminDomainList(db))...)
+	protected.GET("/admin/invite-links", adminProtected(releaseRoles, GetAdminInviteLinks(db))...)
+	protected.POST("/admin/invite-links", adminProtected(releaseRoles, PostAdminInviteLink(db))...)
+	protected.PATCH("/admin/invite-links/:id", adminProtected(releaseRoles, PatchAdminInviteLink(db))...)
+	protected.DELETE("/admin/invite-links/:id", adminProtected(releaseRoles, DeleteAdminInviteLink(db))...)
 
 	// Админ: система и интеграции
-	protected.GET("/admin/bots", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminBots(db))
-	protected.POST("/admin/bots/:id/disable", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminBotDisable(db))
-	protected.POST("/admin/bots/:id/enable", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminBotEnable(db))
-	protected.GET("/admin/limits", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminLimits(db))
-	protected.PATCH("/admin/limits", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminLimits(db))
-	protected.GET("/admin/feature-flags", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminFeatureFlags(db))
-	protected.POST("/admin/feature-flags", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminFeatureFlag(db))
-	protected.PATCH("/admin/feature-flags/:id", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminFeatureFlag(db))
+	protected.GET("/admin/bots", adminProtected(sysadminRoles, GetAdminBots(db))...)
+	protected.POST("/admin/bots/:id/disable", adminProtected(sysadminRoles, PostAdminBotDisable(db))...)
+	protected.POST("/admin/bots/:id/enable", adminProtected(sysadminRoles, PostAdminBotEnable(db))...)
+	protected.GET("/admin/limits", adminProtected(sysadminRoles, GetAdminLimits(db))...)
+	protected.PATCH("/admin/limits", adminProtected(sysadminRoles, PatchAdminLimits(db))...)
+	protected.GET("/admin/feature-flags", adminProtected(sysadminRoles, GetAdminFeatureFlags(db))...)
+	protected.POST("/admin/feature-flags", adminProtected(sysadminRoles, PostAdminFeatureFlag(db))...)
+	protected.PATCH("/admin/feature-flags/:id", adminProtected(sysadminRoles, PatchAdminFeatureFlag(db))...)
 
 	// Админ: аналитика и отчёты
-	protected.GET("/admin/analytics/premium-dashboard", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminPremiumDashboard(db))
-	protected.GET("/admin/analytics/chat-stats", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminChatStats(db))
-	protected.GET("/admin/analytics/reports-summary", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminReportsSummary(db))
-	protected.GET("/admin/analytics/reports-export", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminReportsExport(db))
-	protected.GET("/admin/analytics/audit-export", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminAuditExport(db))
+	protected.GET("/admin/analytics/premium-dashboard", adminProtected(billingRoles, GetAdminPremiumDashboard(db))...)
+	protected.GET("/admin/analytics/chat-stats", adminProtected(sysadminRoles, GetAdminChatStats(db))...)
+	protected.GET("/admin/analytics/reports-summary", adminProtected(sysadminRoles, GetAdminReportsSummary(db))...)
+	protected.GET("/admin/analytics/reports-export", adminProtected(sysadminRoles, GetAdminReportsExport(db))...)
+	protected.GET("/admin/analytics/audit-export", adminProtected(sysadminRoles, GetAdminAuditExport(db))...)
 
 	// Админ: удобство (аудит, поиск, настройки)
-	protected.GET("/admin/audit-log", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminAuditLog(db))
-	protected.GET("/admin/search", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminGlobalSearch(db))
-	protected.GET("/admin/me/preferences", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminPreferences(db))
-	protected.PATCH("/admin/me/preferences", RequireAdmin(db), RequireAdmin2FA(db, cfg), PatchAdminPreferences(db))
+	protected.GET("/admin/audit-log", adminProtected(sysadminRoles, GetAdminAuditLog(db))...)
+	protected.GET("/admin/search", adminProtected(sysadminRoles, GetAdminGlobalSearch(db))...)
+	protected.GET("/admin/me/preferences", adminProtected(allStaffRoles, GetAdminPreferences(db))...)
+	protected.PATCH("/admin/me/preferences", adminProtected(allStaffRoles, PatchAdminPreferences(db))...)
 
 	// Панель владельца (только для owner)
 	protected.GET("/owner/dashboard", RequireOwner(db), GetOwnerDashboard(db))
@@ -370,37 +391,37 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/premium/subscribe/:id", RequireOwner(db), SubscribePremium(db)) // Активировать премиум (только владелец)
 
 	// Управление сервисами (для admin и owner)
-	protected.GET("/admin/services", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetServicesStatus(db))
-	protected.POST("/admin/services/:id/start", RequireAdmin(db), RequireAdmin2FA(db, cfg), StartService(db))
-	protected.POST("/admin/services/:id/stop", RequireAdmin(db), RequireAdmin2FA(db, cfg), StopService(db))
-	protected.POST("/admin/services/:id/restart", RequireAdmin(db), RequireAdmin2FA(db, cfg), RestartService(db))
+	protected.GET("/admin/services", adminProtected(releaseRoles, GetServicesStatus(db))...)
+	protected.POST("/admin/services/:id/start", adminProtected(releaseRoles, StartService(db))...)
+	protected.POST("/admin/services/:id/stop", adminProtected(releaseRoles, StopService(db))...)
+	protected.POST("/admin/services/:id/restart", adminProtected(releaseRoles, RestartService(db))...)
 
 	// Персональные сообщения от администрации и Security Dashboard
-	protected.POST("/admin/send-email", RequireAdmin(db), RequireAdmin2FA(db, cfg), SendPersonalEmail(db))
-	protected.POST("/admin/email/unread-digest", RequireAdmin(db), RequireAdmin2FA(db, cfg), SendUnreadDigestBatch(db))
-	protected.POST("/admin/email/premium-expiring", RequireAdmin(db), RequireAdmin2FA(db, cfg), SendPremiumExpiringBatch(db))
-	protected.GET("/admin/anonymous-chat/:targetUserId", RequireAdmin(db), RequireAdmin2FA(db, cfg), AdminGetAnonymousChat(db))
-	protected.POST("/admin/anonymous-dm", RequireAdmin(db), RequireAdmin2FA(db, cfg), AdminSendAnonymousDM(db, wsHub))
-	protected.GET("/admin/security/sessions", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminSecuritySessions(db))
-	protected.GET("/admin/security/alerts", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminSecurityAlerts(db))
-	protected.GET("/admin/security/blocked-ips", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetAdminSecurityBlockedIPs(db))
-	protected.POST("/admin/security/block-ip", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminSecurityBlockIP(db))
-	protected.POST("/admin/security/unblock-ip", RequireAdmin(db), RequireAdmin2FA(db, cfg), PostAdminSecurityUnblockIP(db))
-	protected.POST("/admin/broadcast-email", RequireAdmin(db), RequireAdmin2FA(db, cfg), BroadcastPersonalEmail(db))
+	protected.POST("/admin/send-email", adminProtected(opsRoles, SendPersonalEmail(db))...)
+	protected.POST("/admin/email/unread-digest", adminProtected(releaseRoles, SendUnreadDigestBatch(db))...)
+	protected.POST("/admin/email/premium-expiring", adminProtected(billingRoles, SendPremiumExpiringBatch(db))...)
+	protected.GET("/admin/anonymous-chat/:targetUserId", adminProtected(supportRoles, AdminGetAnonymousChat(db))...)
+	protected.POST("/admin/anonymous-dm", adminProtected(supportRoles, AdminSendAnonymousDM(db, wsHub))...)
+	protected.GET("/admin/security/sessions", adminProtected(riskRoles, GetAdminSecuritySessions(db))...)
+	protected.GET("/admin/security/alerts", adminProtected(riskRoles, GetAdminSecurityAlerts(db))...)
+	protected.GET("/admin/security/blocked-ips", adminProtected(riskRoles, GetAdminSecurityBlockedIPs(db))...)
+	protected.POST("/admin/security/block-ip", adminProtected(riskRoles, PostAdminSecurityBlockIP(db))...)
+	protected.POST("/admin/security/unblock-ip", adminProtected(riskRoles, PostAdminSecurityUnblockIP(db))...)
+	protected.POST("/admin/broadcast-email", adminProtected(opsRoles, BroadcastPersonalEmail(db))...)
 
 	// Технические работы
-	protected.POST("/admin/maintenance", RequireAdmin(db), RequireAdmin2FA(db, cfg), SendMaintenanceNotificationToAll(db))
-	protected.POST("/admin/maintenance/disable", RequireAdmin(db), RequireAdmin2FA(db, cfg), DisableMaintenance(db))
+	protected.POST("/admin/maintenance", adminProtected(releaseRoles, SendMaintenanceNotificationToAll(db))...)
+	protected.POST("/admin/maintenance/disable", adminProtected(releaseRoles, DisableMaintenance(db))...)
 
 	// Обратная связь и заявки на премиум (отправка — авторизованный пользователь)
 	protected.GET("/feedback", GetMyFeedback(db))
 	protected.POST("/feedback", SubmitFeedback(db))
 
 	// Webhook настройки (для admin и owner)
-	protected.GET("/admin/webhook", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetWebhookSettings)
-	protected.POST("/admin/webhook", RequireAdmin(db), RequireAdmin2FA(db, cfg), UpdateWebhookSettings(db, cfg))
-	protected.POST("/admin/webhook/test", RequireAdmin(db), RequireAdmin2FA(db, cfg), TestWebhook)
-	protected.GET("/admin/logs", RequireAdmin(db), RequireAdmin2FA(db, cfg), GetLogs)
+	protected.GET("/admin/webhook", adminProtected(sysadminRoles, GetWebhookSettings)...)
+	protected.POST("/admin/webhook", adminProtected(sysadminRoles, UpdateWebhookSettings(db, cfg))...)
+	protected.POST("/admin/webhook/test", adminProtected(sysadminRoles, TestWebhook)...)
+	protected.GET("/admin/logs", adminProtected(safetyRoles, GetLogs)...)
 
 	// WebRTC
 	protected.GET("/rtc/ice", GetICEServers())

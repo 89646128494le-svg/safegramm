@@ -224,6 +224,10 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
+		if rejectBlockedAccount(c, user.Status) {
+			return
+		}
+
 		// Если у пользователя есть email, требуется подтверждение
 		if user.Email != nil && *user.Email != "" {
 			// Если код email не предоставлен — 200 с флагом, чтобы не было 401 в сети
@@ -283,15 +287,6 @@ func Login(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 					return
 				}
 			}
-		}
-
-		// Блокируем вход для забаненных аккаунтов
-		if strings.EqualFold(strings.TrimSpace(user.Status), "banned") {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":   "user_banned",
-				"message": "Ваш аккаунт заблокирован администрацией.",
-			})
-			return
 		}
 
 		// Генерация JWT токена

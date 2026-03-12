@@ -101,14 +101,10 @@ func CreateMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			return
 		}
 
-		// Проверяем, не забанен ли пользователь глобально (статус banned)
+		// Проверяем, не ограничен ли пользователь глобально.
 		var user models.User
 		if err := db.Select("status").First(&user, "id = ?", userIDStr).Error; err == nil {
-			if strings.EqualFold(strings.TrimSpace(user.Status), "banned") {
-				c.JSON(http.StatusForbidden, gin.H{
-					"error":   "user_banned",
-					"message": "Ваш аккаунт заблокирован администрацией.",
-				})
+			if rejectBlockedAccount(c, user.Status) {
 				return
 			}
 		}

@@ -47,6 +47,10 @@ func LoginExtended(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
+		if rejectBlockedAccount(c, user.Status) {
+			return
+		}
+
 		// Проверяем PIN, если установлен
 		if user.PinHash != "" {
 			pin := strings.TrimSpace(req.PIN)
@@ -182,6 +186,9 @@ func SendLoginEmailCode(db *gorm.DB) gin.HandlerFunc {
 		}
 		if err := query.First(&user).Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user_not_found"})
+			return
+		}
+		if rejectBlockedAccount(c, user.Status) {
 			return
 		}
 

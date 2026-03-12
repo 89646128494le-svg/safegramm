@@ -457,6 +457,9 @@ func sendPremiumReceiptEmails(user *models.User, plan premiumPlanDefinition) {
 	if user == nil || user.Email == nil || strings.TrimSpace(*user.Email) == "" {
 		return
 	}
+	if !notificationAllowedForUser(user.ID) {
+		return
+	}
 	emailAddress := strings.TrimSpace(*user.Email)
 	username := user.Username
 	receiptTime := time.Now().Format("02.01.2006 15:04 MST")

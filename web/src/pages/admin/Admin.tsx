@@ -23,14 +23,14 @@ import SecurityPolicyTab from '../../components/admin/SecurityPolicyTab';
 import CommunicationTab from '../../components/admin/CommunicationTab';
 import SystemIntegrationsTab from '../../components/admin/SystemIntegrationsTab';
 import AnalyticsReportsTab from '../../components/admin/AnalyticsReportsTab';
-import { ADMIN_TABS, ADMIN_SECTIONS, canAccessAdminTab, getRoleLabel, getRoleLevel, isSystemOwner, canBlockUser, canDemoteUser, canPromoteTo, canDeleteUser, ROLE_LEVEL } from '../../utils/roles';
+import { ADMIN_TABS, ADMIN_SECTIONS, canAccessAdminTab, getRoleLabel, getRoleLevel, getDefaultAdminTab, getPrimaryRoleName, getEffectiveRoles, getStaffRoleOptions, isSystemOwner, canBlockUser, canDemoteUser, canPromoteTo, canDeleteUser, ROLE_LEVEL } from '../../utils/roles';
 
 type AdminTabId = typeof ADMIN_TABS[number]['id'];
 
 type AdminGate = 'loading' | 'no_2fa' | 'need_code' | 'verified';
 
 export default function Admin() {
-  const [tab, setTab] = useState<AdminTabId>('users');
+  const [tab, setTab] = useState<AdminTabId>('sysadmin_users');
   const [user, setUser] = useState<any>(null);
   const [adminGate, setAdminGate] = useState<AdminGate>('loading');
   const [twoFACode, setTwoFACode] = useState('');
@@ -40,6 +40,11 @@ export default function Admin() {
     try {
       const u = await api('/api/users/me');
       setUser(u);
+      const defaultTab = getDefaultAdminTab(u);
+      if (defaultTab && canAccessAdminTab(u, defaultTab)) {
+        setTab(defaultTab);
+        return;
+      }
       const firstTab = ADMIN_TABS.find((t) => canAccessAdminTab(u, t.id));
       if (firstTab) setTab(firstTab.id);
     } catch (e) {
@@ -63,7 +68,7 @@ export default function Admin() {
           setAdminGate('no_2fa');
           return;
         }
-        return api('/api/admin/users').then(() => setAdminGate('verified'));
+        return api('/api/admin/me/preferences').then(() => setAdminGate('verified'));
       })
       .catch((e: any) => {
         if (e?.status === 404) {
@@ -112,11 +117,38 @@ export default function Admin() {
   }, [visibleTabs, tab]);
 
   const roleLabel = user ? getRoleLabel(user) : '';
-  const roleBadgeStyle = roleLabel === 'Владелец'
-    ? { background: 'linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.2))', border: '1px solid rgba(251,191,36,0.4)', color: '#fcd34d' }
-    : roleLabel === 'Тех. Админ'
-    ? { background: 'linear-gradient(135deg, rgba(124,108,255,0.2), rgba(61,216,255,0.15))', border: '1px solid rgba(124,108,255,0.35)', color: '#a5b4fc' }
-    : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--subtle, #9ca3af)' };
+  const primaryRole = user ? getPrimaryRoleName(user) : 'user';
+  const roleBadgeStyle =
+    primaryRole === 'owner'
+      ? { background: 'linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.2))', border: '1px solid rgba(251,191,36,0.4)', color: '#fcd34d' }
+      : primaryRole === 'sysadmin'
+      ? { background: 'linear-gradient(135deg, rgba(124,108,255,0.2), rgba(61,216,255,0.15))', border: '1px solid rgba(124,108,255,0.35)', color: '#a5b4fc' }
+      : primaryRole === 'release_manager'
+      ? { background: 'rgba(96,165,250,0.14)', border: '1px solid rgba(96,165,250,0.3)', color: '#93c5fd' }
+      : primaryRole === 'billing_manager'
+      ? { background: 'rgba(52,211,153,0.14)', border: '1px solid rgba(52,211,153,0.3)', color: '#6ee7b7' }
+      : primaryRole === 'safety'
+      ? { background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.3)', color: '#93c5fd' }
+      : primaryRole === 'risk_analyst'
+      ? { background: 'rgba(56,189,248,0.14)', border: '1px solid rgba(56,189,248,0.3)', color: '#7dd3fc' }
+      : primaryRole === 'moderator'
+      ? { background: 'rgba(34,197,94,0.14)', border: '1px solid rgba(34,197,94,0.3)', color: '#86efac' }
+      : primaryRole === 'support_lead'
+      ? { background: 'rgba(192,132,252,0.14)', border: '1px solid rgba(192,132,252,0.3)', color: '#d8b4fe' }
+      : primaryRole === 'support_l1'
+      ? { background: 'rgba(139,92,246,0.14)', border: '1px solid rgba(139,92,246,0.3)', color: '#c4b5fd' }
+      : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--subtle, #9ca3af)' };
+  const roleBadgeIcon =
+    primaryRole === 'owner' ? '👑' :
+    primaryRole === 'sysadmin' ? '⚙️' :
+    primaryRole === 'release_manager' ? '🚀' :
+    primaryRole === 'billing_manager' ? '💳' :
+    primaryRole === 'safety' ? '🧿' :
+    primaryRole === 'risk_analyst' ? '📡' :
+    primaryRole === 'moderator' ? '🛡️' :
+    primaryRole === 'support_lead' ? '🎧' :
+    primaryRole === 'support_l1' ? '🎫' :
+    '';
 
   if (adminGate === 'loading') {
     return (
@@ -224,11 +256,7 @@ export default function Admin() {
           </h1>
           {roleLabel && (
             <span style={{ fontSize: '12px', fontWeight: '500', padding: '4px 10px', borderRadius: '20px', ...roleBadgeStyle }}>
-              {roleLabel === 'Владелец' && '👑 Владелец'}
-              {roleLabel === 'Тех. Админ' && '⚙️ Тех. Админ'}
-              {roleLabel === 'Служба безопасности' && '🛡️ Безопасность'}
-              {roleLabel === 'Модератор' && '🛡️ Модератор'}
-              {roleLabel === 'Техподдержка' && '🎫 Поддержка'}
+              {roleBadgeIcon ? `${roleBadgeIcon} ${roleLabel}` : roleLabel}
             </span>
           )}
         </div>
@@ -312,35 +340,297 @@ export default function Admin() {
           minHeight: '60vh',
           boxShadow: '0 8px 32px rgba(0,0,0,0.24)',
         }}>
+
+      {tab==='support_l1_overview' && canAccessAdminTab(user, 'support_l1_overview') && (
+        <RoleOverviewPanel
+          title="Техподдержка L1"
+          subtitle="Первая линия поддержки. Здесь обрабатывают новые тикеты, уточняют детали проблемы и контролируют SLA по ответам."
+          accent="linear-gradient(135deg, rgba(139,92,246,0.18), rgba(59,130,246,0.14))"
+          bullets={[
+            'Принимайте новые обращения и доводите диагностику до понятного статуса.',
+            'Собирайте важные детали бага и не теряйте контекст переписки.',
+            'Контролируйте скорость ответа и качество коммуникации.',
+          ]}
+          actions={[
+            { label: 'Открыть тикеты', tab: 'support_l1_tickets' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
+      {tab==='support_l1_tickets' && canAccessAdminTab(user, 'support_l1_tickets') && <SupportTab />}
+
+      {tab==='support_lead_overview' && canAccessAdminTab(user, 'support_lead_overview') && (
+        <RoleOverviewPanel
+          title="Лидер поддержки"
+          subtitle="Координация работы поддержки. Следит за качеством сервиса, приоритетами тикетов и стабильностью работы команды."
+          accent="linear-gradient(135deg, rgba(192,132,252,0.18), rgba(96,165,250,0.14))"
+          bullets={[
+            'Разбирайте эскалации от L1 и доводите запросы до решения.',
+            'Держите в порядке фидбек и воронку набора тестеров.',
+            'Следите за качеством ответов и скоростью реакции команды.',
+          ]}
+          actions={[
+            { label: 'Открыть фидбек', tab: 'support_lead_feedback' },
+            { label: 'Открыть набор тестеров', tab: 'support_lead_recruit' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
+      {tab==='support_lead_feedback' && canAccessAdminTab(user, 'support_lead_feedback') && <FeedbackTab />}
+      {tab==='support_lead_recruit' && canAccessAdminTab(user, 'support_lead_recruit') && <RecruitTab />}
+
+      {tab==='moderator_overview' && canAccessAdminTab(user, 'moderator_overview') && (
+        <RoleOverviewPanel
+          title="Модерация"
+          subtitle="Работа с жалобами, нарушениями правил, блокировками и очередью инцидентов."
+          accent="linear-gradient(135deg, rgba(34,197,94,0.2), rgba(16,185,129,0.14))"
+          bullets={[
+            'Проверяйте жалобы пользователей и решения автоматических систем.',
+            'Разбирайте репорты и применяйте санкции по правилам.',
+            'Следите за качеством модерации и прозрачностью действий.',
+          ]}
+          actions={[
+            { label: 'Открыть очередь', tab: 'moderator_queue' },
+            { label: 'Открыть жалобы', tab: 'moderator_reports' },
+            { label: 'Открыть баны и муты', tab: 'moderator_bans' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
+      {tab==='moderator_queue' && canAccessAdminTab(user, 'moderator_queue') && <ModTab />}
+      {tab==='moderator_reports' && canAccessAdminTab(user, 'moderator_reports') && <ReportsTab />}
+      {tab==='moderator_bans' && canAccessAdminTab(user, 'moderator_bans') && <BanMuteManager />}
+      {tab==='moderator_content' && canAccessAdminTab(user, 'moderator_content') && <ContentModerationTab />}
+
+      {tab==='risk_overview' && canAccessAdminTab(user, 'risk_overview') && (
+        <RoleOverviewPanel
+          title="Риск и аналитика"
+          subtitle="Мониторинг подозрительной активности, попыток обхода ограничений и поведенческих аномалий."
+          accent="linear-gradient(135deg, rgba(56,189,248,0.2), rgba(14,165,233,0.14))"
+          bullets={[
+            'Отслеживайте входы по устройствам, IP и сессиям.',
+            'Ищите повторяющиеся паттерны злоупотреблений и аномалий.',
+            'Готовьте сигналы для службы безопасности и модерации.',
+          ]}
+          actions={[
+            { label: 'Открыть риск-панель', tab: 'risk_dashboard' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
+      {tab==='risk_dashboard' && canAccessAdminTab(user, 'risk_dashboard') && <SecurityDashboard />}
+
+      {tab==='safety_overview' && canAccessAdminTab(user, 'safety_overview') && (
+        <RoleOverviewPanel
+          title="Безопасность"
+          subtitle="Политики безопасности, high-risk события и контроль критических настроек."
+          accent="linear-gradient(135deg, rgba(59,130,246,0.2), rgba(56,189,248,0.14))"
+          bullets={[
+            'Отслеживайте критичные события и оповещения по входам и сессиям.',
+            'Проверяйте соблюдение политик и состояние защитных механизмов.',
+            'Смотрите логи и историю действий по важным инцидентам.',
+          ]}
+          actions={[
+            { label: 'Открыть панель', tab: 'safety_dashboard' },
+            { label: 'Открыть политики', tab: 'safety_policy' },
+            { label: 'Открыть логи', tab: 'safety_logs' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
+      {tab==='safety_dashboard' && canAccessAdminTab(user, 'safety_dashboard') && <SecurityDashboard />}
+      {tab==='safety_policy' && canAccessAdminTab(user, 'safety_policy') && <SecurityPolicyTab />}
+      {tab==='safety_logs' && canAccessAdminTab(user, 'safety_logs') && <AdminLogs />}
+
+      {tab==='billing_overview' && canAccessAdminTab(user, 'billing_overview') && (
+        <RoleOverviewPanel
+          title="Биллинг"
+          subtitle="Premium-заявки, оплаты, выручка и контроль коммерческих операций."
+          accent="linear-gradient(135deg, rgba(52,211,153,0.18), rgba(16,185,129,0.14))"
+          bullets={[
+            'Обрабатывайте заявки на Premium и проверяйте спорные случаи.',
+            'Следите за платежами и revenue-аналитикой.',
+            'Контролируйте корректность выдачи доступа и тарифов.',
+          ]}
+          actions={[
+            { label: 'Открыть Premium', tab: 'billing_apps' },
+            { label: 'Открыть аналитику', tab: 'billing_analytics' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
+      {tab==='billing_apps' && canAccessAdminTab(user, 'billing_apps') && <PremiumApplicationsTab />}
+      {tab==='billing_analytics' && canAccessAdminTab(user, 'billing_analytics') && <AnalyticsReportsTab />}
+
+      {tab==='release_overview' && canAccessAdminTab(user, 'release_overview') && (
+        <RoleOverviewPanel
+          title="Релизы и коммуникации"
+          subtitle="Рассылки, системные баннеры, письма, техработы и внешние коммуникации."
+          accent="linear-gradient(135deg, rgba(96,165,250,0.18), rgba(124,108,255,0.14))"
+          bullets={[
+            'Управляйте анонсами, баннерами и системными письмами.',
+            'Готовьте тексты и публикации для важных изменений продукта.',
+            'Поддерживайте понятную коммуникацию во время техработ.',
+          ]}
+          actions={[
+            { label: 'Открыть письма и баннеры', tab: 'release_messages' },
+            { label: 'Открыть техработы', tab: 'release_maintenance' },
+            { label: 'Открыть коммуникации', tab: 'release_communication' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
+      {tab==='release_messages' && canAccessAdminTab(user, 'release_messages') && (
+        <div style={{ display: 'grid', gap: '24px' }}>
+          <AdminMessaging />
+          <BroadcastManager />
+        </div>
+      )}
+      {tab==='release_maintenance' && canAccessAdminTab(user, 'release_maintenance') && <MaintenanceManager />}
+      {tab==='release_communication' && canAccessAdminTab(user, 'release_communication') && <CommunicationTab />}
+
+      {tab==='sysadmin_overview' && canAccessAdminTab(user, 'sysadmin_overview') && (
+        <RoleOverviewPanel
+          title="Тех. администрирование"
+          subtitle="Инфраструктура, пользователи, сервисы, мониторинг, логи и техническая стабильность платформы."
+          accent="linear-gradient(135deg, rgba(124,108,255,0.2), rgba(61,216,255,0.14))"
+          bullets={[
+            'Управляйте доступами, сервисами и критичными настройками системы.',
+            'Следите за состоянием уведомлений, вебхуков и интеграций.',
+            'Работайте с мониторингом, аудитом и живыми логами.',
+          ]}
+          actions={[
+            { label: 'Открыть пользователей', tab: 'sysadmin_users' },
+            { label: 'Открыть сервисы', tab: 'sysadmin_services' },
+            { label: 'Открыть мониторинг', tab: 'sysadmin_monitor' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
+      {tab==='sysadmin_users' && canAccessAdminTab(user, 'sysadmin_users') && <UsersTab currentUser={user} />}
+      {tab==='sysadmin_support_chat' && canAccessAdminTab(user, 'sysadmin_support_chat') && (
+        <div style={{ display: 'grid', gap: '24px' }}>
+          <SupportTab />
+          <AnonymousDMTab />
+        </div>
+      )}
+      {tab==='sysadmin_services' && canAccessAdminTab(user, 'sysadmin_services') && <ServiceManager />}
+      {tab==='sysadmin_monitor' && canAccessAdminTab(user, 'sysadmin_monitor') && <SystemMonitor />}
+      {tab==='sysadmin_webhook' && canAccessAdminTab(user, 'sysadmin_webhook') && <WebhookManager />}
+      {tab==='sysadmin_push' && canAccessAdminTab(user, 'sysadmin_push') && <PushTab />}
+      {tab==='sysadmin_audit' && canAccessAdminTab(user, 'sysadmin_audit') && <AuditLogTab />}
+      {tab==='sysadmin_integrations' && canAccessAdminTab(user, 'sysadmin_integrations') && <SystemIntegrationsTab />}
+      {tab==='sysadmin_analytics' && canAccessAdminTab(user, 'sysadmin_analytics') && (
+        <div style={{ display: 'grid', gap: '24px' }}>
+          <StatsTab />
+          <AnalyticsDashboard />
+        </div>
+      )}
+
+      {tab==='owner_overview' && canAccessAdminTab(user, 'owner_overview') && (
+        <RoleOverviewPanel
+          title="Владелец"
+          subtitle="Максимальный доступ ко всей системе: sovereign-панель, критические сервисы, база данных и глобальные настройки."
+          accent="linear-gradient(135deg, rgba(251,191,36,0.18), rgba(245,158,11,0.14))"
+          bullets={[
+            'Смотрите все административные зоны без ограничений по ролям.',
+            'Управляйте критическими настройками, ролями и коммерцией.',
+            'Используйте опасные операции только при полной уверенности в последствиях.',
+          ]}
+          actions={[
+            { label: 'Открыть sovereign-панель', tab: 'sovereign' },
+            { label: 'Открыть сервисы', tab: 'services' },
+            { label: 'Открыть базу данных', tab: 'database' },
+          ]}
+          onOpenTab={setTab}
+        />
+      )}
       {tab==='sovereign' && canAccessAdminTab(user, 'sovereign') && <OwnerTab currentUser={user} />}
-      {tab==='users' && canAccessAdminTab(user, 'users') && <UsersTab currentUser={user} />}
-      {tab==='analytics' && canAccessAdminTab(user, 'analytics') && <AnalyticsDashboard />}
-      {tab==='bans' && canAccessAdminTab(user, 'bans') && <BanMuteManager />}
-      {tab==='maintenance' && canAccessAdminTab(user, 'maintenance') && <MaintenanceManager />}
-      {tab==='broadcast' && canAccessAdminTab(user, 'broadcast') && <BroadcastManager />}
-      {tab==='messages' && canAccessAdminTab(user, 'messages') && <AdminMessaging />}
-      {tab==='anonymous_dm' && canAccessAdminTab(user, 'anonymous_dm') && <AnonymousDMTab />}
-      {tab==='logs' && canAccessAdminTab(user, 'logs') && <AdminLogs />}
-      {tab==='monitor' && canAccessAdminTab(user, 'monitor') && <SystemMonitor />}
-      {tab==='security' && canAccessAdminTab(user, 'security') && <SecurityDashboard />}
-      {tab==='mod' && canAccessAdminTab(user, 'mod') && <ModTab/>}
-      {tab==='reports' && canAccessAdminTab(user, 'reports') && <ReportsTab/>}
-      {tab==='feedback' && canAccessAdminTab(user, 'feedback') && <FeedbackTab/>}
-      {tab==='recruit' && canAccessAdminTab(user, 'recruit') && <RecruitTab/>}
-      {tab==='premium_apps' && canAccessAdminTab(user, 'premium_apps') && <PremiumApplicationsTab />}
-      {tab==='push' && canAccessAdminTab(user, 'push') && <PushTab/>}
-      {tab==='services' && canAccessAdminTab(user, 'services') && <ServiceManager />}
+      {tab==='services' && canAccessAdminTab(user, 'services') && (
+        <div style={{ display: 'grid', gap: '24px' }}>
+          <ServiceManager />
+          <SystemMonitor />
+          <LiveLogs />
+        </div>
+      )}
       {tab==='database' && canAccessAdminTab(user, 'database') && <DatabaseTab currentUser={user} />}
-      {tab==='webhook' && canAccessAdminTab(user, 'webhook') && <WebhookManager />}
-      {tab==='support' && canAccessAdminTab(user, 'support') && <SupportTab />}
-      {tab==='audit' && canAccessAdminTab(user, 'audit') && <AuditLogTab />}
-      {tab==='content_moderation' && canAccessAdminTab(user, 'content_moderation') && <ContentModerationTab />}
-      {tab==='security_policy' && canAccessAdminTab(user, 'security_policy') && <SecurityPolicyTab />}
-      {tab==='communication' && canAccessAdminTab(user, 'communication') && <CommunicationTab />}
-      {tab==='system_integrations' && canAccessAdminTab(user, 'system_integrations') && <SystemIntegrationsTab />}
-      {tab==='analytics_reports' && canAccessAdminTab(user, 'analytics_reports') && <AnalyticsReportsTab />}
         </div>
       </main>
+    </div>
+  );
+}
+
+function RoleOverviewPanel({
+  title,
+  subtitle,
+  accent,
+  bullets,
+  actions,
+  onOpenTab,
+}: {
+  title: string;
+  subtitle: string;
+  accent: string;
+  bullets: string[];
+  actions: Array<{ label: string; tab: AdminTabId }>;
+  onOpenTab: (tab: AdminTabId) => void;
+}) {
+  return (
+    <div style={{ display: 'grid', gap: '20px' }}>
+      <section
+        style={{
+          padding: '24px',
+          borderRadius: '20px',
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: accent,
+          boxShadow: '0 18px 48px rgba(0,0,0,0.22)',
+        }}
+      >
+        <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.72)', marginBottom: '10px' }}>
+          Рабочая зона роли
+        </div>
+        <h2 style={{ margin: 0, fontSize: '28px', lineHeight: 1.15, color: '#fff' }}>{title}</h2>
+        <p style={{ margin: '14px 0 0', maxWidth: '760px', color: 'rgba(255,255,255,0.84)', lineHeight: 1.6 }}>{subtitle}</p>
+      </section>
+
+      <section style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(280px, 0.7fr)' }}>
+        <div style={{ padding: '22px', borderRadius: '18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '14px', color: 'var(--fg)' }}>Зона ответственности</h3>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {bullets.map((bullet) => (
+              <div key={bullet} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: 'var(--fg)' }}>
+                <span style={{ color: 'var(--accent, #7c6cff)', marginTop: '2px' }}>●</span>
+                <span style={{ color: 'var(--subtle, #cbd5e1)', lineHeight: 1.55 }}>{bullet}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ padding: '22px', borderRadius: '18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '14px', color: 'var(--fg)' }}>Быстрые действия</h3>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {actions.map((action) => (
+              <button
+                key={action.tab}
+                type="button"
+                onClick={() => onOpenTab(action.tab)}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'var(--fg)',
+                  fontWeight: 600,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                }}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -350,291 +640,116 @@ function OwnerTab({ currentUser }: { currentUser: any }) {
   const [settings, setSettings] = useState<any>(null);
   const [revenue, setRevenue] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const level = getRoleLevel(currentUser);
-  const isOwner = level >= ROLE_LEVEL.owner && isSystemOwner(currentUser);
-  const isSysadmin = level >= ROLE_LEVEL.sysadmin && !isOwner;
-  const isGuardian = level >= ROLE_LEVEL.safety && level < ROLE_LEVEL.sysadmin;
-  const isSupport = level >= ROLE_LEVEL.support && level < ROLE_LEVEL.moderator;
 
-  useEffect(() => {
-    if (isOwner || isSysadmin) {
-      loadDashboard();
-      loadSettings();
-      if (isOwner) {
-        api('/api/owner/revenue').then(setRevenue).catch(() => {});
-      }
-    } else {
-      setLoading(false);
-    }
-  }, [isOwner, isSysadmin]);
-
-  const loadDashboard = async () => {
+  const loadAll = async () => {
+    setLoading(true);
     try {
-      const data = await api('/api/owner/dashboard');
-      setDashboard(data);
+      const [dashboardData, settingsData, revenueData] = await Promise.all([
+        api('/api/owner/dashboard'),
+        api('/api/owner/settings'),
+        api('/api/owner/revenue').catch(() => null),
+      ]);
+      setDashboard(dashboardData);
+      setSettings(settingsData);
+      setRevenue(revenueData);
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'Не удалось загрузить данные.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить панель владельца.'), 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadSettings = async () => {
-    try {
-      const data = await api('/api/owner/settings');
-      setSettings(data);
-    } catch (e) {
-      console.error('Failed to load settings:', e);
+  useEffect(() => {
+    if (getRoleLevel(currentUser) < ROLE_LEVEL.owner) {
+      setLoading(false);
+      return;
     }
-  };
+    loadAll();
+  }, [currentUser]);
 
-  const saveSettings = async (updates: any) => {
+  const saveSettings = async (updates: Record<string, any>) => {
     try {
-      const updated = { ...settings, ...updates };
-      await api('/api/owner/settings', 'POST', updated);
-      setSettings(updated);
+      const next = { ...(settings || {}), ...updates };
+      await api('/api/owner/settings', 'POST', next);
+      setSettings(next);
       showToast('Настройки сохранены', 'success');
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'Не удалось сохранить.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось сохранить настройки.'), 'error');
     }
   };
 
-  const setPlan = async (userId: string, plan: 'free' | 'premium') => {
-    try {
-      await api(`/api/owner/users/${userId}/plan`, 'POST', { plan });
-      showToast(`План пользователя изменен на ${plan}`, 'success');
-      loadDashboard();
-    } catch (e: any) {
-      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
-    }
-  };
-
-  const deleteUser = async (userId: string) => {
-    if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return;
-    try {
-      await api(`/api/owner/users/${userId}`, 'DELETE');
-      showToast('Пользователь удален', 'success');
-      loadDashboard();
-    } catch (e: any) {
-      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
-    }
-  };
-
-  if (loading && (isOwner || isSysadmin)) {
-    return <div>Загрузка...</div>;
+  if (getRoleLevel(currentUser) < ROLE_LEVEL.owner) {
+    return <div className="empty" style={{ padding: '48px' }}>Недостаточно прав доступа.</div>;
   }
 
-  // Support: только тикеты и базовое инфо
-  if (isSupport) {
-    return (
-      <div>
-        <h3 style={{ marginBottom: '16px' }}>🎫 Поддержка — тикеты и пользователи</h3>
-        <p style={{ color: 'var(--subtle)', marginBottom: '16px' }}>Просмотр тикетов и базовая информация о пользователях.</p>
-        <SupportTab />
-      </div>
-    );
+  if (loading) {
+    return <div className="empty" style={{ padding: '48px' }}>Загрузка...</div>;
   }
 
-  // Guardian: мониторинг трафика и бан по IP
-  if (isGuardian) {
-    return (
-      <div>
-        <h3 style={{ marginBottom: '16px' }}>🛡️ Security — мониторинг и бан по IP</h3>
-        <p style={{ color: 'var(--subtle)', marginBottom: '16px' }}>Мониторинг трафика и блокировка подозрительных IP.</p>
-        <SecurityDashboard />
-      </div>
-    );
-  }
-
-  // Owner (Lev) или Sysadmin: полная панель (кнопки остановки сервера / БД только у Lev — бэкенд проверяет)
   return (
-    <div>
-      <h3 style={{ marginBottom: '16px' }}>👑 Sovereign Control Panel</h3>
-      
-      {/* Статистика */}
-      {dashboard && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px',
-          marginBottom: '24px'
-        }}>
-          <div style={{
-            padding: '16px',
-            background: 'var(--bg-card)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)'
-          }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{dashboard.users?.total || 0}</div>
-            <div style={{ color: 'var(--text-secondary)' }}>Всего пользователей</div>
-          </div>
-          <div style={{
-            padding: '16px',
-            background: 'var(--bg-card)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)'
-          }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f59e0b' }}>
-              {dashboard.users?.premium || 0}
-            </div>
-            <div style={{ color: 'var(--text-secondary)' }}>Premium</div>
-          </div>
-          <div style={{
-            padding: '16px',
-            background: 'var(--bg-card)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)'
-          }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{dashboard.chats?.total || 0}</div>
-            <div style={{ color: 'var(--text-secondary)' }}>Чатов</div>
-          </div>
-          <div style={{
-            padding: '16px',
-            background: 'var(--bg-card)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)'
-          }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{dashboard.messages?.total || 0}</div>
-            <div style={{ color: 'var(--text-secondary)' }}>Сообщений</div>
-          </div>
+    <div style={{ display: 'grid', gap: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0, color: 'var(--fg)' }}>Панель владельца</h3>
+          <p style={{ margin: '6px 0 0', color: 'var(--subtle)' }}>Критичные метрики проекта и глобальные настройки в одном месте.</p>
         </div>
-      )}
+        <button onClick={loadAll} style={{ padding: '10px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}>
+          Обновить
+        </button>
+      </div>
 
-      {/* Доходы и конверсия (только owner) */}
-      {isOwner && revenue && (
-        <div style={{ marginBottom: '24px' }}>
-          <h4 style={{ marginBottom: '12px' }}>💰 Доходы и конверсия</h4>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: '12px',
-            marginBottom: '12px'
-          }}>
-            <div style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-              <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{(revenue.totalRevenue / 100).toFixed(0)} ₽</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Всего доход</div>
-            </div>
-            <div style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-              <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{(revenue.last30DaysRevenue / 100).toFixed(0)} ₽</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>За 30 дней</div>
-            </div>
-            <div style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-              <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{Number(revenue.conversionRate || 0).toFixed(1)}%</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Free → Premium</div>
-            </div>
-          </div>
-          {revenue.recentPayments?.length > 0 && (
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Последние платежи: {revenue.recentPayments.slice(0, 5).map((p: any) => `${p.provider} ${(p.amount / 100).toFixed(0)} ${p.currency}`).join(', ')}
-            </div>
-          )}
-        </div>
-      )}
+      <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <MetricCard label="Пользователи" value={dashboard?.users?.total || 0} />
+        <MetricCard label="Premium" value={dashboard?.users?.premium || 0} highlight="#fbbf24" />
+        <MetricCard label="Чаты" value={dashboard?.chats?.total || 0} />
+        <MetricCard label="Сообщения" value={dashboard?.messages?.total || 0} />
+        <MetricCard label="Серверы" value={dashboard?.servers?.total || 0} />
+        {revenue && <MetricCard label="Выручка, 30 дней" value={`${Math.round((revenue.last30DaysRevenue || 0) / 100)} ₽`} highlight="#6ee7b7" />}
+      </div>
 
-      {/* Управление пользователями */}
-      <div style={{ marginBottom: '24px' }}>
-        <h4 style={{ marginBottom: '12px' }}>Управление пользователями</h4>
-        {dashboard?.users?.recent && (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
-          }}>
-            {dashboard.users.recent.map((u: any) => (
-              <div key={u.id} style={{
-                padding: '12px',
-                background: 'var(--bg-card)',
-                borderRadius: '8px',
-                border: '1px solid var(--border-color)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
+      <div style={{ display: 'grid', gap: '24px', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(280px, 0.8fr)' }}>
+        <section style={{ padding: '20px', borderRadius: '18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <h4 style={{ marginTop: 0, color: 'var(--fg)' }}>Новые пользователи</h4>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {(dashboard?.users?.recent || []).map((item: any) => (
+              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)' }}>
                 <div>
-                  <div style={{ fontWeight: '600' }}>{u.username}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    {u.email} • План: {u.plan}
-                  </div>
+                  <div style={{ color: 'var(--fg)', fontWeight: 600 }}>{item.username}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--subtle)' }}>{item.email || 'Без email'}</div>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <select
-                    value={u.plan}
-                    onChange={(e) => setPlan(u.id, e.target.value as 'free' | 'premium')}
-                    style={{
-                      padding: '4px 8px',
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '4px',
-                      color: 'var(--text-primary)'
-                    }}
-                  >
-                    <option value="free">Free</option>
-                    <option value="premium">Premium</option>
-                  </select>
-                  <button
-                    onClick={() => deleteUser(u.id)}
-                    style={{
-                      padding: '4px 8px',
-                      background: 'var(--danger)',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: 'white',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Удалить
-                  </button>
-                </div>
+                <div style={{ fontSize: '12px', color: 'var(--subtle)', textTransform: 'uppercase' }}>{item.plan || 'free'}</div>
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </section>
 
-      {/* Системные настройки */}
-      {settings && (
-        <div>
-          <h4 style={{ marginBottom: '12px' }}>Системные настройки</h4>
-          <div style={{
-            padding: '16px',
-            background: 'var(--bg-card)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)'
-          }}>
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  checked={settings.maintenance || false}
-                  onChange={(e) => {
-                    saveSettings({ maintenance: e.target.checked });
-                  }}
-                />
-                <span>Режим обслуживания</span>
-              </label>
-            </div>
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  checked={settings.registrationEnabled !== false}
-                  onChange={(e) => {
-                    saveSettings({ registrationEnabled: e.target.checked });
-                  }}
-                />
-                <span>Регистрация включена</span>
-              </label>
-            </div>
-            <div style={{ marginTop: '12px' }}>
-              <div>Максимальный размер файла: {settings.maxFileSize ? (settings.maxFileSize / 1024 / 1024) + ' MB' : 'N/A'}</div>
-              <div>Цена Premium: {settings.premiumPrice || 0} ₽/мес</div>
+        <section style={{ padding: '20px', borderRadius: '18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <h4 style={{ marginTop: 0, color: 'var(--fg)' }}>Системные настройки</h4>
+          <div style={{ display: 'grid', gap: '14px' }}>
+            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', color: 'var(--fg)' }}>
+              <span>Техработы</span>
+              <input type="checkbox" checked={Boolean(settings?.maintenance)} onChange={(e) => saveSettings({ maintenance: e.target.checked })} />
+            </label>
+            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', color: 'var(--fg)' }}>
+              <span>Регистрация открыта</span>
+              <input type="checkbox" checked={settings?.registrationEnabled !== false} onChange={(e) => saveSettings({ registrationEnabled: e.target.checked })} />
+            </label>
+            <div style={{ color: 'var(--subtle)', fontSize: '13px', lineHeight: 1.5 }}>
+              <div>Максимальный размер файла: {settings?.maxFileSize ? `${Math.round(settings.maxFileSize / 1024 / 1024)} MB` : 'не задан'}</div>
+              <div>Базовая цена Premium: {settings?.premiumPrice || 0} ₽</div>
             </div>
           </div>
-        </div>
-      )}
+        </section>
+      </div>
+    </div>
+  );
+}
 
-      {/* Live Logs — только для Lev (Intelligence Center) */}
-      {isOwner && <LiveLogs />}
+function MetricCard({ label, value, highlight }: { label: string; value: string | number; highlight?: string }) {
+  return (
+    <div style={{ padding: '18px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div style={{ fontSize: '28px', fontWeight: 700, color: highlight || 'var(--fg)' }}>{value}</div>
+      <div style={{ marginTop: '8px', color: 'var(--subtle)', fontSize: '13px' }}>{label}</div>
     </div>
   );
 }
@@ -646,6 +761,7 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; username: string } | null>(null);
   const [clearDbConfirm, setClearDbConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const roleOptions = getStaffRoleOptions().map((option) => option.value).join(', ');
 
   const load = async () => {
     try {
@@ -653,24 +769,30 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
       const data = await api('/api/admin/users');
       setList(data.users || []);
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'Не удалось загрузить данные.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось загрузить пользователей.'), 'error');
       setList([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const getEdit = (u: any) => editing[u.id] ?? {
     plan: u.plan || 'free',
-    roles: Array.isArray(u.roles) ? u.roles.join(', ') : (u.roles || '')
+    roles: Array.isArray(u.roles) ? u.roles.join(', ') : (u.roles || ''),
   };
 
   const setEdit = (id: string, field: 'plan' | 'roles', value: string) => {
-    setEditing(prev => {
-      const cur = prev[id] ?? { plan: (list.find(x => x.id === id)?.plan || 'free'), roles: Array.isArray(list.find(x => x.id === id)?.roles) ? list.find(x => x.id === id)!.roles.join(', ') : (list.find(x => x.id === id)?.roles || '') };
-      return { ...prev, [id]: { ...cur, [field]: value } };
+    setEditing((prev) => {
+      const original = list.find((item) => item.id === id);
+      const current = prev[id] ?? {
+        plan: original?.plan || 'free',
+        roles: Array.isArray(original?.roles) ? original.roles.join(', ') : (original?.roles || ''),
+      };
+      return { ...prev, [id]: { ...current, [field]: value } };
     });
   };
 
@@ -680,11 +802,15 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
       await api(`/api/owner/users/${u.id}/plan`, 'POST', { plan: ed.plan });
       const roles = ed.roles.split(',').map((r: string) => r.trim()).filter(Boolean);
       await api(`/api/owner/users/${u.id}/role`, 'POST', { roles: roles.length ? roles : ['user'] });
-      showToast('Сохранено', 'success');
-      setEditing(prev => { const next = { ...prev }; delete next[u.id]; return next; });
+      showToast('Изменения сохранены', 'success');
+      setEditing((prev) => {
+        const next = { ...prev };
+        delete next[u.id];
+        return next;
+      });
       load();
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось сохранить изменения.'), 'error');
     }
   };
 
@@ -692,11 +818,11 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
     if (!deleteConfirm) return;
     try {
       await api(`/api/owner/users/${deleteConfirm.id}`, 'DELETE');
-      showToast('Аккаунт удалён', 'success');
+      showToast('Пользователь удалён', 'success');
       setDeleteConfirm(null);
       load();
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось удалить пользователя.'), 'error');
     }
   };
 
@@ -704,40 +830,54 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
     setClearing(true);
     try {
       await api('/api/owner/database/clear', 'POST');
-      showToast('База данных очищена. Вы будете разлогинены.', 'success');
+      showToast('База данных очищена. Текущая сессия будет завершена.', 'success');
       setClearDbConfirm(false);
       localStorage.removeItem('token');
       window.location.href = '/';
     } catch (e: any) {
-      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
+      showToast(getErrorMessage(e, 'Не удалось очистить базу данных.'), 'error');
     } finally {
       setClearing(false);
     }
   };
 
-  if (loading) return <div>Загрузка...</div>;
+  if (loading) return <div className="empty" style={{ padding: '48px' }}>Загрузка...</div>;
 
   return (
-    <div>
-      <h3 style={{ marginBottom: '16px' }}>📦 Редактирование базы данных в онлайне</h3>
-      <p style={{ color: 'var(--subtle)', marginBottom: '16px' }}>Изменение плана и ролей пользователей. Удаление аккаунтов — только для не-владельцев. Сохранение применяется к серверной БД сразу.</p>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <button onClick={load} style={{ padding: '8px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>🔄 Обновить</button>
-        <button onClick={() => setClearDbConfirm(true)} style={{ padding: '8px 16px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>🗑 Очистить всю БД</button>
+    <div style={{ display: 'grid', gap: '18px' }}>
+      <div>
+        <h3 style={{ margin: 0, color: 'var(--fg)' }}>База данных и служебные аккаунты</h3>
+        <p style={{ color: 'var(--subtle)', marginTop: '8px' }}>
+          Здесь можно менять тарифы, роли и при необходимости удалять пользователей.
+        </p>
       </div>
+
+      <div style={{ color: 'var(--subtle)', fontSize: '13px' }}>
+        Доступные роли: {roleOptions}. Если поле роли оставить пустым, пользователю будет назначена роль <code>user</code>.
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <button onClick={load} style={{ padding: '10px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}>
+          Обновить
+        </button>
+        <button onClick={() => setClearDbConfirm(true)} style={{ padding: '10px 16px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}>
+          Очистить всю БД
+        </button>
+      </div>
+
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-card)', borderRadius: '8px', overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'rgba(255,255,255,0.03)', borderRadius: '14px', overflow: 'hidden' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               <th style={{ padding: '12px', textAlign: 'left' }}>Username</th>
               <th style={{ padding: '12px', textAlign: 'left' }}>Email</th>
               <th style={{ padding: '12px', textAlign: 'left' }}>План</th>
-              <th style={{ padding: '12px', textAlign: 'left' }}>Роли (через запятую)</th>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Роли</th>
               <th style={{ padding: '12px' }}>Действия</th>
             </tr>
           </thead>
           <tbody>
-            {list.map(u => {
+            {list.map((u) => {
               const isSelf = u.id === currentUser?.id;
               const rolesArr = u.roles ? (Array.isArray(u.roles) ? u.roles : String(u.roles).split(',').map((r: string) => r.trim())) : [];
               const isOwnerUser = rolesArr.includes('owner');
@@ -749,9 +889,9 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
                   <td style={{ padding: '12px' }}>
                     <select
                       value={ed.plan}
-                      onChange={e => setEdit(u.id, 'plan', e.target.value)}
+                      onChange={(e) => setEdit(u.id, 'plan', e.target.value)}
                       disabled={isOwnerUser && isSystemOwner(u)}
-                      style={{ padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', minWidth: '100px' }}
+                      style={{ padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', minWidth: '110px' }}
                     >
                       <option value="free">free</option>
                       <option value="premium">premium</option>
@@ -761,16 +901,20 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
                     <input
                       type="text"
                       value={ed.roles}
-                      onChange={e => setEdit(u.id, 'roles', e.target.value)}
+                      onChange={(e) => setEdit(u.id, 'roles', e.target.value)}
                       disabled={isOwnerUser && isSystemOwner(u)}
-                      placeholder="user, moderator, admin"
-                      style={{ width: '100%', maxWidth: '220px', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)' }}
+                      placeholder={roleOptions}
+                      style={{ width: '100%', maxWidth: '320px', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)' }}
                     />
                   </td>
                   <td style={{ padding: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button onClick={() => saveUser(u)} style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Сохранить</button>
+                    <button onClick={() => saveUser(u)} style={{ padding: '6px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                      Сохранить
+                    </button>
                     {!isSelf && !isOwnerUser && (
-                      <button onClick={() => setDeleteConfirm({ id: u.id, username: u.username })} style={{ padding: '6px 12px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Удалить</button>
+                      <button onClick={() => setDeleteConfirm({ id: u.id, username: u.username })} style={{ padding: '6px 12px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                        Удалить
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -779,26 +923,28 @@ function DatabaseTab({ currentUser }: { currentUser: any }) {
           </tbody>
         </table>
       </div>
+
       {deleteConfirm && (
         <ConfirmModal
           isOpen={true}
           onClose={() => setDeleteConfirm(null)}
           onConfirm={deleteUser}
-          title="Удалить аккаунт"
-          message={`Безвозвратно удалить пользователя "${deleteConfirm.username}"?`}
+          title="Удаление пользователя"
+          message={`Подтвердите удаление пользователя "${deleteConfirm.username}"?`}
           confirmText="Удалить"
           cancelText="Отмена"
           danger
         />
       )}
+
       {clearDbConfirm && (
         <ConfirmModal
           isOpen={true}
           onClose={() => setClearDbConfirm(false)}
           onConfirm={clearDatabase}
-          title="Очистить всю базу данных"
-          message="Удалить все данные (пользователи, чаты, сообщения и т.д.)? После очистки вы будете разлогинены. Действие необратимо."
-          confirmText={clearing ? 'Очистка…' : 'Очистить БД'}
+          title="Очистка всей базы"
+          message="Будут удалены пользователи, чаты, сообщения и остальные данные проекта без возможности восстановления."
+          confirmText={clearing ? 'Очистка...' : 'Очистить БД'}
           cancelText="Отмена"
           danger
         />
@@ -828,6 +974,19 @@ function UsersTab({ currentUser }: { currentUser: any }) {
     userId: '',
     username: ''
   });
+  const roleFilterOptions = getStaffRoleOptions();
+  const roleIconMap: Record<string, string> = {
+    owner: '??',
+    sysadmin: '??',
+    release_manager: '??',
+    billing_manager: '??',
+    safety: '??',
+    risk_analyst: '??',
+    moderator: '???',
+    support_lead: '??',
+    support_l1: '??',
+    user: '??',
+  };
 
   const load = async () => {
     try {
@@ -903,6 +1062,17 @@ function UsersTab({ currentUser }: { currentUser: any }) {
     else setSelectedIds(new Set(filteredList.map((u: any) => u.id)));
   };
 
+  const getStatusLabel = (status: string) => {
+    if (status === 'banned') return '🚫 Заблокирован';
+    if (status === 'suspended') return '⏸ Временно приостановлен';
+    if (status === 'online') return '🟢 Онлайн';
+    if (status === 'offline') return '⚫ Оффлайн';
+    if (status === 'away') return '🌙 Отошёл';
+    if (status === 'busy') return '⛔ Занят';
+    if (status === 'invisible') return '👁️ Невидимка';
+    return status || 'online';
+  };
+
   useEffect(() => {
     let filtered = list;
     
@@ -916,22 +1086,13 @@ function UsersTab({ currentUser }: { currentUser: any }) {
     }
     
     if (filterRole !== 'all') {
-      filtered = filtered.filter(u => {
-        const raw = u.roles;
-        const roles = Array.isArray(raw) ? raw : (raw ? String(raw).split(',').map((r: string) => r.trim().toLowerCase()) : []);
-        if (filterRole === 'owner') return roles.includes('owner');
-        if (filterRole === 'sysadmin') return (roles.includes('sysadmin') || roles.includes('admin')) && !roles.includes('owner');
-        if (filterRole === 'safety') return (roles.includes('safety') || roles.includes('guardian')) && !roles.includes('owner') && !roles.includes('admin') && !roles.includes('sysadmin');
-        if (filterRole === 'moderator') return roles.includes('moderator') && !roles.includes('safety') && !roles.includes('admin') && !roles.includes('sysadmin') && !roles.includes('owner');
-        if (filterRole === 'support') return roles.includes('support') && !roles.includes('moderator') && !roles.includes('safety') && !roles.includes('admin') && !roles.includes('sysadmin') && !roles.includes('owner');
-        if (filterRole === 'user') return !['owner','admin','sysadmin','safety','guardian','moderator','support'].some(r => roles.includes(r));
-        return true;
-      });
+      filtered = filtered.filter((u) => getPrimaryRoleName(u) === filterRole);
     }
     
     if (filterStatus !== 'all') {
       filtered = filtered.filter(u => {
         if (filterStatus === 'banned') return u.status === 'banned';
+        if (filterStatus === 'suspended') return u.status === 'suspended';
         if (filterStatus === 'online') return u.status === 'online';
         return true;
       });
@@ -948,6 +1109,20 @@ function UsersTab({ currentUser }: { currentUser: any }) {
     try {
       await api(`/api/admin/users/${id}/unblock`, 'POST');
       showToast('Пользователь разблокирован', 'success');
+      await load();
+    } catch (e: any) {
+      showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
+    }
+  };
+
+  const suspendUser = async (id: string, username: string) => {
+    setConfirmModal({ open: true, action: 'suspend', userId: id, username });
+  };
+
+  const unsuspendUser = async (id: string) => {
+    try {
+      await api(`/api/admin/users/${id}/unsuspend`, 'POST');
+      showToast('Приостановка снята', 'success');
       await load();
     } catch (e: any) {
       showToast(getErrorMessage(e, 'Операция не выполнена.'), 'error');
@@ -972,6 +1147,9 @@ function UsersTab({ currentUser }: { currentUser: any }) {
       if (action === 'block') {
         await api(`/api/admin/users/${userId}/block`, 'POST');
         showToast('Пользователь заблокирован', 'success');
+      } else if (action === 'suspend') {
+        await api(`/api/admin/users/${userId}/suspend`, 'POST');
+        showToast('Аккаунт временно приостановлен', 'success');
       } else if (action === 'promote') {
         await api(`/api/admin/users/${userId}/promote`, 'POST');
         showToast('Права администратора предоставлены', 'success');
@@ -1025,6 +1203,8 @@ function UsersTab({ currentUser }: { currentUser: any }) {
           <span style={{ fontWeight: '600' }}>Выбрано: {selectedIds.size}</span>
           <button onClick={() => bulkAction('block')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Заблокировать</button>
           <button onClick={() => bulkAction('unblock')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Разблокировать</button>
+          <button onClick={() => bulkAction('suspend')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Приостановить</button>
+          <button onClick={() => bulkAction('unsuspend')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Снять приостановку</button>
           <button onClick={() => bulkAction('promote')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Сделать админом</button>
           <button onClick={() => bulkAction('demote')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer' }}>Снять админа</button>
           <button onClick={() => bulkAction('set_plan', 'premium')} disabled={bulkProcessing} style={{ padding: '8px 14px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer' }}>План Premium</button>
@@ -1066,12 +1246,11 @@ function UsersTab({ currentUser }: { currentUser: any }) {
           }}
         >
           <option value="all">Все роли</option>
-          <option value="owner">👑 Владелец</option>
-          <option value="sysadmin">⚙️ Тех. Админ</option>
-          <option value="safety">🛡️ Служба безопасности</option>
-          <option value="moderator">🛡️ Модератор</option>
-          <option value="support">🎫 Техподдержка</option>
-          <option value="user">👤 Пользователи</option>
+          {roleFilterOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {(roleIconMap[option.value] || '👤') + ' ' + option.label}
+            </option>
+          ))}
         </select>
         <select
           value={filterStatus}
@@ -1087,6 +1266,7 @@ function UsersTab({ currentUser }: { currentUser: any }) {
         >
           <option value="all">Все статусы</option>
           <option value="online">🟢 Онлайн</option>
+          <option value="suspended">⏸ Приостановленные</option>
           <option value="banned">🚫 Заблокированные</option>
         </select>
         <select
@@ -1123,18 +1303,17 @@ function UsersTab({ currentUser }: { currentUser: any }) {
         )}
         <div style={{display: 'grid', gap: '12px'}}>
           {filteredList.map(u => {
-            const rawRoles = u.roles;
-            const uRoles = Array.isArray(rawRoles) ? rawRoles : (rawRoles ? String(rawRoles).split(',').map((r: string) => r.trim().toLowerCase()) : []);
-            const uIsOwner = uRoles.includes('owner');
-            const uIsSysadmin = uRoles.includes('sysadmin') || uRoles.includes('admin');
-            const uIsSafety = uRoles.includes('safety') || uRoles.includes('guardian');
-            const uIsModerator = uRoles.includes('moderator');
-            const uIsSupport = uRoles.includes('support');
+            const primaryRole = getPrimaryRoleName(u);
+            const roleLabel = getRoleLabel(u) || 'Пользователь';
+            const normalizedRoles = getEffectiveRoles(u);
+            const uIsOwner = primaryRole === 'owner';
+            const uIsSysadmin = primaryRole === 'sysadmin';
             const uIsBanned = u.status === 'banned';
+            const uIsSuspended = u.status === 'suspended';
             const systemOwner = isSystemOwner(u);
             const canBlock = canBlockUser(currentUser, u);
             const canDemote = canDemoteUser(currentUser, u);
-            const canPromoteAdmin = canPromoteTo(currentUser, 'admin');
+            const canPromoteAdmin = canPromoteTo(currentUser, 'sysadmin');
             return (
               <div 
                 key={u.id} 
@@ -1164,16 +1343,12 @@ function UsersTab({ currentUser }: { currentUser: any }) {
                       {u.username} 
                       {showUserIds && <code style={{ fontSize: '12px', background: 'var(--panel-2)', padding: '2px 8px', borderRadius: '6px', color: 'var(--subtle)', fontWeight: '400' }} title={u.id}>{u.id}</code>}
                       {systemOwner && <span title="Встроенный системный владелец" style={{ background: 'rgba(251,191,36,0.2)', color: '#fbbf24', padding: '2px 8px', borderRadius: '6px', fontSize: '12px' }}>Системный владелец</span>}
-                      {uIsOwner && !systemOwner && <span title="Владелец">👑</span>}
-                      {uIsSysadmin && !uIsOwner && <span title="Тех. Админ">⚙️</span>}
-                      {uIsSafety && !uIsSysadmin && !uIsOwner && <span title="Служба безопасности">🛡️</span>}
-                      {uIsModerator && !uIsSafety && !uIsSysadmin && !uIsOwner && <span title="Модератор">🛡️</span>}
-                      {uIsSupport && !uIsModerator && !uIsSafety && !uIsSysadmin && !uIsOwner && <span title="Техподдержка">🎫</span>}
+                      {!systemOwner && <span title={roleLabel} style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--fg)', padding: '2px 8px', borderRadius: '6px', fontSize: '12px' }}>{(roleIconMap[primaryRole] || '👤') + ' ' + roleLabel}</span>}
                     </div>
                     <div className="small" style={{marginBottom: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
-                      <span>Роли: <strong>{Array.isArray(u.roles) ? u.roles.join(', ') : (u.roles || 'user')}</strong></span>
+                      <span>Роли: <strong>{normalizedRoles.join(', ') || 'user'}</strong></span>
                       <span>|</span>
-                      <span>Статус: <strong>{uIsBanned ? '🚫 Заблокирован' : u.status || 'online'}</strong></span>
+                      <span>Статус: <strong>{getStatusLabel(u.status)}</strong></span>
                       {u.plan && <><span>|</span> <span>Тариф: <strong>{u.plan}</strong></span></>}
                     </div>
                     {u.email && (
@@ -1228,21 +1403,56 @@ function UsersTab({ currentUser }: { currentUser: any }) {
                           ✅ Разблокировать
                         </button>
                       ) : (
-                        <button 
-                          onClick={()=>blockUser(u.id, u.username)} 
-                          style={{
-                            padding: '8px 16px', 
-                            fontSize: '14px', 
-                            background: '#dc3545',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: '500'
-                          }}
-                        >
-                          🚫 Заблокировать
-                        </button>
+                        <>
+                          {uIsSuspended ? (
+                            <button
+                              onClick={() => unsuspendUser(u.id)}
+                              style={{
+                                padding: '8px 16px',
+                                fontSize: '14px',
+                                background: '#0ea5e9',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: '500'
+                              }}
+                            >
+                              ▶ Снять приостановку
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => suspendUser(u.id, u.username)}
+                              style={{
+                                padding: '8px 16px',
+                                fontSize: '14px',
+                                background: '#f59e0b',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: '500'
+                              }}
+                            >
+                              ⏸ Приостановить
+                            </button>
+                          )}
+                          <button 
+                            onClick={()=>blockUser(u.id, u.username)} 
+                            style={{
+                              padding: '8px 16px', 
+                              fontSize: '14px', 
+                              background: '#dc3545',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              fontWeight: '500'
+                            }}
+                          >
+                            🚫 Заблокировать
+                          </button>
+                        </>
                       )
                     )}
                     {!uIsSysadmin && !uIsOwner ? (
@@ -1330,19 +1540,21 @@ function UsersTab({ currentUser }: { currentUser: any }) {
         onConfirm={handleConfirm}
         title={
           confirmModal.action === 'block' ? 'Заблокировать пользователя' :
+          confirmModal.action === 'suspend' ? 'Временно приостановить аккаунт' :
           confirmModal.action === 'promote' ? 'Назначить администратором' :
           confirmModal.action === 'demote' ? 'Снять права администратора' :
           confirmModal.action === 'delete' ? 'Удалить аккаунт' : 'Подтверждение'
         }
         message={
           confirmModal.action === 'block' ? `Вы уверены, что хотите заблокировать пользователя "${confirmModal.username}"?` :
+          confirmModal.action === 'suspend' ? `Временно приостановить аккаунт "${confirmModal.username}"? Пользователь не сможет войти, а письма и push-уведомления будут отключены.` :
           confirmModal.action === 'promote' ? `Назначить пользователя "${confirmModal.username}" администратором?` :
           confirmModal.action === 'demote' ? `Снять права администратора у пользователя "${confirmModal.username}"?` :
           confirmModal.action === 'delete' ? `Безвозвратно удалить аккаунт "${confirmModal.username}"? Данные пользователя будут удалены.` : 'Подтвердите действие'
         }
         confirmText="Подтвердить"
         cancelText="Отмена"
-        danger={confirmModal.action === 'block' || confirmModal.action === 'delete'}
+        danger={confirmModal.action === 'block' || confirmModal.action === 'suspend' || confirmModal.action === 'delete'}
       />
     </div>
   );
@@ -1886,3 +2098,5 @@ function PushTab() {
     </div>
   );
 }
+
+

@@ -49,15 +49,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   account: 'Аккаунт',
   security: 'Безопасность',
   billing: 'Оплата',
-  premium: 'Premium',
+  premium: 'Тариф Premium',
   idea: 'Идея',
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
-  low: 'Low',
-  normal: 'Normal',
-  high: 'High',
-  critical: 'Critical',
+  low: 'Низкий',
+  normal: 'Обычный',
+  high: 'Высокий',
+  critical: 'Критический',
 };
 
 const STATUS_STYLES: Record<string, React.CSSProperties> = {
