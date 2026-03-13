@@ -76,6 +76,7 @@ const TTL_OPTIONS = [
 ];
 
 const QUICK_TEMPLATES = ['Got it', 'Checking now', 'Call at 18:00?', 'Thanks', 'Need help'];
+const BRAND_MARK = require('./assets/brand-mark.png');
 const SUPPORT_CATEGORIES = [
   { value: 'general', label: 'General' },
   { value: 'bug', label: 'Bug' },
@@ -1073,7 +1074,7 @@ export default function App() {
       <AppFrame>
         <View style={styles.bootScreen}>
           <View style={styles.bootBadge}>
-            <Text style={styles.bootBadgeText}>SG</Text>
+            <Image source={BRAND_MARK} style={styles.bootLogo} />
           </View>
           <Text style={styles.bootEyebrow}>Encrypted workspace</Text>
           <Text style={styles.bootTitle}>SafeGram</Text>
@@ -1089,6 +1090,10 @@ export default function App() {
       <AppFrame>
         <ScrollView contentContainerStyle={styles.authScreenContent} showsVerticalScrollIndicator={false}>
           <GlassCard style={styles.heroCard}>
+            <View style={styles.brandLockup}>
+              <Image source={BRAND_MARK} style={styles.brandMark} />
+              <Text style={styles.brandWordmark}>SafeGram</Text>
+            </View>
             <Text style={styles.eyebrow}>{authStepMeta.eyebrow}</Text>
             <Text style={styles.heroTitle}>{authStepMeta.title}</Text>
             <Text style={styles.heroText}>{authStepMeta.text}</Text>
@@ -1930,15 +1935,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   bootBadge: {
-    width: 74,
-    height: 74,
-    borderRadius: 22,
+    width: 88,
+    height: 88,
+    borderRadius: 26,
     backgroundColor: 'rgba(111, 194, 255, 0.18)',
     borderWidth: 1,
     borderColor: 'rgba(111, 194, 255, 0.42)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 18,
+  },
+  bootLogo: {
+    width: 56,
+    height: 56,
+    resizeMode: 'contain',
   },
   bootBadgeText: {
     color: '#eef7ff',
@@ -1989,6 +1999,23 @@ const styles = StyleSheet.create({
   heroCard: {
     paddingTop: 22,
     paddingBottom: 20,
+  },
+  brandLockup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  brandMark: {
+    width: 34,
+    height: 34,
+    resizeMode: 'contain',
+  },
+  brandWordmark: {
+    color: '#f7fbff',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   heroCardCompact: {
     paddingTop: 18,
