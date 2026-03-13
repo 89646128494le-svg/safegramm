@@ -47,6 +47,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
   const isAdmin = roles.includes('admin') || roles.includes('owner');
 
   const isLandingRoute = ['/', '/features', '/pricing', '/about', '/privacy', '/terms'].includes(location.pathname);
+  const brandTextColor = '#7d86ff';
 
   return (
     <motion.header
@@ -82,33 +83,70 @@ export default function Header({ user, onLogout }: HeaderProps) {
               gap: '12px'
             }}
         >
-          <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Link
+            to="/"
+            style={{
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              minWidth: 0,
+            }}
+          >
             <img
               src={logoGradientUrl}
               alt="SafeGram logo"
-              width={40}
-              height={40}
+              width={44}
+              height={44}
               style={{
                 display: 'block',
-                width: 40,
-                height: 40,
+                width: 44,
+                height: 44,
                 objectFit: 'contain',
-                filter: 'drop-shadow(0 8px 24px rgba(77, 155, 255, 0.24))',
+                filter: 'drop-shadow(0 10px 28px rgba(77, 155, 255, 0.22))',
+                flexShrink: 0,
               }}
             />
-            <h1 style={{
-              fontSize: '22px',
-              fontWeight: 900,
-              margin: 0,
-              background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              letterSpacing: '0.5px',
-              cursor: 'pointer'
-            }}>
-              SafeGram
-            </h1>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <h1
+                style={{
+                  fontSize: '20px',
+                  fontWeight: 900,
+                  margin: 0,
+                  color: brandTextColor,
+                  letterSpacing: '-0.03em',
+                  lineHeight: 1,
+                  cursor: 'pointer',
+                  textShadow: '0 6px 24px rgba(77, 155, 255, 0.12)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                SafeGram
+              </h1>
+              <span
+                style={{
+                  padding: '5px 10px',
+                  background: 'rgba(124, 108, 255, 0.16)',
+                  borderRadius: '10px',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: '#c4b5fd',
+                  lineHeight: 1,
+                  flexShrink: 0,
+                }}
+              >
+                Beta
+              </span>
+            </div>
             {typeof window !== 'undefined' && (window as any).electronAPI && (
               <span style={{
                 padding: '2px 8px',
@@ -124,24 +162,6 @@ export default function Header({ user, onLogout }: HeaderProps) {
             )}
           </Link>
         </motion.div>
-        <motion.span
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 400, damping: 15 }}
-          style={{
-            padding: '4px 10px',
-            background: 'rgba(124, 108, 255, 0.15)',
-            border: 'none',
-            borderRadius: '8px',
-            fontSize: '11px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-            color: '#a78bfa'
-          }}
-        >
-          BETA
-        </motion.span>
       </motion.div>
 
       <div className="header-right-section" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

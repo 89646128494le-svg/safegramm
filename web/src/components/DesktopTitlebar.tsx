@@ -1,5 +1,5 @@
 import React from 'react';
-import logoLightUrl from '../assets/brand/logo-mark-light.svg';
+import logoGradientUrl from '../assets/brand/logo-mark-gradient.svg';
 
 const TITLEBAR_H = 36;
 
@@ -33,13 +33,19 @@ export default function DesktopTitlebar() {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <img
-          src={logoLightUrl}
+          src={logoGradientUrl}
           alt="SafeGram"
-          width={18}
-          height={18}
-          style={{ width: 18, height: 18, objectFit: 'contain', opacity: 0.96 }}
+          width={20}
+          height={20}
+          style={{
+            width: 20,
+            height: 20,
+            objectFit: 'contain',
+            opacity: 0.98,
+            filter: 'drop-shadow(0 4px 14px rgba(77, 155, 255, 0.2))'
+          }}
         />
-        <span style={{ fontSize: 15, fontWeight: 600, color: '#e2e8f0', letterSpacing: '-0.02em' }}>SafeGram</span>
+        <span style={{ fontSize: 15, fontWeight: 800, color: '#7d86ff', letterSpacing: '-0.03em' }}>SafeGram</span>
       </div>
       <div
         style={{
