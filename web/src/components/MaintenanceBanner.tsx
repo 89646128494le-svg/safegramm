@@ -9,7 +9,22 @@ import type { MaintenanceStatus } from '../store/useStore';
 const POLL_INTERVAL_MS = 20_000;
 const PENDING_BETA_NOTICE_KEY = 'safegram_beta_notice_pending';
 const DISMISSED_BETA_NOTICE_KEY = 'safegram_beta_notice_dismissed';
+const DISMISSED_SYSTEM_BANNER_PREFIX = 'safegram_system_banner_dismissed_';
 const SYSTEM_BANNER_EVENT = 'system-banner-updated';
+
+type SystemBannerSeverity = 'info' | 'success' | 'warning' | 'critical';
+
+interface SystemBannerStatus {
+  enabled?: boolean;
+  isActive?: boolean;
+  id?: string;
+  title?: string;
+  message?: string;
+  severity?: SystemBannerSeverity;
+  dismissible?: boolean;
+  startsAt?: string;
+  endsAt?: string;
+}
 
 type BannerNotice =
   | {
@@ -18,6 +33,15 @@ type BannerNotice =
       title: string;
       message: string;
       timestamp?: string;
+    }
+  | {
+      kind: 'system';
+      id: string;
+      title: string;
+      message: string;
+      timestamp?: string;
+      severity: SystemBannerSeverity;
+      dismissible: boolean;
     }
   | {
       kind: 'beta';
@@ -41,6 +65,12 @@ const CLOSE_LABEL =
   '\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435';
 const TECHWORKS_BADGE =
   '\u0422\u0435\u0445\u0440\u0430\u0431\u043e\u0442\u044b';
+const SYSTEM_BADGE_LABELS: Record<SystemBannerSeverity, string> = {
+  info: 'Инфо',
+  success: 'Обновление',
+  warning: 'Важно',
+  critical: 'Критично',
+};
 
 function readPendingBetaNotice(): BannerNotice | null {
   if (typeof window === 'undefined') return null;
@@ -59,6 +89,7 @@ export default function MaintenanceBanner() {
   const location = useLocation();
   const { setMaintenance } = useStore();
   const [maintenanceData, setMaintenanceData] = useState<MaintenanceStatus | null>(null);
+  const [systemBannerData, setSystemBannerData] = useState<SystemBannerStatus | null>(null);
   const [betaDismissed, setBetaDismissed] = useState(false);
 
   const syncDismissState = useCallback(() => {
@@ -68,21 +99,26 @@ export default function MaintenanceBanner() {
 
   const checkMaintenanceStatus = useCallback(async () => {
     try {
-      const response = await api('/api/maintenance/status', 'GET');
-      const data = response?.isActive
+      const [maintenanceResponse, bannerResponse] = await Promise.all([
+        api('/api/maintenance/status', 'GET'),
+        api('/api/system-banner/status', 'GET').catch(() => null),
+      ]);
+      const data = maintenanceResponse?.isActive
         ? {
             isActive: true,
-            message: response.message || '',
-            timestamp: response.timestamp || '',
-            id: response.id || '',
+            message: maintenanceResponse.message || '',
+            timestamp: maintenanceResponse.timestamp || '',
+            id: maintenanceResponse.id || '',
           }
         : null;
 
       setMaintenance(data);
       setMaintenanceData(data);
+      setSystemBannerData(bannerResponse?.isActive ? bannerResponse : null);
     } catch {
       setMaintenance(null);
       setMaintenanceData(null);
+      setSystemBannerData(null);
     }
   }, [setMaintenance]);
 
@@ -121,34 +157,110 @@ export default function MaintenanceBanner() {
       };
     }
 
+    if (systemBannerData?.isActive && systemBannerData.id) {
+      if (systemBannerData.dismissible && typeof window !== 'undefined') {
+        const dismissed = localStorage.getItem(DISMISSED_SYSTEM_BANNER_PREFIX + systemBannerData.id) === '1';
+        if (dismissed) return null;
+      }
+
+      const scheduleLabel = systemBannerData.endsAt
+        ? `до ${new Date(systemBannerData.endsAt).toLocaleString('ru-RU')}`
+        : systemBannerData.startsAt
+          ? `с ${new Date(systemBannerData.startsAt).toLocaleString('ru-RU')}`
+          : undefined;
+
+      return {
+        kind: 'system',
+        id: systemBannerData.id,
+        title: systemBannerData.title || 'Важное сообщение',
+        message: systemBannerData.message || '',
+        timestamp: scheduleLabel,
+        severity: systemBannerData.severity || 'info',
+        dismissible: Boolean(systemBannerData.dismissible),
+      };
+    }
+
     if (!maintenanceData?.isActive && !betaDismissed) {
       return readPendingBetaNotice();
     }
 
     return null;
-  }, [betaDismissed, maintenanceData]);
+  }, [betaDismissed, maintenanceData, systemBannerData]);
 
-  const palette = activeNotice?.kind === 'maintenance'
-    ? {
+  const palette = useMemo(() => {
+    if (activeNotice?.kind === 'maintenance') {
+      return {
         background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.96) 0%, rgba(255, 138, 0, 0.96) 100%)',
         foreground: '#0f172a',
         badgeBackground: 'rgba(15, 23, 42, 0.12)',
         border: 'rgba(255,255,255,0.24)',
         icon: <Wrench size={22} strokeWidth={2.4} />,
         shadow: '0 14px 36px rgba(255, 138, 0, 0.28)',
+      };
+    }
+
+    if (activeNotice?.kind === 'system') {
+      const severity = activeNotice.severity;
+      if (severity === 'critical') {
+        return {
+          background: 'linear-gradient(135deg, rgba(185, 28, 28, 0.96) 0%, rgba(244, 63, 94, 0.96) 100%)',
+          foreground: '#fff5f5',
+          badgeBackground: 'rgba(255,255,255,0.12)',
+          border: 'rgba(255,255,255,0.18)',
+          icon: <AlertTriangle size={22} strokeWidth={2.4} />,
+          shadow: '0 14px 36px rgba(244, 63, 94, 0.24)',
+        };
       }
-    : {
+      if (severity === 'warning') {
+        return {
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.96) 0%, rgba(251, 191, 36, 0.96) 100%)',
+          foreground: '#111827',
+          badgeBackground: 'rgba(15,23,42,0.10)',
+          border: 'rgba(255,255,255,0.22)',
+          icon: <AlertTriangle size={22} strokeWidth={2.4} />,
+          shadow: '0 14px 36px rgba(245, 158, 11, 0.22)',
+        };
+      }
+      if (severity === 'success') {
+        return {
+          background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.96) 0%, rgba(16, 185, 129, 0.96) 100%)',
+          foreground: '#ecfdf5',
+          badgeBackground: 'rgba(255,255,255,0.14)',
+          border: 'rgba(255,255,255,0.18)',
+          icon: <Info size={22} strokeWidth={2.2} />,
+          shadow: '0 14px 36px rgba(16, 185, 129, 0.24)',
+        };
+      }
+      return {
         background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.96) 0%, rgba(14, 165, 233, 0.96) 100%)',
         foreground: '#eff6ff',
         badgeBackground: 'rgba(255,255,255,0.16)',
         border: 'rgba(255,255,255,0.18)',
-        icon: <FlaskConical size={22} strokeWidth={2.2} />,
+        icon: <Info size={22} strokeWidth={2.2} />,
         shadow: '0 14px 36px rgba(14, 165, 233, 0.24)',
       };
+    }
+
+    return {
+      background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.96) 0%, rgba(14, 165, 233, 0.96) 100%)',
+      foreground: '#eff6ff',
+      badgeBackground: 'rgba(255,255,255,0.16)',
+      border: 'rgba(255,255,255,0.18)',
+      icon: <FlaskConical size={22} strokeWidth={2.2} />,
+      shadow: '0 14px 36px rgba(14, 165, 233, 0.24)',
+    };
+  }, [activeNotice]);
 
   const dismissNotice = useCallback(() => {
     if (typeof window === 'undefined' || !activeNotice) return;
     if (activeNotice.kind === 'maintenance') return;
+
+    if (activeNotice.kind === 'system') {
+      if (!activeNotice.dismissible) return;
+      localStorage.setItem(DISMISSED_SYSTEM_BANNER_PREFIX + activeNotice.id, '1');
+      setSystemBannerData((prev) => (prev?.id === activeNotice.id ? null : prev));
+      return;
+    }
 
     localStorage.setItem(DISMISSED_BETA_NOTICE_KEY, '1');
     sessionStorage.removeItem(PENDING_BETA_NOTICE_KEY);
@@ -242,7 +354,11 @@ export default function MaintenanceBanner() {
                 }}
               >
                 {activeNotice.kind === 'maintenance' ? <AlertTriangle size={14} /> : <Info size={14} />}
-                {activeNotice.kind === 'maintenance' ? TECHWORKS_BADGE : 'Beta'}
+                {activeNotice.kind === 'maintenance'
+                  ? TECHWORKS_BADGE
+                  : activeNotice.kind === 'system'
+                    ? SYSTEM_BADGE_LABELS[activeNotice.severity]
+                    : 'Beta'}
               </span>
             </div>
 
@@ -297,7 +413,7 @@ export default function MaintenanceBanner() {
             </div>
           </div>
 
-          {activeNotice.kind === 'beta' && (
+          {(activeNotice.kind === 'beta' || (activeNotice.kind === 'system' && activeNotice.dismissible)) && (
             <button
               type="button"
               onClick={dismissNotice}

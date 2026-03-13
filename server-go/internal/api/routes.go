@@ -48,6 +48,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 
 	// Публичный статус техработ (без авторизации — для баннера на фронте)
 	api.GET("/maintenance/status", GetMaintenanceStatus(db))
+	api.GET("/system-banner/status", GetSystemBannerStatus(db))
 
 	// Набор тестировщиков и хелперов (публичная заявка, с rate limit)
 	api.POST("/recruit", AuthRateLimitMiddleware(), SubmitRecruit(db))
@@ -292,6 +293,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	protected.POST("/admin/bans", adminProtected(moderationRoles, CreateAdminBan(db))...)
 	protected.DELETE("/admin/bans/:id", adminProtected(moderationRoles, DeleteAdminBan(db))...)
 	protected.GET("/admin/maintenance", adminProtected(releaseRoles, GetAdminMaintenance(db))...)
+	protected.GET("/admin/system-banner", adminProtected(releaseRoles, GetAdminSystemBanner(db))...)
 	protected.GET("/admin/system/health", adminProtected(releaseRoles, GetSystemHealth(db))...)
 	protected.GET("/admin/feedback", adminProtected(supportRoles, GetAdminFeedback(db))...)
 	protected.PATCH("/admin/feedback/:id", adminProtected(supportRoles, PatchAdminFeedback(db))...)
@@ -412,6 +414,8 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// Технические работы
 	protected.POST("/admin/maintenance", adminProtected(releaseRoles, SendMaintenanceNotificationToAll(db))...)
 	protected.POST("/admin/maintenance/disable", adminProtected(releaseRoles, DisableMaintenance(db))...)
+	protected.POST("/admin/system-banner", adminProtected(releaseRoles, UpsertAdminSystemBanner(db))...)
+	protected.POST("/admin/system-banner/disable", adminProtected(releaseRoles, DisableAdminSystemBanner(db))...)
 
 	// Обратная связь и заявки на премиум (отправка — авторизованный пользователь)
 	protected.GET("/feedback", GetMyFeedback(db))

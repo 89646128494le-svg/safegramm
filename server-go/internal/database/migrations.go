@@ -20,7 +20,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.ChatModerationSettings{}, &models.ChatWarning{}, &models.ChatBan{}, &models.ModerationLog{},
 		&models.Webhook{}, &models.StickerPack{}, &models.Sticker{}, &models.VoiceRoom{}, &models.PushSubscription{},
 		&models.SavedMessage{}, &models.Poll{}, &models.PollOption{}, &models.PollVote{}, &models.Story{}, &models.StoryView{},
-		&models.Call{}, &models.GroupCall{}, &models.GroupCallParticipant{}, &models.Session{}, &models.MaintenanceMode{},
+		&models.Call{}, &models.GroupCall{}, &models.GroupCallParticipant{}, &models.Session{}, &models.MaintenanceMode{}, &models.SystemBanner{},
 		&models.Contact{}, &models.Feedback{}, &models.RecruitApplication{},
 		&models.UserBot{},
 		&models.AdminAuditLog{}, &models.RoleBanHistory{}, &models.BannedWord{},

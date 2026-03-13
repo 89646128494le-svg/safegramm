@@ -1,268 +1,210 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Loader2, Wrench } from 'lucide-react';
 import { api } from '../../services/api';
 import { showToast } from '../Toast';
-import { useTranslation } from '../../i18n';
 
-interface MaintenanceSettings {
-  enabled: boolean;
-  message: string;
-  startTime?: number;
-  endTime?: number;
-  scheduled: boolean;
+interface MaintenanceResponse {
+  enabled?: boolean;
+  isActive?: boolean;
+  message?: string;
+  timestamp?: string;
+  id?: string;
+  createdAt?: string;
 }
 
+const DEFAULT_MESSAGE = 'Ведутся технические работы. Возможны временные ограничения части функций.';
+
 export default function MaintenanceManager() {
-  const { t } = useTranslation();
-  const [settings, setSettings] = useState<MaintenanceSettings>({
-    enabled: false,
-    message: 'Ведутся технические работы. Приносим извинения за неудобства.',
-    scheduled: false
-  });
+  const [message, setMessage] = useState(DEFAULT_MESSAGE);
+  const [timestamp, setTimestamp] = useState('');
+  const [sendEmail, setSendEmail] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    loadSettings();
-  }, []);
+  const [enabled, setEnabled] = useState(false);
 
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const response = await api('/api/admin/maintenance');
-      const enabled = response?.enabled ?? response?.isActive ?? false;
-      const startTime = response?.createdAt ? new Date(response.createdAt).getTime() : undefined;
-      setSettings(prev => ({
-        ...prev,
-        enabled,
-        message: (response?.message != null && response.message !== '') ? response.message : prev.message,
-        startTime: startTime ?? prev.startTime,
-      }));
-    } catch (e: any) {
-      showToast('Ошибка загрузки: ' + (e?.message || 'не найдено'), 'error');
+      const response: MaintenanceResponse = await api('/api/admin/maintenance');
+      const nextEnabled = Boolean(response?.enabled ?? response?.isActive);
+      setEnabled(nextEnabled);
+      setMessage(response?.message || DEFAULT_MESSAGE);
+      setTimestamp(response?.timestamp || '');
+    } catch (error: any) {
+      showToast('Не удалось загрузить техработы: ' + error.message, 'error');
+      setEnabled(false);
+      setMessage(DEFAULT_MESSAGE);
+      setTimestamp('');
     } finally {
       setLoading(false);
     }
   };
 
-  const saveSettings = async () => {
-    showToast('Сообщение сохранено локально. Для включения техработ нажмите «Включить».', 'success');
-  };
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
-  const toggleMaintenance = async () => {
-    const enabling = !settings.enabled;
+  const enableMaintenance = async () => {
+    if (!message.trim() || !timestamp.trim()) {
+      showToast('Заполните время и сообщение', 'warning');
+      return;
+    }
+    setSaving(true);
     try {
-      setSaving(true);
-      if (enabling) {
-        const timestamp = new Date().toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short' });
-        await api('/api/admin/maintenance', 'POST', {
-          timestamp,
-          message: settings.message,
-          sendEmail: true,
-        });
-        setSettings(prev => ({ ...prev, enabled: true, startTime: Date.now() }));
-        showToast('Техработы включены', 'success');
-      } else {
-        await api('/api/admin/maintenance/disable', 'POST');
-        setSettings(prev => ({ ...prev, enabled: false }));
-        showToast('Техработы выключены', 'success');
-      }
+      await api('/api/admin/maintenance', 'POST', {
+        timestamp: timestamp.trim(),
+        message: message.trim(),
+        sendEmail,
+      });
+      setEnabled(true);
+      showToast('Техработы включены', 'success');
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('maintenance-updated'));
+        window.dispatchEvent(new Event('system-banner-updated'));
       }
-    } catch (e: any) {
-      showToast('Ошибка: ' + (e?.message || 'не найдено'), 'error');
+      await loadSettings();
+    } catch (error: any) {
+      showToast('Не удалось включить техработы: ' + error.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const disableMaintenance = async () => {
+    setSaving(true);
+    try {
+      await api('/api/admin/maintenance/disable', 'POST');
+      setEnabled(false);
+      showToast('Техработы отключены', 'success');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('maintenance-updated'));
+        window.dispatchEvent(new Event('system-banner-updated'));
+      }
+      await loadSettings();
+    } catch (error: any) {
+      showToast('Не удалось отключить техработы: ' + error.message, 'error');
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return (
-      <div style={{ padding: '48px', textAlign: 'center' }}>
-        <div className="empty">{t('common.loading')}</div>
-      </div>
-    );
+    return <div className="empty" style={{ padding: '48px' }}>Загрузка техработ...</div>;
   }
 
   return (
-    <div>
-      <h3 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '24px' }}>
-        🔧 Управление техническими работами
-      </h3>
-
-      {/* Статус */}
-      <div style={{
-        padding: '20px',
-        background: settings.enabled ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
-        border: `1px solid ${settings.enabled ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
-        borderRadius: '12px',
-        marginBottom: '24px'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px'
-        }}>
+    <div style={{ display: 'grid', gap: 20 }}>
+      <div
+        style={{
+          padding: 20,
+          borderRadius: 18,
+          background: enabled ? 'rgba(251,191,36,0.12)' : 'rgba(34,197,94,0.12)',
+          border: enabled ? '1px solid rgba(251,191,36,0.22)' : '1px solid rgba(34,197,94,0.22)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px' }}>
-              Статус: {settings.enabled ? '🔴 Технические работы включены' : '🟢 Система работает'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--fg)', fontWeight: 700, marginBottom: 8 }}>
+              {enabled ? <AlertTriangle size={20} color="#fbbf24" /> : <CheckCircle2 size={20} color="#34d399" />}
+              {enabled ? 'Техработы активны' : 'Система работает в штатном режиме'}
             </div>
-            {settings.enabled && settings.startTime && (
-              <div style={{ fontSize: '14px', color: 'var(--subtle, #9ca3af)' }}>
-                Начато: {new Date(settings.startTime).toLocaleString('ru-RU')}
-              </div>
-            )}
+            <div style={{ color: 'var(--subtle)' }}>
+              {enabled ? `Пользователи видят баннер техработ. ${timestamp ? `Время: ${timestamp}` : ''}` : 'Блокирующий баннер техработ сейчас выключен.'}
+            </div>
           </div>
-          <button
-            onClick={toggleMaintenance}
-            disabled={saving}
-            style={{
-              padding: '12px 24px',
-              background: settings.enabled ? '#22c55e' : '#ef4444',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              fontWeight: '600',
-              fontSize: '14px',
-              opacity: saving ? 0.6 : 1
-            }}
-          >
-            {saving ? 'Сохранение...' : settings.enabled ? '✅ Выключить' : '🔴 Включить'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" onClick={enableMaintenance} disabled={saving} style={warningButtonStyle}>
+              {saving ? <Loader2 size={18} className="spin" /> : <Wrench size={18} />}
+              Включить
+            </button>
+            <button type="button" onClick={disableMaintenance} disabled={saving || !enabled} style={successButtonStyle}>
+              <CheckCircle2 size={18} />
+              Отключить
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Настройки */}
-      <div style={{
-        padding: '20px',
-        background: 'var(--panel, rgba(31, 41, 55, 0.6))',
-        borderRadius: '12px',
-        border: '1px solid var(--border, #374151)',
-        marginBottom: '24px'
-      }}>
-        <h4 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: '600' }}>
-          Сообщение для пользователей
-        </h4>
-        <textarea
-          value={settings.message}
-          onChange={e => setSettings({ ...settings, message: e.target.value })}
-          placeholder="Введите сообщение, которое увидят пользователи во время технических работ..."
-          rows={6}
-          style={{
-            width: '100%',
-            padding: '12px',
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            color: '#e9ecf5',
-            fontSize: '14px',
-            fontFamily: 'inherit',
-            resize: 'vertical',
-            marginBottom: '16px'
-          }}
-        />
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <button
-            onClick={saveSettings}
-            disabled={saving}
-            style={{
-              padding: '10px 20px',
-              background: 'var(--accent, #3b82f6)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              fontWeight: '600',
-              opacity: saving ? 0.6 : 1
-            }}
-          >
-            {saving ? 'Сохранение...' : '💾 Сохранить'}
-          </button>
-          <button
-            onClick={() => setSettings({
-              ...settings,
-              message: 'Ведутся технические работы. Приносим извинения за неудобства.'
-            })}
-            style={{
-              padding: '10px 20px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#e9ecf5',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: '500'
-            }}
-          >
-            🔄 Сбросить
-          </button>
-        </div>
-      </div>
-
-      {/* Планирование */}
-      <div style={{
-        padding: '20px',
-        background: 'var(--panel, rgba(31, 41, 55, 0.6))',
-        borderRadius: '12px',
-        border: '1px solid var(--border, #374151)'
-      }}>
-        <h4 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: '600' }}>
-          📅 Планирование технических работ
-        </h4>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+      <div
+        style={{
+          padding: 20,
+          borderRadius: 18,
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          display: 'grid',
+          gap: 16,
+        }}
+      >
+        <div>
+          <label style={labelStyle}>Время проведения</label>
           <input
-            type="checkbox"
-            checked={settings.scheduled}
-            onChange={e => setSettings({ ...settings, scheduled: e.target.checked })}
+            type="text"
+            value={timestamp}
+            onChange={(e) => setTimestamp(e.target.value)}
+            placeholder="Например: 13 марта, с 02:00 до 04:00 МСК"
+            style={inputStyle}
           />
-          <span>Включить запланированные технические работы</span>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Сообщение для пользователей</label>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            rows={5}
+            placeholder="Опишите, какие функции могут быть ограничены."
+            style={{ ...inputStyle, minHeight: 130, resize: 'vertical', fontFamily: 'inherit' }}
+          />
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--fg)', fontWeight: 600 }}>
+          <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+          Отправить email-уведомление пользователям
         </label>
-        {settings.scheduled && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px' }}>
-                Дата и время начала:
-              </label>
-              <input
-                type="datetime-local"
-                onChange={e => {
-                  const timestamp = new Date(e.target.value).getTime();
-                  setSettings({ ...settings, startTime: timestamp });
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '8px',
-                  color: '#e9ecf5'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px' }}>
-                Дата и время окончания:
-              </label>
-              <input
-                type="datetime-local"
-                onChange={e => {
-                  const timestamp = new Date(e.target.value).getTime();
-                  setSettings({ ...settings, endTime: timestamp });
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '8px',
-                  color: '#e9ecf5'
-                }}
-              />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: 8,
+  color: 'var(--fg)',
+  fontWeight: 600,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '12px 14px',
+  background: 'var(--panel-2, #111827)',
+  border: '1px solid var(--border, #374151)',
+  borderRadius: 12,
+  color: 'var(--fg, #e5e7eb)',
+  fontSize: 14,
+};
+
+const warningButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '12px 16px',
+  background: 'linear-gradient(135deg, #f59e0b, #f97316)',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 12,
+  cursor: 'pointer',
+  fontWeight: 700,
+};
+
+const successButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '12px 16px',
+  background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 12,
+  cursor: 'pointer',
+  fontWeight: 700,
+};
