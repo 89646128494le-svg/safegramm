@@ -1,13 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import logoGradientUrl from '../assets/brand/logo-mark-gradient.svg';
+import logoPrimaryUrl from '../assets/brand/logo-primary.png';
 
 export default function LandingFooter() {
   return (
     <footer className="landing-footer" role="contentinfo">
       <div className="landing-footer-inner">
         <div className="landing-footer-brand">
-          <img src={logoGradientUrl} alt="SafeGram" width={32} height={32} />
+          <img src={logoPrimaryUrl} alt="SafeGram" width={32} height={32} />
           <span>SafeGram</span>
         </div>
         <nav className="landing-footer-nav" aria-label="??????????? ??????">

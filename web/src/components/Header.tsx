@@ -5,7 +5,7 @@ import { Shield, LogOut, User, Settings, Crown, Bell, Menu, X, Home, Star, Dolla
 import ThemeSwitcher from './ThemeSwitcher';
 import Navigation from './Navigation';
 import { useStore } from '../store/useStore';
-import logoGradientUrl from '../assets/brand/logo-mark-gradient.svg';
+import logoPrimaryUrl from '../assets/brand/logo-primary.png';
 
 const publicNavItems = [
   { path: '/', label: 'Главная', icon: Home },
@@ -94,7 +94,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
             }}
           >
             <img
-              src={logoGradientUrl}
+              src={logoPrimaryUrl}
               alt="SafeGram logo"
               width={44}
               height={44}

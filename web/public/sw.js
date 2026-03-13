@@ -4,7 +4,7 @@ const OFFLINE_URL = '/offline.html';
 self.addEventListener('install', function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(['/', '/offline.html', '/manifest.webmanifest', '/favicon.svg']);
+      return cache.addAll(['/', '/offline.html', '/manifest.webmanifest', '/favicon.png']);
     }).then(function () {
       return self.skipWaiting();
     })

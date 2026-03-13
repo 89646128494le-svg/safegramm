@@ -198,8 +198,8 @@ export async function showNotification(
   
   // Создаём уведомление
   const notificationOptions: any = {
-    icon: options.icon || '/favicon.svg',
-    badge: options.badge || '/favicon.svg',
+    icon: options.icon || '/favicon.png',
+    badge: options.badge || '/favicon.png',
     tag: options.tag,
     data: options.data,
     requireInteraction: options.requireInteraction || false,
@@ -375,7 +375,7 @@ export async function notifyNewMessage(
       {
         title,
         body: newBody,
-        icon: avatarUrl || '/favicon.svg',
+        icon: avatarUrl || '/favicon.png',
         tag,
         image: stealthMode ? undefined : imageUrl,
         actions,
@@ -399,7 +399,7 @@ export async function notifyNewMessage(
     {
       title,
       body,
-      icon: avatarUrl || '/favicon.svg',
+      icon: avatarUrl || '/favicon.png',
       tag,
       image: stealthMode ? undefined : imageUrl,
       actions,
@@ -435,7 +435,7 @@ export async function notifyCall(
     {
       title,
       body: isVideo ? 'Входящий видеозвонок' : 'Входящий звонок',
-      icon: avatarUrl || '/favicon.svg',
+      icon: avatarUrl || '/favicon.png',
       tag: `call-${chatId || 'unknown'}`,
       data: {
         type: 'call',
@@ -464,7 +464,7 @@ export async function notifyGroupInvite(
     {
       title: `👥 Приглашение в группу`,
       body: `${inviterName} приглашает вас в "${groupName}"`,
-      icon: '/favicon.svg',
+      icon: '/favicon.png',
       tag: `invite-${groupId || 'unknown'}`,
       data: {
         type: 'group_invite',
@@ -491,7 +491,7 @@ export async function notifySystem(
     {
       title: `🔔 ${title}`,
       body,
-      icon: '/favicon.svg',
+      icon: '/favicon.png',
       tag: `system-${Date.now()}`,
       requireInteraction: false,
     },
@@ -537,8 +537,8 @@ function updateOrCreateNotification(
   }
   
   const notification = new Notification(options.title, {
-    icon: options.icon || '/favicon.svg',
-    badge: options.badge || '/favicon.svg',
+    icon: options.icon || '/favicon.png',
+    badge: options.badge || '/favicon.png',
     tag: tag,
     data: options.data,
     requireInteraction: options.requireInteraction || false,

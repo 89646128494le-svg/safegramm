@@ -1,5 +1,5 @@
 import React from 'react';
-import logoGradientUrl from '../assets/brand/logo-mark-gradient.svg';
+import logoPrimaryUrl from '../assets/brand/logo-primary.png';
 
 const TITLEBAR_H = 36;
 
@@ -33,7 +33,7 @@ export default function DesktopTitlebar() {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <img
-          src={logoGradientUrl}
+          src={logoPrimaryUrl}
           alt="SafeGram"
           width={20}
           height={20}
