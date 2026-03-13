@@ -192,6 +192,7 @@ interface EnhancedChatWindowProps {
   currentUser: User;
   onClose?: () => void;
   onBack?: () => void;
+  onDeleteChat?: () => void;
   chatMembers?: string[];
   onMarkAsRead?: () => void;
   /** Map userId -> server role badges (for server channel chat) */
@@ -244,7 +245,7 @@ const playCallSound = () => {
   }
 };
 
-export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBack, chatMembers, onMarkAsRead, serverMemberRoles }: EnhancedChatWindowProps) {
+export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBack, onDeleteChat, chatMembers, onMarkAsRead, serverMemberRoles }: EnhancedChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -2406,6 +2407,15 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
           ) : null}
         </div>
         <div className="chat-header-actions">
+          {onDeleteChat && (
+            <button
+              className="delete-chat-btn"
+              onClick={onDeleteChat}
+              title="Delete chat"
+            >
+              Delete
+            </button>
+          )}
           <button
             className="search-btn"
             onClick={() => setShowSearch(!showSearch)}

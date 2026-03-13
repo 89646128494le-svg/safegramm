@@ -75,6 +75,7 @@ export interface ChatSummary {
   id: string;
   type: string;
   name?: string;
+  archivedAt?: number;
   members?: Array<{
     userId?: string;
     user?: {
@@ -342,13 +343,47 @@ export async function checkoutPremium(
   });
 }
 
-export async function getChats(apiBase: string, token: string): Promise<ChatSummary[]> {
-  const data = await apiRequest<{ chats?: ChatSummary[] }>('/api/chats?limit=100', {
+export async function getChats(
+  apiBase: string,
+  token: string,
+  options: {
+    includeArchived?: boolean;
+  } = {}
+): Promise<ChatSummary[]> {
+  const params = new URLSearchParams({ limit: '100' });
+  if (options.includeArchived) {
+    params.set('includeArchived', 'true');
+  }
+  const data = await apiRequest<{ chats?: ChatSummary[] }>(`/api/chats?${params.toString()}`, {
     method: 'GET',
     token,
     apiBase,
   });
   return data.chats || [];
+}
+
+export async function archiveChat(
+  apiBase: string,
+  token: string,
+  chatId: string
+): Promise<void> {
+  await apiRequest(`/api/chats/${encodeURIComponent(chatId)}/archive`, {
+    method: 'POST',
+    token,
+    apiBase,
+  });
+}
+
+export async function unarchiveChat(
+  apiBase: string,
+  token: string,
+  chatId: string
+): Promise<void> {
+  await apiRequest(`/api/chats/${encodeURIComponent(chatId)}/unarchive`, {
+    method: 'POST',
+    token,
+    apiBase,
+  });
 }
 
 export async function searchUsers(
@@ -397,6 +432,18 @@ export async function getMessages(
     }
   );
   return data.messages || [];
+}
+
+export async function deleteChat(
+  apiBase: string,
+  token: string,
+  chatId: string
+): Promise<void> {
+  await apiRequest(`/api/chats/${encodeURIComponent(chatId)}`, {
+    method: 'DELETE',
+    token,
+    apiBase,
+  });
 }
 
 export async function sendMessage(

@@ -1,7 +1,7 @@
 {
   "name": "SafeGram",
   "short_name": "SafeGram",
-  "description": "Защищённый мессенджер с E2EE и Safety AI",
+  "description": "?????????? ?????????? ? E2EE ? Safety AI",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b1020",
@@ -9,9 +9,15 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],

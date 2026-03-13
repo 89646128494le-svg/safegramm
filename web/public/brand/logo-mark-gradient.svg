@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+
+  <defs>
+    <linearGradient id="sg-stroke" x1="16" y1="10" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4895FF"/>
+      <stop offset="65%" stop-color="#69D6FF"/>
+      <stop offset="100%" stop-color="#F2FFFF"/>
+    </linearGradient>
+    <linearGradient id="sg-lock" x1="25" y1="22" x2="40" y2="47" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#76E6FF"/>
+      <stop offset="100%" stop-color="#4B95FF"/>
+    </linearGradient>
+    <linearGradient id="sg-accent" x1="34" y1="57" x2="52" y2="42" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2D78FF"/>
+      <stop offset="100%" stop-color="#F2FFFF"/>
+    </linearGradient>
+  </defs>
+  <polyline points="32,10 16,15.5 16,31.5 19.4,42.2 27.3,49.7 27.3,58 34.6,52.4 42.5,51.4 49,47.9 53.5,41.3 56,33 56,15.5 32,10" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M19.2 24.2H25.5" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round"/><path d="M19.2 29.6H23.9" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round"/><path d="M19.2 35.0H24.8" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round"/><path d="M19.2 40.4H21.8" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round"/><path d="M38.5 24.2H44.8" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round"/><path d="M40.1 29.6H44.8" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round"/><path d="M39.2 35.0H44.8" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round"/><path d="M42.2 40.4H44.8" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M27.8 28.8V23.4C27.8 19.8 30.1 17.1 33 17.1C35.9 17.1 38.2 19.8 38.2 23.4V28.8" stroke="url(#sg-stroke)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M25.1 28.8H40.9C43.5 28.8 45.6 30.9 45.6 33.5V39.9C45.6 41.4 44.8 42.8 43.5 43.6L35.8 48.6C34.1 49.6 31.9 49.6 30.2 48.6L22.5 43.6C21.2 42.8 20.4 41.4 20.4 39.9V33.5C20.4 30.9 22.5 28.8 25.1 28.8Z" fill="url(#sg-lock)"/>
+  <path d="M33 33.7C31.4 33.7 30.2 34.9 30.2 36.5C30.2 37.8 31 38.8 32.1 39.3V43.6H33.9V39.3C35 38.8 35.8 37.8 35.8 36.5C35.8 34.9 34.6 33.7 33 33.7Z" fill="#07111f"/>
+  <polyline points="34.5,57.2 41.3,52.4 47.2,49.7 52.3,42.5" stroke="url(#sg-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.9"/>
+</svg>

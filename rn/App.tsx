@@ -24,12 +24,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import {
+  archiveChat as archiveChatRequest,
   AuthUser,
   BillingPlan,
   ChatSummary,
   checkoutPremium,
   createSupportTicket,
   createDm,
+  deleteChat as deleteChatRequest,
   getBillingPlans,
   getChats,
   getMessages,
@@ -48,6 +50,7 @@ import {
   sendMessage,
   STORAGE_KEYS,
   SupportTicket,
+  unarchiveChat as unarchiveChatRequest,
   uploadAttachment,
 } from './src/lib/mobileApi';
 import { decryptForChat, encryptForChat, isLiteCiphertext } from './src/lib/e2eeLite';
@@ -202,6 +205,7 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<Array<{ id: string; username: string }>>([]);
   const [chatSearchQ, setChatSearchQ] = useState('');
   const [showStarredOnly, setShowStarredOnly] = useState(false);
+  const [showArchivedOnly, setShowArchivedOnly] = useState(false);
   const [starredChats, setStarredChats] = useState<Set<string>>(new Set());
   const [refreshingChats, setRefreshingChats] = useState(false);
   const [refreshingMessages, setRefreshingMessages] = useState(false);
@@ -323,6 +327,9 @@ export default function App() {
   const filteredChats = useMemo(() => {
     const query = chatSearchQ.trim().toLowerCase();
     const list = chats.filter((chat) => {
+      const archived = Boolean(chat.archivedAt);
+      if (showArchivedOnly && !archived) return false;
+      if (!showArchivedOnly && archived) return false;
       if (showStarredOnly && !starredChats.has(chat.id)) return false;
       if (!query) return true;
       const title = getChatCardTitle(chat).toLowerCase();
@@ -338,14 +345,15 @@ export default function App() {
       const bTime = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
       return bTime - aTime;
     });
-  }, [chatSearchQ, chats, getChatCardSubtitle, getChatCardTitle, showStarredOnly, starredChats]);
+  }, [chatSearchQ, chats, getChatCardSubtitle, getChatCardTitle, showArchivedOnly, showStarredOnly, starredChats]);
 
   const chatsStats = useMemo(() => {
-    const total = chats.length;
+    const active = chats.filter((item) => !item.archivedAt).length;
+    const archived = chats.filter((item) => Boolean(item.archivedAt)).length;
     const starred = starredChats.size;
-    const dm = chats.filter((item) => item.type === 'dm').length;
-    const groups = chats.filter((item) => item.type !== 'dm').length;
-    return { total, starred, dm, groups };
+    const dm = chats.filter((item) => item.type === 'dm' && !item.archivedAt).length;
+    const groups = chats.filter((item) => item.type !== 'dm' && !item.archivedAt).length;
+    return { active, archived, starred, dm, groups };
   }, [chats, starredChats]);
 
   const refreshCurrentUser = useCallback(async () => {
@@ -544,7 +552,7 @@ export default function App() {
     if (!token) return;
     setChatsLoading(true);
     try {
-      const list = await getChats(apiBase, token);
+      const list = await getChats(apiBase, token, { includeArchived: true });
       setChats(list);
     } catch (error: any) {
       if ((error?.message || '').includes('session_invalid')) {
@@ -732,6 +740,76 @@ export default function App() {
     [apiBase, loadChatsSafe, onOpenChat, token]
   );
 
+  const onDeleteChat = useCallback(
+    (chat: ChatSummary) => {
+      if (!token) return;
+      const title = getChatCardTitle(chat);
+      Alert.alert('Delete chat', `Delete "${title}"? This cannot be undone.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteChatRequest(apiBase, token, chat.id);
+              if (selectedChat?.id === chat.id) {
+                setSelectedChat(null);
+                setMessages([]);
+                setAttachmentDraft(null);
+                setView('chats');
+              }
+              await loadChatsSafe();
+              Alert.alert('Delete chat', 'Chat removed.');
+            } catch (error: any) {
+              Alert.alert('Delete chat', String(error?.message || error));
+            }
+          },
+        },
+      ]);
+    },
+    [apiBase, getChatCardTitle, loadChatsSafe, selectedChat?.id, token]
+  );
+
+  const onToggleArchiveChat = useCallback(
+    (chat: ChatSummary) => {
+      if (!token) return;
+      const archived = Boolean(chat.archivedAt);
+      const title = getChatCardTitle(chat);
+      Alert.alert(
+        archived ? 'Restore chat' : 'Archive chat',
+        archived
+          ? `Return "${title}" to the main list?`
+          : `Move "${title}" to archive? You can restore it later.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: archived ? 'Restore' : 'Archive',
+            onPress: async () => {
+              try {
+                if (archived) {
+                  await unarchiveChatRequest(apiBase, token, chat.id);
+                } else {
+                  await archiveChatRequest(apiBase, token, chat.id);
+                }
+                if (!archived && selectedChat?.id === chat.id && !showArchivedOnly) {
+                  setSelectedChat(null);
+                  setMessages([]);
+                  setAttachmentDraft(null);
+                  setView('chats');
+                }
+                await loadChatsSafe();
+                Alert.alert(archived ? 'Restore chat' : 'Archive chat', archived ? 'Chat restored.' : 'Chat archived.');
+              } catch (error: any) {
+                Alert.alert(archived ? 'Restore chat' : 'Archive chat', String(error?.message || error));
+              }
+            },
+          },
+        ]
+      );
+    },
+    [apiBase, getChatCardTitle, loadChatsSafe, selectedChat?.id, showArchivedOnly, token]
+  );
+
   const onOpenSupportChat = useCallback(
     async (chatId?: string) => {
       if (!token || !chatId) {
@@ -741,7 +819,7 @@ export default function App() {
       try {
         let targetChat = chats.find((chat) => chat.id === chatId) || null;
         if (!targetChat) {
-          const refreshed = await getChats(apiBase, token);
+          const refreshed = await getChats(apiBase, token, { includeArchived: true });
           setChats(refreshed);
           targetChat = refreshed.find((chat) => chat.id === chatId) || null;
         }
@@ -967,7 +1045,7 @@ export default function App() {
     if (!token) return;
     setRefreshingChats(true);
     try {
-      const list = await getChats(apiBase, token);
+      const list = await getChats(apiBase, token, { includeArchived: true });
       setChats(list);
     } catch (error: any) {
       Alert.alert('Refresh failed', String(error?.message || error));
@@ -1431,9 +1509,17 @@ export default function App() {
                 >
                   <Text style={styles.ghostPillText}>Back</Text>
                 </Pressable>
-                <Pressable style={styles.ghostPill} onPress={onRefreshMessages}>
-                  <Text style={styles.ghostPillText}>Sync</Text>
-                </Pressable>
+                <View style={styles.chatHeaderActions}>
+                  <Pressable style={styles.ghostPill} onPress={onRefreshMessages}>
+                    <Text style={styles.ghostPillText}>Sync</Text>
+                  </Pressable>
+                  <Pressable style={styles.ghostPill} onPress={() => onToggleArchiveChat(selectedChat)}>
+                    <Text style={styles.ghostPillText}>{selectedChat.archivedAt ? 'Restore' : 'Archive'}</Text>
+                  </Pressable>
+                  <Pressable style={styles.dangerGhostPill} onPress={() => onDeleteChat(selectedChat)}>
+                    <Text style={styles.dangerGhostPillText}>Delete</Text>
+                  </Pressable>
+                </View>
               </View>
 
               <View style={styles.chatIdentityRow}>
@@ -1637,13 +1723,19 @@ export default function App() {
                 >
                   <Text style={styles.statusPillText}>{showStarredOnly ? 'Showing starred only' : 'Showing all chats'}</Text>
                 </Pressable>
+                <Pressable
+                  style={[styles.statusPill, showArchivedOnly ? styles.statusPillSecure : styles.statusPillMuted]}
+                  onPress={() => setShowArchivedOnly((prev) => !prev)}
+                >
+                  <Text style={styles.statusPillText}>{showArchivedOnly ? 'Showing archive' : 'Showing active chats'}</Text>
+                </Pressable>
               </View>
             </GlassCard>
 
             <View style={styles.statsGrid}>
               <GlassCard style={styles.statCardTall}>
-                <Text style={styles.statLabel}>Chats</Text>
-                <Text style={styles.statValue}>{chatsStats.total}</Text>
+                <Text style={styles.statLabel}>Active</Text>
+                <Text style={styles.statValue}>{chatsStats.active}</Text>
               </GlassCard>
               <GlassCard style={styles.statCardTall}>
                 <Text style={styles.statLabel}>Starred</Text>
@@ -1654,8 +1746,8 @@ export default function App() {
                 <Text style={styles.statValue}>{chatsStats.dm}</Text>
               </GlassCard>
               <GlassCard style={styles.statCardTall}>
-                <Text style={styles.statLabel}>Groups</Text>
-                <Text style={styles.statValue}>{chatsStats.groups}</Text>
+                <Text style={styles.statLabel}>Archived</Text>
+                <Text style={styles.statValue}>{chatsStats.archived}</Text>
               </GlassCard>
             </View>
 
@@ -1717,8 +1809,12 @@ export default function App() {
         }
         ListEmptyComponent={
           <GlassCard style={styles.emptyStateCard}>
-            <Text style={styles.emptyStateTitle}>No chats loaded</Text>
-            <Text style={styles.emptyStateText}>Search for a user above and create your first DM to start testing.</Text>
+            <Text style={styles.emptyStateTitle}>{showArchivedOnly ? 'Archive is empty' : 'No chats loaded'}</Text>
+            <Text style={styles.emptyStateText}>
+              {showArchivedOnly
+                ? 'Archived chats will appear here. Restore any chat to move it back into the main list.'
+                : 'Search for a user above and create your first DM to start testing.'}
+            </Text>
           </GlassCard>
         }
         renderItem={({ item }) => {
@@ -1726,38 +1822,53 @@ export default function App() {
           const subtitle = getChatCardSubtitle(item);
           const starred = starredChats.has(item.id);
           return (
-            <Pressable style={styles.chatCard} onPress={() => onOpenChat(item)}>
-              <View style={styles.chatIdentityRow}>
-                <View style={styles.avatarLarge}>
-                  <Text style={styles.avatarLargeText}>{getInitials(title)}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.chatTopLine}>
-                    <Text style={styles.chatTitle}>{title}</Text>
-                    <Text style={styles.chatTime}>{humanRelativeTime(item.lastMessage?.createdAt)}</Text>
+            <View style={styles.chatCard}>
+              <Pressable style={styles.chatCardOpenArea} onPress={() => onOpenChat(item)}>
+                <View style={styles.chatIdentityRow}>
+                  <View style={styles.avatarLarge}>
+                    <Text style={styles.avatarLargeText}>{getInitials(title)}</Text>
                   </View>
-                  <Text style={styles.chatSubtitle} numberOfLines={2}>{subtitle}</Text>
-                  <View style={styles.chatMetaRow}>
-                    <View style={styles.metaPill}>
-                      <Text style={styles.metaPillText}>{item.type === 'dm' ? 'Direct' : 'Group'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.chatTopLine}>
+                      <Text style={styles.chatTitle}>{title}</Text>
+                      <Text style={styles.chatTime}>{humanRelativeTime(item.lastMessage?.createdAt)}</Text>
                     </View>
-                    {item.lastMessage?.ciphertext ? (
-                      <View style={[styles.metaPill, styles.metaPillSecure]}>
-                        <Text style={styles.metaPillText}>Encrypted</Text>
-                      </View>
-                    ) : null}
-                    {item.lastMessage?.attachmentUrl ? (
+                    <Text style={styles.chatSubtitle} numberOfLines={2}>{subtitle}</Text>
+                    <View style={styles.chatMetaRow}>
                       <View style={styles.metaPill}>
-                        <Text style={styles.metaPillText}>File</Text>
+                        <Text style={styles.metaPillText}>{item.type === 'dm' ? 'Direct' : 'Group'}</Text>
                       </View>
-                    ) : null}
+                      {item.archivedAt ? (
+                        <View style={[styles.metaPill, styles.metaPillArchived]}>
+                          <Text style={styles.metaPillText}>Archived</Text>
+                        </View>
+                      ) : null}
+                      {item.lastMessage?.ciphertext ? (
+                        <View style={[styles.metaPill, styles.metaPillSecure]}>
+                          <Text style={styles.metaPillText}>Encrypted</Text>
+                        </View>
+                      ) : null}
+                      {item.lastMessage?.attachmentUrl ? (
+                        <View style={styles.metaPill}>
+                          <Text style={styles.metaPillText}>File</Text>
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
-              </View>
-              <Pressable style={[styles.starButton, starred ? styles.starButtonActive : null]} onPress={() => onToggleStarChat(item.id)}>
-                <Text style={styles.starButtonText}>{starred ? 'Starred' : 'Star'}</Text>
               </Pressable>
-            </Pressable>
+              <View style={styles.chatCardActions}>
+                <Pressable style={[styles.starButton, starred ? styles.starButtonActive : null]} onPress={() => onToggleStarChat(item.id)}>
+                  <Text style={styles.starButtonText}>{starred ? 'Starred' : 'Star'}</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryActionButton} onPress={() => onToggleArchiveChat(item)}>
+                  <Text style={styles.secondaryActionButtonText}>{item.archivedAt ? 'Restore' : 'Archive'}</Text>
+                </Pressable>
+                <Pressable style={styles.deleteButtonSmall} onPress={() => onDeleteChat(item)}>
+                  <Text style={styles.deleteButtonSmallText}>Delete</Text>
+                </Pressable>
+              </View>
+            </View>
           );
         }}
       />
@@ -2193,6 +2304,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  dangerGhostPill: {
+    minHeight: 38,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(228, 115, 115, 0.2)',
+    backgroundColor: 'rgba(74, 21, 21, 0.82)',
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dangerGhostPillText: {
+    color: '#ffe3e3',
+    fontSize: 13,
+    fontWeight: '800',
+  },
   statusPill: {
     minHeight: 36,
     borderRadius: 999,
@@ -2358,6 +2484,11 @@ const styles = StyleSheet.create({
   },
   chatHeaderCard: {
     paddingBottom: 16,
+  },
+  chatHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   chatIdentityRow: {
     flexDirection: 'row',
@@ -2688,6 +2819,14 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
   },
+  chatCardOpenArea: {
+    borderRadius: 18,
+  },
+  chatCardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   chatTopLine: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2729,6 +2868,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(9, 62, 49, 0.84)',
     borderColor: 'rgba(72, 213, 169, 0.22)',
   },
+  metaPillArchived: {
+    backgroundColor: 'rgba(58, 44, 15, 0.82)',
+    borderColor: 'rgba(221, 177, 84, 0.22)',
+  },
   metaPillText: {
     color: '#d7ebff',
     fontSize: 11,
@@ -2749,6 +2892,34 @@ const styles = StyleSheet.create({
   },
   starButtonText: {
     color: '#f5f0cb',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  secondaryActionButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(111, 194, 255, 0.18)',
+    backgroundColor: 'rgba(8, 16, 28, 0.74)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  secondaryActionButtonText: {
+    color: '#dff0ff',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  deleteButtonSmall: {
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(228, 115, 115, 0.18)',
+    backgroundColor: 'rgba(74, 21, 21, 0.84)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  deleteButtonSmallText: {
+    color: '#ffe3e3',
     fontWeight: '800',
     fontSize: 12,
   },

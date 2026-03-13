@@ -437,4 +437,141 @@
   animation: slide-in 0.5s ease;
 }
 
+@media (max-width: 768px) {
+  .register-container {
+    align-items: flex-start;
+    padding: 12px;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .register-card {
+    border-radius: 18px;
+    padding: 24px 18px;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  .register-header {
+    margin-bottom: 24px;
+  }
+
+  .register-header h1 {
+    font-size: 24px;
+    margin-bottom: 16px;
+  }
+
+  .step-indicator {
+    gap: 8px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+  }
+
+  .step-dot {
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
+  }
+
+  .step-icon {
+    font-size: 48px;
+    margin-bottom: 14px;
+  }
+
+  .step-content h2 {
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+
+  .step-content p {
+    font-size: 13px;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .choice-buttons,
+  .register-actions {
+    flex-direction: column;
+  }
+
+  .choice-btn,
+  .btn-primary,
+  .btn-secondary {
+    width: 100%;
+    min-height: 48px;
+    padding: 14px 16px;
+    font-size: 15px;
+  }
+
+  .register-input {
+    padding: 14px;
+    font-size: 16px;
+  }
+
+  .register-footer {
+    margin-top: 18px;
+    padding-top: 18px;
+  }
+
+  .success-animation {
+    width: min(100%, 340px);
+    height: 420px;
+  }
+
+  .shield {
+    width: 150px;
+    height: 180px;
+  }
+
+  .gate-left,
+  .gate-right {
+    width: 110px;
+    height: 220px;
+    top: 90px;
+  }
+
+  .success-text h1 {
+    font-size: 22px;
+  }
+
+  .success-text p {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 420px) {
+  .register-container {
+    padding: 8px;
+  }
+
+  .register-card {
+    padding: 18px 14px;
+    border-radius: 16px;
+  }
+
+  .register-header h1 {
+    font-size: 22px;
+  }
+
+  .step-indicator {
+    justify-content: flex-start;
+  }
+
+  .step-dot {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .error-message {
+    margin: 14px 0;
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  .success-animation {
+    height: 360px;
+  }
+}
+
 

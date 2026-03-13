@@ -936,6 +936,7 @@ export default function Chats() {
                 setSelectedChatId('');
                 setSidebarOpen(false);
               }}
+              onDeleteChat={() => deleteChat(selectedChatId)}
             />
           ) : (
             <div className="empty-state chats-empty-state">

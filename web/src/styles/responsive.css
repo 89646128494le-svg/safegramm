@@ -55,6 +55,20 @@ html {
     min-height: 56px;
     padding: 12px max(16px, env(safe-area-inset-left));
   }
+  .chat-list-item .chat-item-actions-toggle,
+  .chat-list-item button {
+    min-height: 44px;
+  }
+  .chat-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .chat-header-actions .delete-chat-btn {
+    background: rgba(83, 21, 21, 0.84);
+    border: 1px solid rgba(233, 114, 114, 0.22);
+    color: #ffe1e1;
+  }
   .message-wrapper { max-width: 90%; }
 }
 

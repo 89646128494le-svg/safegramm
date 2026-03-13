@@ -28,6 +28,9 @@ export default function Login({ onDone }: LoginProps) {
   const [hasCloudCode, setHasCloudCode] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [devEmailCode, setDevEmailCode] = useState<string>('');
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1280
+  );
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '';
@@ -51,6 +54,16 @@ export default function Login({ onDone }: LoginProps) {
     const t = setInterval(() => setResendCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
     return () => clearInterval(t);
   }, [resendCooldown]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const isPhone = viewportWidth <= 640;
+  const isNarrowPhone = viewportWidth <= 420;
 
   const sendEmailCode = async () => {
     if (!username.trim()) {
@@ -481,23 +494,25 @@ export default function Login({ onDone }: LoginProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      className="login-screen"
       style={{
         minHeight: '100vh',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: isPhone ? 'stretch' : 'center',
         justifyContent: 'center',
-        padding: 'var(--spacing-lg)',
+        padding: isPhone ? '12px' : 'var(--spacing-lg)',
         background: 'linear-gradient(135deg, #0b1020 0%, #1a1f35 100%)',
         position: 'relative',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        overflowY: 'auto'
       }}
     >
       {/* Animated background orbs */}
       <motion.div
         style={{
           position: 'absolute',
-          width: '500px',
-          height: '500px',
+          width: isPhone ? '280px' : '500px',
+          height: isPhone ? '280px' : '500px',
           background: 'radial-gradient(circle, rgba(124,108,255,0.3), transparent)',
           borderRadius: '50%',
           filter: 'blur(80px)',
@@ -518,8 +533,8 @@ export default function Login({ onDone }: LoginProps) {
       <motion.div
         style={{
           position: 'absolute',
-          width: '400px',
-          height: '400px',
+          width: isPhone ? '220px' : '400px',
+          height: isPhone ? '220px' : '400px',
           background: 'radial-gradient(circle, rgba(61,216,255,0.3), transparent)',
           borderRadius: '50%',
           filter: 'blur(80px)',
@@ -540,18 +555,18 @@ export default function Login({ onDone }: LoginProps) {
       />
 
       <motion.div
-        className="modal-content"
+        className="modal-content login-card"
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         style={{
-          maxWidth: '420px',
+          maxWidth: isPhone ? '100%' : '420px',
           width: '100%',
           background: 'rgba(11, 16, 32, 0.95)',
           backdropFilter: 'blur(20px)',
           border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: '20px',
-          padding: '40px',
+          borderRadius: isPhone ? '18px' : '20px',
+          padding: isPhone ? (isNarrowPhone ? '18px 16px' : '22px 20px') : '40px',
           boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(124, 108, 255, 0.2)',
           position: 'relative',
           zIndex: 1
@@ -561,29 +576,29 @@ export default function Login({ onDone }: LoginProps) {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          style={{ textAlign: 'center', marginBottom: '32px' }}
+          style={{ textAlign: 'center', marginBottom: isPhone ? '24px' : '32px' }}
         >
           <motion.div
             style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '16px',
+              width: isPhone ? '54px' : '64px',
+              height: isPhone ? '54px' : '64px',
+              borderRadius: isPhone ? '14px' : '16px',
               background: 'linear-gradient(135deg, rgba(124,108,255,0.3), rgba(61,216,255,0.3))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 16px'
+              margin: isPhone ? '0 auto 12px' : '0 auto 16px'
             }}
             animate={{ rotate: [0, 10, -10, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           >
             {step === 'email' ? <Mail size={32} color="#7c6cff" /> :
-             step === 'cloudCode' ? <Key size={32} color="#7c6cff" /> :
-             <Lock size={32} color="#7c6cff" />}
+             step === 'cloudCode' ? <Key size={isPhone ? 26 : 32} color="#7c6cff" /> :
+             <Lock size={isPhone ? 26 : 32} color="#7c6cff" />}
           </motion.div>
           <h2 style={{
             marginBottom: '8px',
-            fontSize: '28px',
+            fontSize: isPhone ? '22px' : '28px',
             fontWeight: 800,
             background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
             WebkitBackgroundClip: 'text',
@@ -592,12 +607,12 @@ export default function Login({ onDone }: LoginProps) {
           }}>
             {getTitle()}
           </h2>
-          <p style={{ color: 'rgba(233, 236, 245, 0.6)', fontSize: '14px' }}>
+          <p style={{ color: 'rgba(233, 236, 245, 0.6)', fontSize: isPhone ? '13px' : '14px', lineHeight: 1.55 }}>
             {getSubtitle()}
           </p>
         </motion.div>
 
-        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: isPhone ? '12px' : '16px' }}>
           <AnimatePresence mode="wait">
             {renderStep()}
           </AnimatePresence>
@@ -634,17 +649,17 @@ export default function Login({ onDone }: LoginProps) {
             transition={{ delay: 0.4 }}
             whileHover={{ scale: loading ? 1 : 1.02, y: loading ? 0 : -2 }}
             whileTap={{ scale: loading ? 1 : 0.98 }}
-            style={{
-              width: '100%',
-              padding: '16px',
-              background: loading
-                ? 'rgba(124, 108, 255, 0.3)'
-                : 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
-              border: 'none',
-              borderRadius: '12px',
-              color: '#0a0e1a',
-              fontSize: '16px',
-              fontWeight: 700,
+                style={{
+                  width: '100%',
+                  padding: isPhone ? '14px' : '16px',
+                  background: loading
+                    ? 'rgba(124, 108, 255, 0.3)'
+                    : 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: '#0a0e1a',
+                  fontSize: isPhone ? '15px' : '16px',
+                  fontWeight: 700,
               cursor: loading ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -674,7 +689,7 @@ export default function Login({ onDone }: LoginProps) {
             transition={{ delay: 0.5 }}
           >
             <hr style={{
-              margin: '24px 0',
+              margin: isPhone ? '18px 0' : '24px 0',
               border: 'none',
               borderTop: '1px solid rgba(255, 255, 255, 0.1)'
             }} />
@@ -690,12 +705,12 @@ export default function Login({ onDone }: LoginProps) {
               whileTap={{ scale: 0.98 }}
               style={{
                 width: '100%',
-                padding: '14px',
+                padding: isPhone ? '13px' : '14px',
                 background: 'rgba(255, 255, 255, 0.05)',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
                 borderRadius: '12px',
                 color: '#e9ecf5',
-                fontSize: '15px',
+                fontSize: isPhone ? '14px' : '15px',
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s'

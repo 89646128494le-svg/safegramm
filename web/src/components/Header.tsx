@@ -5,6 +5,7 @@ import { Shield, LogOut, User, Settings, Crown, Bell, Menu, X, Home, Star, Dolla
 import ThemeSwitcher from './ThemeSwitcher';
 import Navigation from './Navigation';
 import { useStore } from '../store/useStore';
+import logoGradientUrl from '../assets/brand/logo-mark-gradient.svg';
 
 const publicNavItems = [
   { path: '/', label: 'Главная', icon: Home },
@@ -25,63 +26,6 @@ interface User {
 interface HeaderProps {
   user: User | null;
   onLogout: () => void;
-}
-
-function LogoMark({ size = 40 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ display: 'block' }}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <linearGradient id="sg_g" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#7c6cff" />
-          <stop offset="1" stopColor="#3dd8ff" />
-        </linearGradient>
-        <linearGradient id="sg_g2" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
-          <stop stopColor="rgba(255,255,255,0.35)" />
-          <stop offset="1" stopColor="rgba(255,255,255,0.0)" />
-        </linearGradient>
-        <filter id="sg_shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor="rgba(0,0,0,0.35)" />
-        </filter>
-      </defs>
-      <rect x="6" y="6" width="52" height="52" rx="16" fill="url(#sg_g)" filter="url(#sg_shadow)" />
-      <rect x="10" y="10" width="44" height="44" rx="14" fill="url(#sg_g2)" opacity="0.9" />
-      {/* Envelope / message mark */}
-      <path
-        d="M20 26.5C20 24.567 21.567 23 23.5 23H40.5C42.433 23 44 24.567 44 26.5V39.5C44 41.433 42.433 43 40.5 43H23.5C21.567 43 20 41.433 20 39.5V26.5Z"
-        fill="rgba(3,7,18,0.55)"
-        stroke="rgba(255,255,255,0.45)"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M22 27.5L31.1 34.1C31.65 34.5 32.35 34.5 32.9 34.1L42 27.5"
-        stroke="rgba(255,255,255,0.75)"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M22.5 41L29.2 34.8"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M41.5 41L34.8 34.8"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 export default function Header({ user, onLogout }: HeaderProps) {
@@ -139,7 +83,19 @@ export default function Header({ user, onLogout }: HeaderProps) {
             }}
         >
           <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <LogoMark size={40} />
+            <img
+              src={logoGradientUrl}
+              alt="SafeGram logo"
+              width={40}
+              height={40}
+              style={{
+                display: 'block',
+                width: 40,
+                height: 40,
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 8px 24px rgba(77, 155, 255, 0.24))',
+              }}
+            />
             <h1 style={{
               fontSize: '22px',
               fontWeight: 900,
