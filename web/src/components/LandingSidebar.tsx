@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Home, Star, DollarSign, Info, FileText, Shield, LogIn, UserPlus } from 'lucide-react';
+import { useDomainMigration } from '../contexts/DomainMigrationContext';
 
-/** Нормальная иконка «три полоски» для мобильного меню */
 function BurgerIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -14,7 +14,6 @@ function BurgerIcon() {
   );
 }
 
-/** Разделы сайта (лендинг) — в выдвижном меню на телефонах */
 const publicNavItems = [
   { path: '/', label: 'Главная', icon: Home },
   { path: '/features', label: 'Функции', icon: Star },
@@ -27,6 +26,8 @@ const publicNavItems = [
 export default function LandingSidebar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const domainMigration = useDomainMigration();
+  const authClosedOnLegacy = domainMigration.legacyHost && domainMigration.authClosed;
 
   return (
     <>
@@ -81,14 +82,31 @@ export default function LandingSidebar() {
                     </Link>
                   );
                 })}
-                <Link to="/login" className="landing-sidebar-item" onClick={() => setOpen(false)}>
-                  <LogIn size={22} />
-                  <span>Войти</span>
-                </Link>
-                <Link to="/register" className="landing-sidebar-item landing-sidebar-item-register" onClick={() => setOpen(false)}>
-                  <UserPlus size={22} />
-                  <span>Регистрация</span>
-                </Link>
+                {authClosedOnLegacy ? (
+                  <a
+                    href={domainMigration.targetUrl}
+                    className="landing-sidebar-item landing-sidebar-item-register"
+                    onClick={() => setOpen(false)}
+                  >
+                    <LogIn size={22} />
+                    <span>На safegram.site</span>
+                  </a>
+                ) : (
+                  <>
+                    <Link to="/login" className="landing-sidebar-item" onClick={() => setOpen(false)}>
+                      <LogIn size={22} />
+                      <span>Войти</span>
+                    </Link>
+                    <Link
+                      to="/register"
+                      className="landing-sidebar-item landing-sidebar-item-register"
+                      onClick={() => setOpen(false)}
+                    >
+                      <UserPlus size={22} />
+                      <span>Регистрация</span>
+                    </Link>
+                  </>
+                )}
               </div>
             </motion.aside>
           </>

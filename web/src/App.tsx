@@ -5,10 +5,12 @@ import { useStore } from './store/useStore';
 import ErrorBoundary from './components/ErrorBoundary';
 import MaintenanceBanner from './components/MaintenanceBanner';
 import DesktopTitlebar, { DESKTOP_TITLEBAR_HEIGHT } from './components/DesktopTitlebar';
+import { DomainMigrationProvider, useDomainMigration } from './contexts/DomainMigrationContext';
 import Landing from './pages/Landing';
 import AppShell from './pages/AppShell';
 import Feedback from './pages/Feedback';
 import Status from './pages/Status';
+import DomainMigration from './pages/DomainMigration';
 
 const Features = lazy(() => import('./pages/Features'));
 const Pricing = lazy(() => import('./pages/Pricing'));
@@ -47,7 +49,7 @@ function PageFallback() {
   );
 }
 
-export default function App() {
+function AppRoutes() {
   const navigate = useNavigate();
   const [errorBoundaryKey, setErrorBoundaryKey] = useState(0);
   const handleErrorRetry = () => {
@@ -55,6 +57,7 @@ export default function App() {
     navigate('/login');
   };
   const { token, setToken, setUser, user, maintenance } = useStore();
+  const domainMigration = useDomainMigration();
   const authChecked = useRef(false);
   const hasStoredToken = !!(token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null));
   const [authCheckDone, setAuthCheckDone] = useState(!hasStoredToken);
@@ -112,6 +115,7 @@ export default function App() {
     return normalized === 'lev' || normalized === 'ra40k';
   };
   const appMaintenanceLocked = !!maintenance?.isActive && !isMaintenanceBypassUser(user?.username);
+  const authDomainLocked = domainMigration.legacyHost && domainMigration.authClosed;
 
   if (checkingAuth) {
     return (
@@ -144,11 +148,12 @@ export default function App() {
                 appMaintenanceLocked ? <Navigate to="/status" replace /> : isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
               } />
               <Route path="/status" element={<Status />} />
+              <Route path="/migration" element={<DomainMigration />} />
               <Route path="/login" element={
-                isAuthenticated ? <Navigate to="/app/chats" replace /> : <Login onDone={handleAuthSuccess} />
+                authDomainLocked ? <Navigate to="/migration" replace /> : isAuthenticated ? <Navigate to="/app/chats" replace /> : <Login onDone={handleAuthSuccess} />
               } />
               <Route path="/register" element={
-                isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
+                authDomainLocked ? <Navigate to="/migration" replace /> : isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
               } />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
@@ -177,6 +182,7 @@ export default function App() {
           appMaintenanceLocked ? <Navigate to="/status" replace /> : isAuthenticated ? <AppShell /> : <Navigate to="/login" replace />
         } />
         <Route path="/status" element={<Status />} />
+        <Route path="/migration" element={<DomainMigration />} />
         <Route path="/features" element={<Features />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/about" element={<About />} />
@@ -185,10 +191,10 @@ export default function App() {
         <Route path="/support" element={<Feedback />} />
         <Route path="/feedback" element={<Navigate to="/support" replace />} />
         <Route path="/login" element={
-          isAuthenticated ? <Navigate to="/app/chats" replace /> : <Login onDone={handleAuthSuccess} />
+          authDomainLocked ? <Navigate to="/migration" replace /> : isAuthenticated ? <Navigate to="/app/chats" replace /> : <Login onDone={handleAuthSuccess} />
         } />
         <Route path="/register" element={
-          isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
+          authDomainLocked ? <Navigate to="/migration" replace /> : isAuthenticated ? <Navigate to="/app/chats" replace /> : <Register />
         } />
         <Route path="/premium-apply" element={<PremiumApply />} />
         <Route path="/join" element={<JoinRecruit />} />
@@ -197,5 +203,13 @@ export default function App() {
         </Routes>
       </Suspense>
     </ErrorBoundary>
+  );
+}
+
+export default function App() {
+  return (
+    <DomainMigrationProvider>
+      <AppRoutes />
+    </DomainMigrationProvider>
   );
 }

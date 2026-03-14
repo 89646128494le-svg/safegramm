@@ -1,19 +1,20 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Shield, LogOut, User, Settings, Crown, Bell, Menu, X, Home, Star, DollarSign, Info, FileText, Lock } from 'lucide-react';
 import ThemeSwitcher from './ThemeSwitcher';
 import Navigation from './Navigation';
 import { useStore } from '../store/useStore';
+import { useDomainMigration } from '../contexts/DomainMigrationContext';
 import logoPrimaryUrl from '../assets/brand/logo-primary.png';
 
 const publicNavItems = [
-  { path: '/', label: 'Главная', icon: Home },
-  { path: '/features', label: 'Функции', icon: Star },
-  { path: '/pricing', label: 'Тарифы', icon: DollarSign },
-  { path: '/about', label: 'О нас', icon: Info },
-  { path: '/privacy', label: 'Приватность', icon: Lock },
-  { path: '/terms', label: 'Условия', icon: FileText },
+  { path: '/', label: 'Ð“Ð»Ð°Ð²Ð½Ð°Ñ', icon: Home },
+  { path: '/features', label: 'Ð¤ÑƒÐ½ÐºÑ†Ð¸Ð¸', icon: Star },
+  { path: '/pricing', label: 'Ð¢Ð°Ñ€Ð¸Ñ„Ñ‹', icon: DollarSign },
+  { path: '/about', label: 'Ðž Ð½Ð°Ñ', icon: Info },
+  { path: '/privacy', label: 'ÐŸÑ€Ð¸Ð²Ð°Ñ‚Ð½Ð¾ÑÑ‚ÑŒ', icon: Lock },
+  { path: '/terms', label: 'Ð£ÑÐ»Ð¾Ð²Ð¸Ñ', icon: FileText },
 ];
 
 interface User {
@@ -35,6 +36,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
   const nav = useNavigate();
   const location = useLocation();
   const { ui } = useStore();
+  const domainMigration = useDomainMigration();
   const isAppRoute = location.pathname.startsWith('/app');
 
   const getUserRoles = (): string[] => {
@@ -48,6 +50,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
   const isLandingRoute = ['/', '/features', '/pricing', '/about', '/privacy', '/terms'].includes(location.pathname);
   const brandTextColor = '#7d86ff';
+  const authClosedOnLegacy = !user && domainMigration.legacyHost && domainMigration.authClosed;
 
   return (
     <motion.header
@@ -174,7 +177,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
             <button
               type="button"
               className="header-burger"
-              aria-label="Меню"
+              aria-label="ÐœÐµÐ½ÑŽ"
               onClick={() => setShowPublicNav(!showPublicNav)}
               style={{
                 display: 'none',
@@ -198,7 +201,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
         <ThemeSwitcher />
         {ui.stealthMode && (
           <span
-            title="Stealth mode включен"
+            title="Stealth mode Ð²ÐºÐ»ÑŽÑ‡ÐµÐ½"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -211,7 +214,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
               animation: 'pulse 1.4s infinite',
             }}
           >
-            🥷
+            ðŸ¥·
           </span>
         )}
         
@@ -247,7 +250,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                     }}
                   >
                     <Crown size={16} />
-                    <span>Панель</span>
+                    <span>ÐŸÐ°Ð½ÐµÐ»ÑŒ</span>
                   </Link>
                 </motion.div>
               )}
@@ -294,7 +297,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 whileTap={{ scale: 0.95 }}
               >
                 <LogOut size={16} />
-                <span>Выйти</span>
+                <span>Ð’Ñ‹Ð¹Ñ‚Ð¸</span>
               </motion.button>
             </div>
 
@@ -322,26 +325,11 @@ export default function Header({ user, onLogout }: HeaderProps) {
           </>
         ) : (
           <div className="header-public-nav" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Link
-                to="/login"
-                style={{
-                  padding: '10px 16px',
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: 'none',
-                  borderRadius: '10px',
-                  color: '#e9ecf5',
-                  textDecoration: 'none',
-                  fontSize: '14px',
-                  fontWeight: 600
-                }}
-              >
-                Войти
-              </Link>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Link
-                to="/register"
+            {authClosedOnLegacy ? (
+              <motion.a
+                href={domainMigration.targetUrl}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 style={{
                   padding: '10px 16px',
                   background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
@@ -349,18 +337,55 @@ export default function Header({ user, onLogout }: HeaderProps) {
                   color: '#0a0e1a',
                   textDecoration: 'none',
                   fontSize: '14px',
-                  fontWeight: 700,
+                  fontWeight: 800,
                   boxShadow: '0 4px 12px rgba(124, 108, 255, 0.3)'
                 }}
               >
-                Регистрация
-              </Link>
-            </motion.div>
+                На safegram.site
+              </motion.a>
+            ) : (
+              <>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Link
+                    to="/login"
+                    style={{
+                      padding: '10px 16px',
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#e9ecf5',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      fontWeight: 600
+                    }}
+                  >
+                    Войти
+                  </Link>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Link
+                    to="/register"
+                    style={{
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+                      borderRadius: '10px',
+                      color: '#0a0e1a',
+                      textDecoration: 'none',
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      boxShadow: '0 4px 12px rgba(124, 108, 255, 0.3)'
+                    }}
+                  >
+                    Регистрация
+                  </Link>
+                </motion.div>
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* Mobile: публичное меню (страницы сайта + Войти + Регистрация) */}
+      {/* Mobile: Ð¿ÑƒÐ±Ð»Ð¸Ñ‡Ð½Ð¾Ðµ Ð¼ÐµÐ½ÑŽ (ÑÑ‚Ñ€Ð°Ð½Ð¸Ñ†Ñ‹ ÑÐ°Ð¹Ñ‚Ð° + Ð’Ð¾Ð¹Ñ‚Ð¸ + Ð ÐµÐ³Ð¸ÑÑ‚Ñ€Ð°Ñ†Ð¸Ñ) */}
       <AnimatePresence>
         {showPublicNav && !user && (
           <>
@@ -431,50 +456,74 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 );
               })}
               <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
-              <Link
-                to="/login"
-                onClick={() => setShowPublicNav(false)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '14px 16px',
-                  borderRadius: 12,
-                  textDecoration: 'none',
-                  color: '#e9ecf5',
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  fontSize: 16,
-                  fontWeight: 600,
-                }}
-              >
-                Войти
-              </Link>
-              <Link
-                to="/register"
-                onClick={() => setShowPublicNav(false)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '14px 16px',
-                  borderRadius: 12,
-                  textDecoration: 'none',
-                  color: '#0a0e1a',
-                  background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  boxShadow: '0 4px 12px rgba(124, 108, 255, 0.3)',
-                }}
-              >
-                Регистрация
-              </Link>
+              {authClosedOnLegacy ? (
+                <a
+                  href={domainMigration.targetUrl}
+                  onClick={() => setShowPublicNav(false)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '14px 16px',
+                    borderRadius: 12,
+                    textDecoration: 'none',
+                    color: '#0a0e1a',
+                    background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+                    fontSize: 16,
+                    fontWeight: 800,
+                    boxShadow: '0 4px 12px rgba(124, 108, 255, 0.3)',
+                  }}
+                >
+                  Перейти на safegram.site
+                </a>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    onClick={() => setShowPublicNav(false)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '14px 16px',
+                      borderRadius: 12,
+                      textDecoration: 'none',
+                      color: '#e9ecf5',
+                      background: 'rgba(255,255,255,0.08)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      fontSize: 16,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Войти
+                  </Link>
+                  <Link
+                    to="/register"
+                    onClick={() => setShowPublicNav(false)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '14px 16px',
+                      borderRadius: 12,
+                      textDecoration: 'none',
+                      color: '#0a0e1a',
+                      background: 'linear-gradient(135deg, #7c6cff 0%, #3dd8ff 100%)',
+                      fontSize: 16,
+                      fontWeight: 700,
+                      boxShadow: '0 4px 12px rgba(124, 108, 255, 0.3)',
+                    }}
+                  >
+                    Регистрация
+                  </Link>
+                </>
+              )}
             </motion.div>
           </>
         )}
       </AnimatePresence>
 
-      {/* Mobile Menu (для авторизованных) */}
+      {/* Mobile Menu (Ð´Ð»Ñ Ð°Ð²Ñ‚Ð¾Ñ€Ð¸Ð·Ð¾Ð²Ð°Ð½Ð½Ñ‹Ñ…) */}
       <AnimatePresence>
         {showMenu && user && (
           <motion.div
@@ -517,7 +566,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                   }}
                 >
                   <Crown size={18} />
-                  <span>Панель управления</span>
+                  <span>ÐŸÐ°Ð½ÐµÐ»ÑŒ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ</span>
                 </Link>
               </motion.div>
             )}
@@ -539,7 +588,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 }}
               >
                 <User size={18} />
-                <span>Профиль</span>
+                <span>ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ</span>
               </Link>
             </motion.div>
             <motion.div
@@ -560,7 +609,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 }}
               >
                 <Settings size={18} />
-                <span>Настройки</span>
+                <span>ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸</span>
               </Link>
             </motion.div>
             <motion.button
@@ -586,7 +635,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
               }}
             >
               <LogOut size={18} />
-              <span>Выйти</span>
+              <span>Ð’Ñ‹Ð¹Ñ‚Ð¸</span>
             </motion.button>
           </motion.div>
         )}
@@ -619,3 +668,4 @@ export default function Header({ user, onLogout }: HeaderProps) {
     </motion.header>
   );
 }
+

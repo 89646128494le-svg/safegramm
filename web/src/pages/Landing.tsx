@@ -4,6 +4,7 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import Header from '../components/Header';
 import LandingSidebar from '../components/LandingSidebar';
 import LandingFooter from '../components/LandingFooter';
+import { useDomainMigration } from '../contexts/DomainMigrationContext';
 import { useStore } from '../store/useStore';
 import { 
   Shield, 
@@ -37,12 +38,17 @@ const staggerContainer = {
 export default function Landing() {
   const nav = useNavigate();
   const { user } = useStore();
+  const domainMigration = useDomainMigration();
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
   const scale = useTransform(scrollYProgress, [0, 0.5], [1, 0.95]);
 
   const accept = () => {
     localStorage.setItem('policiesAccepted', '1');
+    if (domainMigration.legacyHost && domainMigration.authClosed) {
+      window.location.assign(domainMigration.targetUrl);
+      return;
+    }
     nav('/login');
   };
 
@@ -196,6 +202,30 @@ export default function Landing() {
               </Link>
             </motion.div>
           </motion.div>
+
+          {domainMigration.legacyHost && domainMigration.authClosed && (
+            <motion.div
+              variants={fadeInUp}
+              style={{
+                marginTop: '18px',
+                padding: '16px 18px',
+                borderRadius: '18px',
+                background: 'rgba(11, 24, 48, 0.72)',
+                border: '1px solid rgba(61, 216, 255, 0.18)',
+                color: 'rgba(232, 240, 255, 0.86)',
+                maxWidth: '640px'
+              }}
+            >
+              Вход и регистрация на beta-домене уже закрыты. Основной адрес SafeGram —{' '}
+              <a
+                href={domainMigration.targetUrl}
+                style={{ color: '#84d8ff', fontWeight: 800, textDecoration: 'none' }}
+              >
+                safegram.site
+              </a>
+              .
+            </motion.div>
+          )}
 
           <motion.div 
             className="hero-stats"
