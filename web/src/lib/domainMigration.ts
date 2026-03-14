@@ -1,7 +1,7 @@
 export const LEGACY_HOSTNAME = 'safegram-hazel.vercel.app';
 export const TARGET_HOSTNAME = 'safegram.site';
 export const TARGET_URL = 'https://safegram.site';
-export const MIGRATION_DEADLINE_ISO = '2026-03-14T23:00:00+03:00';
+export const MIGRATION_DEADLINE_ISO = '2026-03-14T23:25:00+03:00';
 export const MIGRATION_WARNING_WINDOW_MS = 60 * 60 * 1000;
 
 export type DomainMigrationPhase = 'inactive' | 'countdown' | 'completed';

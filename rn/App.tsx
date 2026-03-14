@@ -12,6 +12,7 @@ import {
   RefreshControl,
   SafeAreaView,
   ScrollView,
+  Share,
   StyleProp,
   StyleSheet,
   Switch,
@@ -25,38 +26,121 @@ import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import {
   archiveChat as archiveChatRequest,
+  AdminAnalyticsSummary,
+  AdminBanRecord,
+  AdminBannedWordRecord,
+  AdminFeedbackTicket,
+  AdminMaintenanceStatus,
+  AdminPremiumDashboard,
+  AdminStatsSnapshot,
+  AdminSystemBannerStatus,
+  AdminSystemHealth,
+  AdminUserRecord,
   AuthUser,
   BillingPlan,
   ChatSummary,
+  clearAdmin2FAToken,
   checkoutPremium,
+  createAdminBan,
+  createAdminBannedWord,
+  addServerMembersBulk,
+  createServer,
+  createServerCategory,
+  createServerChannel,
+  createServerRole,
   createSupportTicket,
+  createVoiceRoom,
   createDm,
+  DEFAULT_API_BASE,
   deleteChat as deleteChatRequest,
+  deleteAdminBan,
+  deleteAdminBannedWord,
+  deleteServerCategory,
+  deleteServerChannel,
+  deleteServerRole,
+  disableAdminMaintenance,
+  disableAdminSystemBanner,
+  getAdmin2FAStatus,
+  getAdminAnalytics,
+  getAdminBannedWords,
+  getAdminBans,
+  getAdminFeedback,
+  getAdminMaintenance,
+  getAdminModQueue,
+  getAdminPremiumDashboard,
+  getAdminReports,
+  getAdminStats,
+  getAdminSystemBanner,
+  getAdminSystemHealth,
+  getAdminUsers,
   getBillingPlans,
   getChats,
   getMessages,
   getPremiumInfo,
-  getSupportTickets,
-  getSavedApiBase,
+  getServer,
+  getServerCategories,
+  getServerChannels,
+  getServerMembers,
+  getServers,
+  getServerVoiceState,
   getCurrentUser,
+  getSavedAdmin2FAToken,
+  getServerHistory,
+  getSupportTickets,
+  getVoiceRoom,
   loginUser,
+  leaveServer,
+  joinServerByInvite,
   MessageItem,
+  MemberEventRecord,
   normalizeApiBase,
+  patchAdminFeedback,
+  patchAdminBannedWord,
   PremiumInfo,
   registerUser,
-  saveApiBase,
+  saveAdmin2FAToken,
   searchUsers,
   sendLoginEmailCode,
   sendMessage,
+  setServerChannelCategory,
+  ServerRoleRecord,
+  ServerCategory,
+  ServerChannel,
+  ServerMemberRecord,
+  ServerSummary,
+  setAdminMaintenance,
+  setAdminSystemBanner,
+  setServerMemberRole,
+  setServerMemberRoles,
   STORAGE_KEYS,
+  suspendAdminUser,
   SupportTicket,
   unarchiveChat as unarchiveChatRequest,
+  unblockAdminUser,
+  unsuspendAdminUser,
+  updateServer,
+  updateServerRole,
   uploadAttachment,
+  verifyAdmin2FA,
+  VoiceRoomRecord,
+  blockAdminUser,
+  endVoiceRoom,
+  generateServerInviteLink,
+  getServerRoles,
 } from './src/lib/mobileApi';
 import { decryptForChat, encryptForChat, isLiteCiphertext } from './src/lib/e2eeLite';
+import {
+  getAvailableStaffSections,
+  getDefaultStaffSection,
+  getRoleLabel,
+  hasRoleAtLeast,
+  hasStaffAccess,
+  StaffSectionId,
+} from './src/lib/staffRoles';
 
-type ViewMode = 'auth' | 'chats' | 'chat' | 'settings';
+type ViewMode = 'auth' | 'chats' | 'chat' | 'settings' | 'admin' | 'servers' | 'server';
 type AuthStep = 'credentials' | 'email' | 'cloudCode';
+type ChatOrigin = 'chats' | 'server';
 
 type UiMessage = MessageItem & {
   fromMe: boolean;
@@ -92,8 +176,21 @@ const SUPPORT_PRIORITIES = [
   { value: 'critical', label: 'Critical' },
   { value: 'low', label: 'Low' },
 ];
+const ADMIN_FEEDBACK_STATUSES = [
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'waiting_user', label: 'Waiting for user' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'closed', label: 'Closed' },
+];
+const SYSTEM_BANNER_SEVERITIES = [
+  { value: 'info', label: 'Info' },
+  { value: 'success', label: 'Success' },
+  { value: 'warning', label: 'Warning' },
+  { value: 'critical', label: 'Critical' },
+];
 const STARRED_CHATS_KEY = 'sg_starred_chats';
-const LEGAL_BASE = 'https://safegram-hazel.vercel.app';
+const LEGAL_BASE = 'https://safegram.site';
 const AUTH_STEPS: Array<{ key: AuthStep; label: string; short: string }> = [
   { key: 'credentials', label: 'Credentials', short: '01' },
   { key: 'email', label: 'Email check', short: '02' },
@@ -172,8 +269,7 @@ function GlassCard({ children, style }: { children: React.ReactNode; style?: Sty
 export default function App() {
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState<ViewMode>('auth');
-  const [apiBase, setApiBase] = useState('https://141.8.198.152.nip.io');
-  const [apiInput, setApiInput] = useState('https://141.8.198.152.nip.io');
+  const [apiBase] = useState(DEFAULT_API_BASE);
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [premiumInfo, setPremiumInfo] = useState<PremiumInfo | null>(null);
@@ -196,10 +292,43 @@ export default function App() {
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [selectedChat, setSelectedChat] = useState<ChatSummary | null>(null);
+  const [chatOrigin, setChatOrigin] = useState<ChatOrigin>('chats');
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [composer, setComposer] = useState('');
   const [selectedTtl, setSelectedTtl] = useState(0);
+  const [servers, setServers] = useState<ServerSummary[]>([]);
+  const [serversLoading, setServersLoading] = useState(false);
+  const [selectedServer, setSelectedServer] = useState<ServerSummary | null>(null);
+  const [serverChannels, setServerChannels] = useState<ServerChannel[]>([]);
+  const [serverCategories, setServerCategories] = useState<ServerCategory[]>([]);
+  const [serverMembers, setServerMembers] = useState<ServerMemberRecord[]>([]);
+  const [serverVoiceState, setServerVoiceState] = useState<Record<string, string[]>>({});
+  const [serverBusy, setServerBusy] = useState(false);
+  const [serverDraftName, setServerDraftName] = useState('');
+  const [serverDraftDescription, setServerDraftDescription] = useState('');
+  const [serverJoinCode, setServerJoinCode] = useState('');
+  const [serverSettingsName, setServerSettingsName] = useState('');
+  const [serverSettingsDescription, setServerSettingsDescription] = useState('');
+  const [serverInviteLink, setServerInviteLink] = useState('');
+  const [channelDraftName, setChannelDraftName] = useState('');
+  const [channelDraftType, setChannelDraftType] = useState<'text' | 'voice'>('text');
+  const [categoryDraftName, setCategoryDraftName] = useState('');
+  const [selectedVoiceChannelId, setSelectedVoiceChannelId] = useState('');
+  const [selectedVoiceRoom, setSelectedVoiceRoom] = useState<VoiceRoomRecord | null>(null);
+  const [serverRoles, setServerRoles] = useState<ServerRoleRecord[]>([]);
+  const [serverAllPermissions, setServerAllPermissions] = useState<string[]>([]);
+  const [serverHistory, setServerHistory] = useState<MemberEventRecord[]>([]);
+  const [serverRoleDraftName, setServerRoleDraftName] = useState('');
+  const [serverRoleDraftColor, setServerRoleDraftColor] = useState('99aab5');
+  const [serverRoleDraftPermissions, setServerRoleDraftPermissions] = useState<string[]>([]);
+  const [editingServerRoleId, setEditingServerRoleId] = useState('');
+  const [serverMemberSearchQ, setServerMemberSearchQ] = useState('');
+  const [serverMemberSearchLoading, setServerMemberSearchLoading] = useState(false);
+  const [serverMemberSearchResults, setServerMemberSearchResults] = useState<Array<{ id: string; username: string }>>([]);
+  const [pendingEntryServerId, setPendingEntryServerId] = useState('');
+  const [pendingEntryTextChannelId, setPendingEntryTextChannelId] = useState('');
+  const [pendingEntryVoiceChannelId, setPendingEntryVoiceChannelId] = useState('');
 
   const [searchQ, setSearchQ] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
@@ -225,6 +354,45 @@ export default function App() {
   const [supportPriority, setSupportPriority] = useState('normal');
   const [supportSubject, setSupportSubject] = useState('');
   const [supportBody, setSupportBody] = useState('');
+  const [adminSection, setAdminSection] = useState<StaffSectionId>('support');
+  const [adminGateLoading, setAdminGateLoading] = useState(false);
+  const [adminTwoFactorEnabled, setAdminTwoFactorEnabled] = useState(false);
+  const [adminTwoFactorToken, setAdminTwoFactorToken] = useState<string | null>(null);
+  const [adminTwoFactorCode, setAdminTwoFactorCode] = useState('');
+  const [adminStats, setAdminStats] = useState<AdminStatsSnapshot | null>(null);
+  const [adminHealth, setAdminHealth] = useState<AdminSystemHealth | null>(null);
+  const [adminAnalytics, setAdminAnalytics] = useState<AdminAnalyticsSummary | null>(null);
+  const [adminPremium, setAdminPremium] = useState<AdminPremiumDashboard | null>(null);
+  const [adminUsers, setAdminUsers] = useState<AdminUserRecord[]>([]);
+  const [adminUserSearch, setAdminUserSearch] = useState('');
+  const [adminFeedback, setAdminFeedback] = useState<AdminFeedbackTicket[]>([]);
+  const [adminFeedbackStatus, setAdminFeedbackStatus] = useState('open');
+  const [adminMaintenance, setAdminMaintenanceState] = useState<AdminMaintenanceStatus | null>(null);
+  const [adminMaintenanceTimestamp, setAdminMaintenanceTimestamp] = useState('');
+  const [adminMaintenanceMessage, setAdminMaintenanceMessage] = useState('');
+  const [adminBanner, setAdminBannerState] = useState<AdminSystemBannerStatus | null>(null);
+  const [adminBannerTitle, setAdminBannerTitle] = useState('');
+  const [adminBannerMessage, setAdminBannerMessage] = useState('');
+  const [adminBannerSeverity, setAdminBannerSeverity] = useState('info');
+  const [adminBannerStartsAt, setAdminBannerStartsAt] = useState('');
+  const [adminBannerEndsAt, setAdminBannerEndsAt] = useState('');
+  const [adminBannerDismissible, setAdminBannerDismissible] = useState(true);
+  const [adminReports, setAdminReports] = useState<any[]>([]);
+  const [adminModQueue, setAdminModQueue] = useState<any[]>([]);
+  const [adminBans, setAdminBans] = useState<AdminBanRecord[]>([]);
+  const [adminBannedWords, setAdminBannedWords] = useState<AdminBannedWordRecord[]>([]);
+  const [adminModerationSearchQ, setAdminModerationSearchQ] = useState('');
+  const [adminModerationSearchLoading, setAdminModerationSearchLoading] = useState(false);
+  const [adminModerationSearchResults, setAdminModerationSearchResults] = useState<Array<{ id: string; username: string }>>([]);
+  const [adminBanTargetUserId, setAdminBanTargetUserId] = useState('');
+  const [adminBanTargetUsername, setAdminBanTargetUsername] = useState('');
+  const [adminBanReason, setAdminBanReason] = useState('');
+  const [adminBanPermanent, setAdminBanPermanent] = useState(true);
+  const [adminBanExpiresAt, setAdminBanExpiresAt] = useState('');
+  const [adminBannedWordPhrase, setAdminBannedWordPhrase] = useState('');
+  const [adminBannedWordAction, setAdminBannedWordAction] = useState('warn');
+  const [adminBannedWordScope, setAdminBannedWordScope] = useState('global');
+  const [adminBannedWordRegex, setAdminBannedWordRegex] = useState(false);
 
   const connectionHost = useMemo(() => {
     try {
@@ -233,6 +401,10 @@ export default function App() {
       return apiBase.replace(/^https?:\/\//i, '');
     }
   }, [apiBase]);
+
+  const hasStaffWorkspace = useMemo(() => hasStaffAccess(user), [user]);
+  const staffRoleLabel = useMemo(() => getRoleLabel(user), [user]);
+  const staffSections = useMemo(() => getAvailableStaffSections(user), [user]);
 
   const selectedTtlLabel = useMemo(
     () => TTL_OPTIONS.find((item) => item.value === selectedTtl)?.label || 'off',
@@ -254,6 +426,16 @@ export default function App() {
     }
     return 'Free plan active';
   }, [premiumInfo]);
+
+  const adminOverviewCards = useMemo(
+    () => [
+      { label: 'Users', value: String(adminStats?.users ?? 0) },
+      { label: 'Online', value: String(adminStats?.online ?? 0) },
+      { label: 'Tickets', value: String(adminFeedback.length) },
+      { label: 'Health', value: adminHealth?.status || 'unknown' },
+    ],
+    [adminFeedback.length, adminHealth?.status, adminStats?.online, adminStats?.users]
+  );
 
   const authStepMeta = useMemo(() => {
     if (authStep === 'credentials') {
@@ -357,6 +539,56 @@ export default function App() {
     return { active, archived, starred, dm, groups };
   }, [chats, starredChats]);
 
+  const selectedServerRole = useMemo(() => {
+    if (!selectedServer || !user) return 'member';
+    return (
+      serverMembers.find((member) => member.userId === user.id)?.role ||
+      (selectedServer.ownerId === user.id ? 'owner' : 'member')
+    );
+  }, [selectedServer, serverMembers, user]);
+
+  const canManageSelectedServer = useMemo(
+    () => selectedServerRole === 'owner' || selectedServerRole === 'admin',
+    [selectedServerRole]
+  );
+
+  const selectedServerTextChannels = useMemo(
+    () => serverChannels.filter((channel) => channel.type === 'text').sort((a, b) => a.position - b.position),
+    [serverChannels]
+  );
+
+  const selectedServerVoiceChannels = useMemo(
+    () => serverChannels.filter((channel) => channel.type === 'voice').sort((a, b) => a.position - b.position),
+    [serverChannels]
+  );
+
+  const selectedServerVoiceChannel = useMemo(
+    () => selectedServerVoiceChannels.find((channel) => channel.id === selectedVoiceChannelId) || null,
+    [selectedVoiceChannelId, selectedServerVoiceChannels]
+  );
+
+  const selectedServerInviteUrl = useMemo(
+    () =>
+      serverInviteLink
+        ? `https://safegram.site/app/servers/join/${serverInviteLink}`
+        : '',
+    [serverInviteLink]
+  );
+
+  const inviteReadyForShare = useMemo(
+    () => Boolean(selectedServerInviteUrl && selectedServer),
+    [selectedServer, selectedServerInviteUrl]
+  );
+
+  const getServerMemberName = useCallback(
+    (userId?: string) => {
+      if (!userId) return 'Unknown';
+      const member = serverMembers.find((item) => item.userId === userId);
+      return member?.user?.username || `user:${userId.slice(0, 6)}`;
+    },
+    [serverMembers]
+  );
+
   const refreshCurrentUser = useCallback(async () => {
     if (!token) return null;
     const current = await getCurrentUser(apiBase, token);
@@ -407,18 +639,230 @@ export default function App() {
     }
   }, [apiBase, token]);
 
+  const clearAdminWorkspace = useCallback(
+    async (clearStoredToken = true) => {
+      if (clearStoredToken) {
+        await clearAdmin2FAToken();
+      }
+      setAdminTwoFactorToken(null);
+      setAdminTwoFactorCode('');
+      setAdminStats(null);
+      setAdminHealth(null);
+      setAdminAnalytics(null);
+      setAdminPremium(null);
+      setAdminUsers([]);
+      setAdminFeedback([]);
+      setAdminReports([]);
+      setAdminModQueue([]);
+      setAdminBans([]);
+      setAdminBannedWords([]);
+      setAdminModerationSearchQ('');
+      setAdminModerationSearchResults([]);
+      setAdminBanTargetUserId('');
+      setAdminBanTargetUsername('');
+      setAdminBanReason('');
+      setAdminBanPermanent(true);
+      setAdminBanExpiresAt('');
+      setAdminBannedWordPhrase('');
+      setAdminBannedWordAction('warn');
+      setAdminBannedWordScope('global');
+      setAdminBannedWordRegex(false);
+      setAdminMaintenanceState(null);
+      setAdminBannerState(null);
+    },
+    []
+  );
+
+  const handleAdminWorkspaceError = useCallback(
+    async (error: any, title = 'Staff tools') => {
+      const message = String(error?.message || error || '');
+      if (message === 'Staff verification required') {
+        await clearAdminWorkspace(true);
+        Alert.alert('Staff tools', 'Enter a fresh two-factor code to continue.');
+        return true;
+      }
+      if (message === 'Enable two-factor authentication before opening staff tools') {
+        await clearAdminWorkspace(true);
+        setAdminTwoFactorEnabled(false);
+        Alert.alert('Staff tools', 'Enable 2FA in the desktop or web settings first.');
+        return true;
+      }
+      Alert.alert(title, message || 'Request failed');
+      return false;
+    },
+    [clearAdminWorkspace]
+  );
+
+  const loadAdminOverview = useCallback(
+    async (staffToken: string) => {
+      if (!token || !hasStaffWorkspace) return;
+
+      const overviewTasks: Array<Promise<any>> = [
+        getAdminStats(apiBase, token, staffToken),
+        getAdminSystemHealth(apiBase, token, staffToken),
+        getAdminAnalytics(apiBase, token, staffToken, '7d'),
+      ];
+      const shouldLoadPremium = hasRoleAtLeast(user, 'billing_manager');
+      if (shouldLoadPremium) {
+        overviewTasks.push(getAdminPremiumDashboard(apiBase, token, staffToken, '30d'));
+      }
+
+      const [stats, health, analytics, premium] = await Promise.all(overviewTasks);
+      setAdminStats(stats as AdminStatsSnapshot);
+      setAdminHealth(health as AdminSystemHealth);
+      setAdminAnalytics(analytics as AdminAnalyticsSummary);
+      setAdminPremium(shouldLoadPremium ? ((premium as AdminPremiumDashboard) || null) : null);
+    },
+    [apiBase, hasStaffWorkspace, token, user]
+  );
+
+  const loadAdminSectionData = useCallback(
+    async (section: StaffSectionId, staffTokenOverride?: string) => {
+      if (!token || !hasStaffWorkspace) return;
+      const staffToken = staffTokenOverride || adminTwoFactorToken;
+      if (!staffToken) return;
+
+      if (section === 'support') {
+        const tickets = await getAdminFeedback(apiBase, token, staffToken, { status: adminFeedbackStatus });
+        setAdminFeedback(tickets);
+        return;
+      }
+
+      if (section === 'moderation') {
+        const [reports, queue, bans, bannedWords] = await Promise.all([
+          getAdminReports(apiBase, token, staffToken),
+          getAdminModQueue(apiBase, token, staffToken),
+          getAdminBans(apiBase, token, staffToken),
+          getAdminBannedWords(apiBase, token, staffToken),
+        ]);
+        setAdminReports(reports);
+        setAdminModQueue(queue);
+        setAdminBans(bans);
+        setAdminBannedWords(bannedWords);
+        return;
+      }
+
+      if (section === 'release') {
+        const [maintenance, banner] = await Promise.all([
+          getAdminMaintenance(apiBase, token, staffToken),
+          getAdminSystemBanner(apiBase, token, staffToken),
+        ]);
+        setAdminMaintenanceState(maintenance);
+        setAdminBannerState(banner);
+        setAdminMaintenanceTimestamp(maintenance?.timestamp || '');
+        setAdminMaintenanceMessage(maintenance?.message || '');
+        setAdminBannerTitle(banner?.title || '');
+        setAdminBannerMessage(banner?.message || '');
+        setAdminBannerSeverity(banner?.severity || 'info');
+        setAdminBannerStartsAt(
+          typeof banner?.startsAt === 'string' ? banner.startsAt.slice(0, 16) : ''
+        );
+        setAdminBannerEndsAt(
+          typeof banner?.endsAt === 'string' ? banner.endsAt.slice(0, 16) : ''
+        );
+        setAdminBannerDismissible(Boolean(banner?.dismissible));
+        return;
+      }
+
+      if (section === 'sysadmin' || section === 'owner') {
+        const usersList = await getAdminUsers(apiBase, token, staffToken, { search: adminUserSearch });
+        setAdminUsers(usersList);
+        return;
+      }
+
+      if (section === 'billing') {
+        const premium = await getAdminPremiumDashboard(apiBase, token, staffToken, '30d');
+        setAdminPremium(premium);
+        return;
+      }
+    },
+    [
+      adminFeedbackStatus,
+      adminTwoFactorToken,
+      adminUserSearch,
+      apiBase,
+      hasStaffWorkspace,
+      token,
+    ]
+  );
+
+  const enterAdminWorkspace = useCallback(async () => {
+    if (!token || !hasStaffWorkspace) {
+      Alert.alert('Staff tools', 'This account has no staff role.');
+      return;
+    }
+    setAdminGateLoading(true);
+    try {
+      const status = await getAdmin2FAStatus(apiBase, token);
+      setAdminTwoFactorEnabled(Boolean(status.twoFactorEnabled));
+      if (!status.twoFactorEnabled) {
+        setView('admin');
+        return;
+      }
+      const stored = adminTwoFactorToken || (await getSavedAdmin2FAToken());
+      if (stored) {
+        setAdminTwoFactorToken(stored);
+        await loadAdminOverview(stored);
+        await loadAdminSectionData(getDefaultStaffSection(user), stored);
+      }
+      setView('admin');
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error);
+      setView('admin');
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [
+    adminTwoFactorToken,
+    apiBase,
+    handleAdminWorkspaceError,
+    hasStaffWorkspace,
+    loadAdminOverview,
+    loadAdminSectionData,
+    token,
+    user,
+  ]);
+
+  const verifyAdminWorkspace = useCallback(async () => {
+    if (!token) return;
+    const code = adminTwoFactorCode.trim();
+    if (code.length < 6) {
+      Alert.alert('Staff verification', 'Enter the current 2FA code.');
+      return;
+    }
+    setAdminGateLoading(true);
+    try {
+      const result = await verifyAdmin2FA(apiBase, token, code);
+      await saveAdmin2FAToken(result.token);
+      setAdminTwoFactorToken(result.token);
+      setAdminTwoFactorCode('');
+      await loadAdminOverview(result.token);
+      await loadAdminSectionData(adminSection, result.token);
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error, 'Staff verification');
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [
+    adminSection,
+    adminTwoFactorCode,
+    apiBase,
+    handleAdminWorkspaceError,
+    loadAdminOverview,
+    loadAdminSectionData,
+    token,
+  ]);
+
   const hydrateSession = useCallback(async () => {
-    const [savedToken, savedUserRaw, savedApiBase, savedSecureMode, savedStarredChats] = await Promise.all([
+    const [savedToken, savedUserRaw, savedSecureMode, savedStarredChats, savedAdmin2FAToken] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.token),
       AsyncStorage.getItem(STORAGE_KEYS.user),
-      getSavedApiBase(),
       AsyncStorage.getItem(STORAGE_KEYS.secureMode),
       AsyncStorage.getItem(STARRED_CHATS_KEY),
+      getSavedAdmin2FAToken(),
     ]);
+    await AsyncStorage.removeItem(STORAGE_KEYS.apiBase);
 
-    const normalizedApi = normalizeApiBase(savedApiBase);
-    setApiBase(normalizedApi);
-    setApiInput(normalizedApi);
     setSecureMode(savedSecureMode !== '0');
     if (savedStarredChats) {
       try {
@@ -434,9 +878,11 @@ export default function App() {
         const parsedUser = JSON.parse(savedUserRaw) as AuthUser;
         setToken(savedToken);
         setUser(parsedUser);
+        setAdminTwoFactorToken(savedAdmin2FAToken || null);
+        setAdminSection(getDefaultStaffSection(parsedUser));
         setView('chats');
       } catch {
-        await AsyncStorage.multiRemove([STORAGE_KEYS.token, STORAGE_KEYS.user]);
+        await AsyncStorage.multiRemove([STORAGE_KEYS.token, STORAGE_KEYS.user, STORAGE_KEYS.admin2FAToken]);
       }
     }
     setBooting(false);
@@ -467,8 +913,34 @@ export default function App() {
     }
   }, [loadPremiumState, loadSupportTicketsSafe, token, view]);
 
+  useEffect(() => {
+    if (!token || view !== 'admin' || !hasStaffWorkspace || !adminTwoFactorToken) return;
+    loadAdminSectionData(adminSection).catch((error) => {
+      handleAdminWorkspaceError(error);
+    });
+  }, [
+    adminSection,
+    adminTwoFactorToken,
+    handleAdminWorkspaceError,
+    hasStaffWorkspace,
+    loadAdminSectionData,
+    token,
+    view,
+  ]);
+
+  useEffect(() => {
+    if (!hasStaffWorkspace) {
+      setAdminSection('support');
+      return;
+    }
+    const allowedIds = staffSections.map((section) => section.id);
+    if (!allowedIds.includes(adminSection)) {
+      setAdminSection(getDefaultStaffSection(user));
+    }
+  }, [adminSection, hasStaffWorkspace, staffSections, user]);
+
   const logout = useCallback(async () => {
-    await AsyncStorage.multiRemove([STORAGE_KEYS.token, STORAGE_KEYS.user]);
+    await AsyncStorage.multiRemove([STORAGE_KEYS.token, STORAGE_KEYS.user, STORAGE_KEYS.admin2FAToken]);
     setToken(null);
     setUser(null);
     setPremiumInfo(null);
@@ -477,9 +949,41 @@ export default function App() {
     setChats([]);
     setSearchResults([]);
     setSelectedChat(null);
+    setChatOrigin('chats');
     setMessages([]);
     setComposer('');
     setAttachmentDraft(null);
+    setServers([]);
+    setServersLoading(false);
+    setSelectedServer(null);
+    setServerChannels([]);
+    setServerCategories([]);
+    setServerMembers([]);
+    setServerVoiceState({});
+    setServerBusy(false);
+    setServerDraftName('');
+    setServerDraftDescription('');
+    setServerJoinCode('');
+    setServerSettingsName('');
+    setServerSettingsDescription('');
+    setServerInviteLink('');
+    setChannelDraftName('');
+    setChannelDraftType('text');
+    setCategoryDraftName('');
+    setSelectedVoiceChannelId('');
+    setSelectedVoiceRoom(null);
+    setServerRoles([]);
+    setServerAllPermissions([]);
+    setServerHistory([]);
+    setServerRoleDraftName('');
+    setServerRoleDraftColor('99aab5');
+    setServerRoleDraftPermissions([]);
+    setEditingServerRoleId('');
+    setServerMemberSearchQ('');
+    setServerMemberSearchResults([]);
+    setPendingEntryServerId('');
+    setPendingEntryTextChannelId('');
+    setPendingEntryVoiceChannelId('');
     setChatSearchQ('');
     setShowStarredOnly(false);
     setAuthStep('credentials');
@@ -492,6 +996,32 @@ export default function App() {
     setSupportBody('');
     setSupportCategory('general');
     setSupportPriority('normal');
+    setAdminTwoFactorEnabled(false);
+    setAdminTwoFactorToken(null);
+    setAdminTwoFactorCode('');
+    setAdminStats(null);
+    setAdminHealth(null);
+    setAdminAnalytics(null);
+    setAdminPremium(null);
+    setAdminUsers([]);
+    setAdminFeedback([]);
+    setAdminReports([]);
+    setAdminModQueue([]);
+    setAdminBans([]);
+    setAdminBannedWords([]);
+    setAdminModerationSearchQ('');
+    setAdminModerationSearchResults([]);
+    setAdminBanTargetUserId('');
+    setAdminBanTargetUsername('');
+    setAdminBanReason('');
+    setAdminBanPermanent(true);
+    setAdminBanExpiresAt('');
+    setAdminBannedWordPhrase('');
+    setAdminBannedWordAction('warn');
+    setAdminBannedWordScope('global');
+    setAdminBannedWordRegex(false);
+    setAdminMaintenanceState(null);
+    setAdminBannerState(null);
     setView('auth');
   }, []);
 
@@ -504,7 +1034,15 @@ export default function App() {
     setResendCooldown(0);
   }, []);
 
-  const completeLogin = useCallback(async (nextToken: string, nextUser: AuthUser) => {
+  const completeLogin = useCallback(async (
+    nextToken: string,
+    nextUser: AuthUser,
+    entry?: {
+      entryServerId?: string;
+      entryTextChannelId?: string;
+      entryVoiceChannelId?: string;
+    }
+  ) => {
     let hydratedUser = nextUser;
     try {
       hydratedUser = await getCurrentUser(apiBase, nextToken);
@@ -517,12 +1055,39 @@ export default function App() {
     ]);
     setToken(nextToken);
     setUser(hydratedUser);
+    await clearAdminWorkspace(true);
+    setAdminTwoFactorEnabled(false);
+    setAdminSection(getDefaultStaffSection(hydratedUser));
     setPremiumInfo(null);
+    setServers([]);
+    setSelectedServer(null);
+    setServerJoinCode('');
+    setServerSettingsName('');
+    setServerSettingsDescription('');
+    setServerInviteLink('');
+    setServerChannels([]);
+    setServerCategories([]);
+    setServerMembers([]);
+    setServerVoiceState({});
+    setSelectedVoiceChannelId('');
+    setSelectedVoiceRoom(null);
+    setServerRoles([]);
+    setServerAllPermissions([]);
+    setServerHistory([]);
+    setServerRoleDraftName('');
+    setServerRoleDraftColor('99aab5');
+    setServerRoleDraftPermissions([]);
+    setEditingServerRoleId('');
+    setServerMemberSearchQ('');
+    setServerMemberSearchResults([]);
+    setPendingEntryServerId(entry?.entryServerId || '');
+    setPendingEntryTextChannelId(entry?.entryTextChannelId || '');
+    setPendingEntryVoiceChannelId(entry?.entryVoiceChannelId || '');
     setUsername('');
     setPassword('');
     resetAuthFlow();
-    setView('chats');
-  }, [apiBase, resetAuthFlow]);
+    setView(entry?.entryServerId ? 'servers' : 'chats');
+  }, [apiBase, clearAdminWorkspace, resetAuthFlow]);
 
   const requestLoginEmailCode = useCallback(async () => {
     const loginName = username.trim();
@@ -565,6 +1130,28 @@ export default function App() {
       setChatsLoading(false);
     }
   }, [apiBase, logout, token]);
+
+  const loadServersSafe = useCallback(
+    async (authToken = token, options: { silent?: boolean } = {}) => {
+      if (!authToken) return [] as ServerSummary[];
+      if (!options.silent) setServersLoading(true);
+      try {
+        const list = await getServers(apiBase, authToken);
+        setServers(list);
+        return list;
+      } catch (error: any) {
+        if ((error?.message || '').includes('session_invalid')) {
+          await logout();
+          return [] as ServerSummary[];
+        }
+        Alert.alert('Servers', String(error?.message || error));
+        return [] as ServerSummary[];
+      } finally {
+        if (!options.silent) setServersLoading(false);
+      }
+    },
+    [apiBase, logout, token]
+  );
 
   const mapMessagesToUi = useCallback(
     async (chatId: string, incoming: MessageItem[]): Promise<UiMessage[]> => {
@@ -618,11 +1205,157 @@ export default function App() {
     [apiBase, mapMessagesToUi, token]
   );
 
+  const loadSelectedServerData = useCallback(
+    async (
+      serverId: string,
+      options: {
+        authToken?: string | null;
+        silent?: boolean;
+        preferredVoiceChannelId?: string;
+      } = {}
+    ) => {
+      const authToken = options.authToken ?? token;
+      if (!authToken) return null;
+      if (!options.silent) setServerBusy(true);
+      try {
+        const [server, channels, categories, members, voiceState] = await Promise.all([
+          getServer(apiBase, authToken, serverId),
+          getServerChannels(apiBase, authToken, serverId),
+          getServerCategories(apiBase, authToken, serverId),
+          getServerMembers(apiBase, authToken, serverId),
+          getServerVoiceState(apiBase, authToken, serverId),
+        ]);
+        setSelectedServer(server);
+        setServerSettingsName(server.name || '');
+        setServerSettingsDescription(server.description || '');
+        setServerInviteLink(server.inviteLink || '');
+        setServerChannels(channels);
+        setServerCategories(categories);
+        setServerMembers(members);
+        setServerVoiceState(voiceState);
+        try {
+          const [rolesPayload, historyItems] = await Promise.all([
+            getServerRoles(apiBase, authToken, serverId),
+            getServerHistory(apiBase, authToken, serverId),
+          ]);
+          setServerRoles(rolesPayload.roles || []);
+          setServerAllPermissions(rolesPayload.allPermissions || []);
+          setServerHistory(historyItems || []);
+        } catch {
+          setServerRoles([]);
+          setServerAllPermissions([]);
+          setServerHistory([]);
+        }
+
+        const requestedVoiceChannelId = options.preferredVoiceChannelId || selectedVoiceChannelId;
+        const nextVoiceChannel =
+          (requestedVoiceChannelId
+            ? channels.find((channel) => channel.id === requestedVoiceChannelId && channel.type === 'voice')
+            : null) ||
+          null;
+
+        if (nextVoiceChannel?.chatId) {
+          setSelectedVoiceChannelId(nextVoiceChannel.id);
+          const room = await getVoiceRoom(apiBase, authToken, nextVoiceChannel.chatId);
+          setSelectedVoiceRoom(room);
+        } else {
+          setSelectedVoiceChannelId('');
+          setSelectedVoiceRoom(null);
+        }
+
+        return { server, channels, categories, members, voiceState };
+      } catch (error: any) {
+        if ((error?.message || '').includes('session_invalid')) {
+          await logout();
+          return null;
+        }
+        Alert.alert('Server', String(error?.message || error));
+        return null;
+      } finally {
+        if (!options.silent) setServerBusy(false);
+      }
+    },
+    [apiBase, logout, selectedVoiceChannelId, token]
+  );
+
   useEffect(() => {
     if (token && view === 'chats') {
       loadChatsSafe();
     }
   }, [token, view, loadChatsSafe]);
+
+  useEffect(() => {
+    if (!token || view !== 'servers') return;
+    let cancelled = false;
+    (async () => {
+      const list = await loadServersSafe(token);
+      if (cancelled || !pendingEntryServerId) return;
+      const matched = list.find((item) => item.id === pendingEntryServerId) || null;
+      if (!matched) {
+        setPendingEntryServerId('');
+        setPendingEntryTextChannelId('');
+        setPendingEntryVoiceChannelId('');
+        return;
+      }
+      setSelectedServer(matched);
+      setView('server');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadServersSafe, pendingEntryServerId, token, view]);
+
+  useEffect(() => {
+    if (!token || view !== 'server' || !selectedServer?.id) return;
+    loadSelectedServerData(selectedServer.id, {
+      preferredVoiceChannelId: pendingEntryVoiceChannelId || selectedVoiceChannelId || undefined,
+    }).then((payload) => {
+      if (!payload) return;
+      if (pendingEntryTextChannelId) {
+        const entryTextChannel = payload.channels.find(
+          (channel) => channel.id === pendingEntryTextChannelId && channel.type === 'text' && channel.chatId
+        );
+        if (entryTextChannel?.chatId) {
+          setPendingEntryTextChannelId('');
+          setPendingEntryServerId('');
+          setPendingEntryVoiceChannelId('');
+          setSelectedChat({
+            id: entryTextChannel.chatId,
+            type: 'channel',
+            name: `${payload.server.name} · #${entryTextChannel.name}`,
+          });
+          setMessages([]);
+          setComposer('');
+          setAttachmentDraft(null);
+          setChatOrigin('server');
+          setView('chat');
+        } else {
+          setPendingEntryTextChannelId('');
+          setPendingEntryServerId('');
+          setPendingEntryVoiceChannelId('');
+        }
+      } else if (pendingEntryServerId) {
+        setPendingEntryServerId('');
+        setPendingEntryVoiceChannelId('');
+      }
+    });
+    const timer = setInterval(() => {
+      loadSelectedServerData(selectedServer.id, {
+        silent: true,
+        preferredVoiceChannelId: selectedVoiceChannelId || pendingEntryVoiceChannelId || undefined,
+      });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [
+    loadSelectedServerData,
+    pendingEntryServerId,
+    pendingEntryTextChannelId,
+    pendingEntryVoiceChannelId,
+    selectedServer?.id,
+    selectedVoiceChannelId,
+    token,
+    view,
+  ]);
 
   useEffect(() => {
     if (!token || view !== 'chat' || !selectedChat?.id) return;
@@ -655,7 +1388,7 @@ export default function App() {
       });
 
       if (auth.kind === 'success') {
-        await completeLogin(auth.token, auth.user);
+        await completeLogin(auth.token, auth.user, auth);
         return;
       }
 
@@ -690,7 +1423,7 @@ export default function App() {
       if (auth.kind !== 'success') {
         throw new Error('Unexpected login challenge after registration');
       }
-      await completeLogin(auth.token, auth.user);
+      await completeLogin(auth.token, auth.user, auth);
     } catch (error: any) {
       Alert.alert('Register failed', String(error?.message || error));
     } finally {
@@ -699,8 +1432,9 @@ export default function App() {
   }, [apiBase, completeLogin, password, username]);
 
   const onOpenChat = useCallback(
-    async (chat: ChatSummary) => {
+    async (chat: ChatSummary, origin: ChatOrigin = 'chats') => {
       setSelectedChat(chat);
+      setChatOrigin(origin);
       setMessages([]);
       setComposer('');
       setAttachmentDraft(null);
@@ -708,6 +1442,538 @@ export default function App() {
       await loadMessagesSafe(chat.id, true);
     },
     [loadMessagesSafe]
+  );
+
+  const openServer = useCallback(
+    async (
+      server: ServerSummary,
+      options: {
+        preferredTextChannelId?: string;
+        preferredVoiceChannelId?: string;
+      } = {}
+    ) => {
+      setServerMemberSearchQ('');
+      setServerMemberSearchResults([]);
+      setSelectedServer(server);
+      setView('server');
+      const payload = await loadSelectedServerData(server.id, {
+        preferredVoiceChannelId: options.preferredVoiceChannelId,
+      });
+      if (!payload) return;
+      if (options.preferredTextChannelId) {
+        const targetChannel = payload.channels.find(
+          (channel) =>
+            channel.id === options.preferredTextChannelId &&
+            channel.type === 'text' &&
+            typeof channel.chatId === 'string' &&
+            channel.chatId
+        );
+        if (targetChannel?.chatId) {
+          await onOpenChat(
+            {
+              id: targetChannel.chatId,
+              type: 'channel',
+              name: `${payload.server.name} · #${targetChannel.name}`,
+            },
+            'server'
+          );
+        }
+      }
+    },
+    [loadSelectedServerData, onOpenChat]
+  );
+
+  const onCreateServer = useCallback(async () => {
+    if (!token) return;
+    const name = serverDraftName.trim();
+    const description = serverDraftDescription.trim();
+    if (name.length < 2) {
+      Alert.alert('Server', 'Enter server name.');
+      return;
+    }
+    setServerBusy(true);
+    try {
+      const server = await createServer(apiBase, token, {
+        name,
+        description: description || undefined,
+      });
+      setServerDraftName('');
+      setServerDraftDescription('');
+      await loadServersSafe(token, { silent: true });
+      await openServer(server);
+    } catch (error: any) {
+      Alert.alert('Server', String(error?.message || error));
+    } finally {
+      setServerBusy(false);
+    }
+  }, [apiBase, loadServersSafe, openServer, serverDraftDescription, serverDraftName, token]);
+
+  const onCreateServerCategory = useCallback(async () => {
+    if (!token || !selectedServer) return;
+    const name = categoryDraftName.trim();
+    if (!name) {
+      Alert.alert('Category', 'Enter category name.');
+      return;
+    }
+    setServerBusy(true);
+    try {
+      await createServerCategory(apiBase, token, selectedServer.id, {
+        name,
+        position: serverCategories.length,
+      });
+      setCategoryDraftName('');
+      await loadSelectedServerData(selectedServer.id, { authToken: token });
+    } catch (error: any) {
+      Alert.alert('Category', String(error?.message || error));
+    } finally {
+      setServerBusy(false);
+    }
+  }, [apiBase, categoryDraftName, loadSelectedServerData, selectedServer, serverCategories.length, token]);
+
+  const onCreateServerChannel = useCallback(async () => {
+    if (!token || !selectedServer) return;
+    const name = channelDraftName.trim();
+    if (!name) {
+      Alert.alert('Channel', 'Enter channel name.');
+      return;
+    }
+    setServerBusy(true);
+    try {
+      await createServerChannel(apiBase, token, selectedServer.id, {
+        name,
+        type: channelDraftType,
+        position: serverChannels.length,
+      });
+      setChannelDraftName('');
+      setChannelDraftType('text');
+      await loadSelectedServerData(selectedServer.id, { authToken: token });
+    } catch (error: any) {
+      Alert.alert('Channel', String(error?.message || error));
+    } finally {
+      setServerBusy(false);
+    }
+  }, [apiBase, channelDraftName, channelDraftType, loadSelectedServerData, selectedServer, serverChannels.length, token]);
+
+  const onDeleteServerChannel = useCallback(
+    (channel: ServerChannel) => {
+      if (!token || !selectedServer) return;
+      Alert.alert('Channel', `Delete ${channel.type === 'voice' ? 'voice' : 'text'} channel "${channel.name}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setServerBusy(true);
+            try {
+              await deleteServerChannel(apiBase, token, selectedServer.id, channel.id);
+              await loadSelectedServerData(selectedServer.id, { authToken: token });
+            } catch (error: any) {
+              Alert.alert('Channel', String(error?.message || error));
+            } finally {
+              setServerBusy(false);
+            }
+          },
+        },
+      ]);
+    },
+    [apiBase, loadSelectedServerData, selectedServer, token]
+  );
+
+  const onOpenServerTextChannel = useCallback(
+    async (channel: ServerChannel) => {
+      if (!channel.chatId || !selectedServer) return;
+      await onOpenChat(
+        {
+          id: channel.chatId,
+          type: 'channel',
+          name: `${selectedServer.name} · #${channel.name}`,
+        },
+        'server'
+      );
+    },
+    [onOpenChat, selectedServer]
+  );
+
+  const onSelectServerVoiceChannel = useCallback(
+    async (channel: ServerChannel) => {
+      if (!token || !channel.chatId) return;
+      setSelectedVoiceChannelId(channel.id);
+      try {
+        const room = await getVoiceRoom(apiBase, token, channel.chatId);
+        setSelectedVoiceRoom(room);
+      } catch (error: any) {
+        Alert.alert('Voice', String(error?.message || error));
+      }
+    },
+    [apiBase, token]
+  );
+
+  const onStartVoiceRoom = useCallback(
+    async (channel: ServerChannel) => {
+      if (!token || !channel.chatId) return;
+      setServerBusy(true);
+      try {
+        const room = await createVoiceRoom(apiBase, token, channel.chatId);
+        setSelectedVoiceChannelId(channel.id);
+        setSelectedVoiceRoom(room);
+        if (selectedServer) {
+          await loadSelectedServerData(selectedServer.id, { authToken: token, preferredVoiceChannelId: channel.id });
+        }
+      } catch (error: any) {
+        Alert.alert('Voice', String(error?.message || error));
+      } finally {
+        setServerBusy(false);
+      }
+    },
+    [apiBase, loadSelectedServerData, selectedServer, token]
+  );
+
+  const onEndVoiceRoom = useCallback(async () => {
+    if (!token || !selectedServer || !selectedVoiceRoom) return;
+    setServerBusy(true);
+    try {
+      await endVoiceRoom(apiBase, token, selectedVoiceRoom.id);
+      setSelectedVoiceRoom(null);
+      await loadSelectedServerData(selectedServer.id, { authToken: token, preferredVoiceChannelId: selectedVoiceChannelId || undefined });
+    } catch (error: any) {
+      Alert.alert('Voice', String(error?.message || error));
+    } finally {
+      setServerBusy(false);
+    }
+  }, [apiBase, loadSelectedServerData, selectedServer, selectedVoiceChannelId, selectedVoiceRoom, token]);
+
+  const onLeaveSelectedServer = useCallback(() => {
+    if (!token || !selectedServer) return;
+    Alert.alert('Server', `Leave "${selectedServer.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          setServerBusy(true);
+          try {
+            await leaveServer(apiBase, token, selectedServer.id);
+            setSelectedServer(null);
+            setServerChannels([]);
+            setServerCategories([]);
+            setServerMembers([]);
+            setServerVoiceState({});
+            setSelectedVoiceChannelId('');
+            setSelectedVoiceRoom(null);
+            setServerMemberSearchQ('');
+            setServerMemberSearchResults([]);
+            setView('servers');
+            await loadServersSafe(token, { silent: true });
+          } catch (error: any) {
+            Alert.alert('Server', String(error?.message || error));
+          } finally {
+            setServerBusy(false);
+          }
+        },
+      },
+    ]);
+  }, [apiBase, loadServersSafe, selectedServer, token]);
+
+  const onJoinServerByCode = useCallback(async () => {
+    if (!token) return;
+    const invite = serverJoinCode.trim();
+    if (!invite) {
+      Alert.alert('Server invite', 'Enter an invite code or full join URL.');
+      return;
+    }
+    const normalized = invite.replace(/^https?:\/\/[^/]+\/app\/servers\/join\//i, '').trim();
+    setServerBusy(true);
+    try {
+      const result = await joinServerByInvite(apiBase, token, normalized);
+      setServerJoinCode('');
+      const refreshed = await loadServersSafe(token, { silent: true });
+      const server = result.server || refreshed.find((item) => item.inviteLink === normalized) || null;
+      if (server) {
+        await openServer(server);
+      } else {
+        setView('servers');
+      }
+    } catch (error: any) {
+      Alert.alert('Server invite', String(error?.message || error));
+    } finally {
+      setServerBusy(false);
+    }
+  }, [apiBase, loadServersSafe, openServer, serverJoinCode, token]);
+
+  const onUpdateSelectedServer = useCallback(async () => {
+    if (!token || !selectedServer) return;
+    const name = serverSettingsName.trim();
+    const description = serverSettingsDescription.trim();
+    if (name.length < 2) {
+      Alert.alert('Server', 'Enter a valid server name.');
+      return;
+    }
+    setServerBusy(true);
+    try {
+      const updated = await updateServer(apiBase, token, selectedServer.id, {
+        name,
+        description,
+      });
+      setSelectedServer(updated);
+      await loadServersSafe(token, { silent: true });
+      await loadSelectedServerData(updated.id, { authToken: token, preferredVoiceChannelId: selectedVoiceChannelId || undefined });
+      Alert.alert('Server', 'Server settings updated.');
+    } catch (error: any) {
+      Alert.alert('Server', String(error?.message || error));
+    } finally {
+      setServerBusy(false);
+    }
+  }, [apiBase, loadSelectedServerData, loadServersSafe, selectedServer, selectedVoiceChannelId, serverSettingsDescription, serverSettingsName, token]);
+
+  const onRotateServerInvite = useCallback(async () => {
+    if (!token || !selectedServer) return;
+    setServerBusy(true);
+    try {
+      const result = await generateServerInviteLink(apiBase, token, selectedServer.id);
+      const nextInvite = result.inviteLink || '';
+      setServerInviteLink(nextInvite);
+      setSelectedServer((prev) => (prev ? { ...prev, inviteLink: nextInvite } : prev));
+      await loadServersSafe(token, { silent: true });
+    } catch (error: any) {
+      Alert.alert('Invite', String(error?.message || error));
+    } finally {
+      setServerBusy(false);
+    }
+  }, [apiBase, loadServersSafe, selectedServer, token]);
+
+  const onShareSelectedServerInvite = useCallback(async () => {
+    if (!selectedServer || !selectedServerInviteUrl) {
+      Alert.alert('Invite', 'Generate an invite link first.');
+      return;
+    }
+    try {
+      await Share.share({
+        title: `Join ${selectedServer.name} on SafeGram`,
+        message: `Join ${selectedServer.name} on SafeGram:\n${selectedServerInviteUrl}`,
+        url: selectedServerInviteUrl,
+      });
+    } catch (error: any) {
+      Alert.alert('Invite', String(error?.message || error));
+    }
+  }, [selectedServer, selectedServerInviteUrl]);
+
+  const onDeleteServerCategory = useCallback(
+    (category: ServerCategory) => {
+      if (!token || !selectedServer) return;
+      Alert.alert('Category', `Delete category "${category.name}"? Channels inside it will become uncategorized.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setServerBusy(true);
+            try {
+              await deleteServerCategory(apiBase, token, selectedServer.id, category.id);
+              await loadSelectedServerData(selectedServer.id, {
+                authToken: token,
+                preferredVoiceChannelId: selectedVoiceChannelId || undefined,
+              });
+            } catch (error: any) {
+              Alert.alert('Category', String(error?.message || error));
+            } finally {
+              setServerBusy(false);
+            }
+          },
+        },
+      ]);
+    },
+    [apiBase, loadSelectedServerData, selectedServer, selectedVoiceChannelId, token]
+  );
+
+  const onMoveServerChannelToCategory = useCallback(
+    async (channel: ServerChannel, categoryId?: string) => {
+      if (!token || !selectedServer) return;
+      setServerBusy(true);
+      try {
+        await setServerChannelCategory(apiBase, token, selectedServer.id, channel.id, categoryId);
+        await loadSelectedServerData(selectedServer.id, {
+          authToken: token,
+          preferredVoiceChannelId: channel.type === 'voice' ? channel.id : selectedVoiceChannelId || undefined,
+        });
+      } catch (error: any) {
+        Alert.alert('Channel', String(error?.message || error));
+      } finally {
+        setServerBusy(false);
+      }
+    },
+    [apiBase, loadSelectedServerData, selectedServer, selectedVoiceChannelId, token]
+  );
+
+  const onFindServerMembersToAdd = useCallback(async () => {
+    if (!token || !selectedServer) return;
+    if (serverMemberSearchQ.trim().length < 2) {
+      Alert.alert('Members', 'Enter at least 2 chars');
+      return;
+    }
+    setServerMemberSearchLoading(true);
+    try {
+      const users = await searchUsers(apiBase, token, serverMemberSearchQ.trim());
+      const existingIds = new Set(serverMembers.map((member) => member.userId));
+      setServerMemberSearchResults(
+        users.filter((item) => item.id !== user?.id && !existingIds.has(item.id))
+      );
+    } catch (error: any) {
+      Alert.alert('Members', String(error?.message || error));
+    } finally {
+      setServerMemberSearchLoading(false);
+    }
+  }, [apiBase, selectedServer, serverMemberSearchQ, serverMembers, token, user?.id]);
+
+  const onAddServerMember = useCallback(
+    async (targetUserId: string) => {
+      if (!token || !selectedServer) return;
+      setServerBusy(true);
+      try {
+        const result = await addServerMembersBulk(apiBase, token, selectedServer.id, [targetUserId]);
+        await loadSelectedServerData(selectedServer.id, {
+          authToken: token,
+          preferredVoiceChannelId: selectedVoiceChannelId || undefined,
+        });
+        setServerMemberSearchResults((current) => current.filter((item) => item.id !== targetUserId));
+        Alert.alert('Members', result.added ? 'Member added to server.' : 'User is already in this server.');
+      } catch (error: any) {
+        Alert.alert('Members', String(error?.message || error));
+      } finally {
+        setServerBusy(false);
+      }
+    },
+    [apiBase, loadSelectedServerData, selectedServer, selectedVoiceChannelId, token]
+  );
+
+  const onSetSelectedServerMemberRole = useCallback(
+    async (target: ServerMemberRecord, role: 'owner' | 'admin' | 'moderator' | 'member') => {
+      if (!token || !selectedServer) return;
+      setServerBusy(true);
+      try {
+        await setServerMemberRole(apiBase, token, selectedServer.id, target.userId, role);
+        await loadSelectedServerData(selectedServer.id, { authToken: token, preferredVoiceChannelId: selectedVoiceChannelId || undefined });
+      } catch (error: any) {
+        Alert.alert('Role', String(error?.message || error));
+      } finally {
+        setServerBusy(false);
+      }
+    },
+    [apiBase, loadSelectedServerData, selectedServer, selectedVoiceChannelId, token]
+  );
+
+  const onToggleServerRolePermission = useCallback((permission: string) => {
+    setServerRoleDraftPermissions((current) =>
+      current.includes(permission)
+        ? current.filter((item) => item !== permission)
+        : [...current, permission]
+    );
+  }, []);
+
+  const onStartEditServerRole = useCallback((role: ServerRoleRecord) => {
+    setEditingServerRoleId(role.id);
+    setServerRoleDraftName(role.name || '');
+    setServerRoleDraftColor((role.color || '99aab5').replace(/^#/, ''));
+    setServerRoleDraftPermissions(role.permissions || []);
+  }, []);
+
+  const onResetServerRoleDraft = useCallback(() => {
+    setEditingServerRoleId('');
+    setServerRoleDraftName('');
+    setServerRoleDraftColor('99aab5');
+    setServerRoleDraftPermissions([]);
+  }, []);
+
+  const onSaveServerRole = useCallback(async () => {
+    if (!token || !selectedServer) return;
+    const name = serverRoleDraftName.trim();
+    const color = serverRoleDraftColor.trim().replace(/^#/, '');
+    if (!name) {
+      Alert.alert('Role', 'Enter role name.');
+      return;
+    }
+    setServerBusy(true);
+    try {
+      if (editingServerRoleId) {
+        await updateServerRole(apiBase, token, selectedServer.id, editingServerRoleId, {
+          name,
+          color,
+          permissions: serverRoleDraftPermissions,
+        });
+      } else {
+        await createServerRole(apiBase, token, selectedServer.id, {
+          name,
+          color,
+          permissions: serverRoleDraftPermissions,
+        });
+      }
+      onResetServerRoleDraft();
+      await loadSelectedServerData(selectedServer.id, { authToken: token, preferredVoiceChannelId: selectedVoiceChannelId || undefined });
+    } catch (error: any) {
+      Alert.alert('Role', String(error?.message || error));
+    } finally {
+      setServerBusy(false);
+    }
+  }, [
+    apiBase,
+    createServerRole,
+    editingServerRoleId,
+    loadSelectedServerData,
+    onResetServerRoleDraft,
+    selectedServer,
+    selectedVoiceChannelId,
+    serverRoleDraftColor,
+    serverRoleDraftName,
+    serverRoleDraftPermissions,
+    token,
+    updateServerRole,
+  ]);
+
+  const onDeleteSelectedServerRole = useCallback(
+    (role: ServerRoleRecord) => {
+      if (!token || !selectedServer) return;
+      Alert.alert('Role', `Delete role "${role.name}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setServerBusy(true);
+            try {
+              await deleteServerRole(apiBase, token, selectedServer.id, role.id);
+              if (editingServerRoleId === role.id) {
+                onResetServerRoleDraft();
+              }
+              await loadSelectedServerData(selectedServer.id, { authToken: token, preferredVoiceChannelId: selectedVoiceChannelId || undefined });
+            } catch (error: any) {
+              Alert.alert('Role', String(error?.message || error));
+            } finally {
+              setServerBusy(false);
+            }
+          },
+        },
+      ]);
+    },
+    [apiBase, deleteServerRole, editingServerRoleId, loadSelectedServerData, onResetServerRoleDraft, selectedServer, selectedVoiceChannelId, token]
+  );
+
+  const onToggleServerMemberCustomRole = useCallback(
+    async (member: ServerMemberRecord, roleId: string) => {
+      if (!token || !selectedServer) return;
+      const currentIds = (member.roles || []).map((role) => role.id).filter((value): value is string => Boolean(value));
+      const nextIds = currentIds.includes(roleId)
+        ? currentIds.filter((item) => item !== roleId)
+        : [...currentIds, roleId];
+      setServerBusy(true);
+      try {
+        await setServerMemberRoles(apiBase, token, selectedServer.id, member.userId, nextIds);
+        await loadSelectedServerData(selectedServer.id, { authToken: token, preferredVoiceChannelId: selectedVoiceChannelId || undefined });
+      } catch (error: any) {
+        Alert.alert('Role', String(error?.message || error));
+      } finally {
+        setServerBusy(false);
+      }
+    },
+    [apiBase, loadSelectedServerData, selectedServer, selectedVoiceChannelId, token]
   );
 
   const onFindUsers = useCallback(async () => {
@@ -887,6 +2153,322 @@ export default function App() {
     token,
   ]);
 
+  const onRefreshAdminOverview = useCallback(async () => {
+    if (!token || !adminTwoFactorToken) return;
+    setAdminGateLoading(true);
+    try {
+      await loadAdminOverview(adminTwoFactorToken);
+      await loadAdminSectionData(adminSection, adminTwoFactorToken);
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error);
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [adminSection, adminTwoFactorToken, handleAdminWorkspaceError, loadAdminOverview, loadAdminSectionData, token]);
+
+  const onPatchAdminTicketStatus = useCallback(
+    async (ticketId: string, status: string) => {
+      if (!token || !adminTwoFactorToken) return;
+      try {
+        await patchAdminFeedback(apiBase, token, adminTwoFactorToken, ticketId, status);
+        await loadAdminSectionData('support', adminTwoFactorToken);
+      } catch (error: any) {
+        await handleAdminWorkspaceError(error, 'Support queue');
+      }
+    },
+    [adminTwoFactorToken, apiBase, handleAdminWorkspaceError, loadAdminSectionData, token]
+  );
+
+  const onFindModerationUser = useCallback(async () => {
+    if (!token) return;
+    if (adminModerationSearchQ.trim().length < 2) {
+      Alert.alert('Moderation', 'Enter at least 2 chars');
+      return;
+    }
+    setAdminModerationSearchLoading(true);
+    try {
+      const users = await searchUsers(apiBase, token, adminModerationSearchQ.trim());
+      setAdminModerationSearchResults(users.slice(0, 10));
+    } catch (error: any) {
+      Alert.alert('Moderation', String(error?.message || error));
+    } finally {
+      setAdminModerationSearchLoading(false);
+    }
+  }, [adminModerationSearchQ, apiBase, token]);
+
+  const onCreateAdminBan = useCallback(async () => {
+    if (!token || !adminTwoFactorToken) return;
+    if (!adminBanTargetUserId) {
+      Alert.alert('Ban', 'Choose a user first.');
+      return;
+    }
+    setAdminGateLoading(true);
+    try {
+      const payload: {
+        userId: string;
+        reason?: string;
+        permanent?: boolean;
+        expiresAt?: number;
+      } = {
+        userId: adminBanTargetUserId,
+        reason: adminBanReason.trim() || undefined,
+        permanent: adminBanPermanent,
+      };
+      if (!adminBanPermanent && adminBanExpiresAt.trim()) {
+        const parsed = new Date(adminBanExpiresAt.trim());
+        if (Number.isNaN(parsed.getTime())) {
+          throw new Error('Invalid expiry date');
+        }
+        payload.expiresAt = parsed.getTime();
+      }
+      await createAdminBan(apiBase, token, adminTwoFactorToken, payload);
+      setAdminBanReason('');
+      setAdminBanExpiresAt('');
+      await loadAdminSectionData('moderation', adminTwoFactorToken);
+      Alert.alert('Ban', 'User banned.');
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error, 'Ban');
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [
+    adminBanExpiresAt,
+    adminBanPermanent,
+    adminBanReason,
+    adminBanTargetUserId,
+    adminTwoFactorToken,
+    apiBase,
+    handleAdminWorkspaceError,
+    loadAdminSectionData,
+    token,
+  ]);
+
+  const onRevokeAdminBan = useCallback(
+    async (banIdOrUserId: string) => {
+      if (!token || !adminTwoFactorToken) return;
+      setAdminGateLoading(true);
+      try {
+        await deleteAdminBan(apiBase, token, adminTwoFactorToken, banIdOrUserId);
+        await loadAdminSectionData('moderation', adminTwoFactorToken);
+      } catch (error: any) {
+        await handleAdminWorkspaceError(error, 'Ban');
+      } finally {
+        setAdminGateLoading(false);
+      }
+    },
+    [adminTwoFactorToken, apiBase, handleAdminWorkspaceError, loadAdminSectionData, token]
+  );
+
+  const onCreateAdminBannedWord = useCallback(async () => {
+    if (!token || !adminTwoFactorToken) return;
+    const phrase = adminBannedWordPhrase.trim();
+    if (!phrase) {
+      Alert.alert('Banned words', 'Enter a phrase.');
+      return;
+    }
+    setAdminGateLoading(true);
+    try {
+      await createAdminBannedWord(apiBase, token, adminTwoFactorToken, {
+        phrase,
+        isRegex: adminBannedWordRegex,
+        action: adminBannedWordAction,
+        scope: adminBannedWordScope,
+      });
+      setAdminBannedWordPhrase('');
+      setAdminBannedWordRegex(false);
+      await loadAdminSectionData('moderation', adminTwoFactorToken);
+      Alert.alert('Banned words', 'Rule added.');
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error, 'Banned words');
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [
+    adminBannedWordAction,
+    adminBannedWordPhrase,
+    adminBannedWordRegex,
+    adminBannedWordScope,
+    adminTwoFactorToken,
+    apiBase,
+    handleAdminWorkspaceError,
+    loadAdminSectionData,
+    token,
+  ]);
+
+  const onToggleAdminBannedWordActive = useCallback(
+    async (item: AdminBannedWordRecord) => {
+      if (!token || !adminTwoFactorToken) return;
+      setAdminGateLoading(true);
+      try {
+        await patchAdminBannedWord(apiBase, token, adminTwoFactorToken, item.id, {
+          active: !item.active,
+        });
+        await loadAdminSectionData('moderation', adminTwoFactorToken);
+      } catch (error: any) {
+        await handleAdminWorkspaceError(error, 'Banned words');
+      } finally {
+        setAdminGateLoading(false);
+      }
+    },
+    [adminTwoFactorToken, apiBase, handleAdminWorkspaceError, loadAdminSectionData, token]
+  );
+
+  const onDeleteAdminBannedWord = useCallback(
+    async (itemId: string) => {
+      if (!token || !adminTwoFactorToken) return;
+      setAdminGateLoading(true);
+      try {
+        await deleteAdminBannedWord(apiBase, token, adminTwoFactorToken, itemId);
+        await loadAdminSectionData('moderation', adminTwoFactorToken);
+      } catch (error: any) {
+        await handleAdminWorkspaceError(error, 'Banned words');
+      } finally {
+        setAdminGateLoading(false);
+      }
+    },
+    [adminTwoFactorToken, apiBase, handleAdminWorkspaceError, loadAdminSectionData, token]
+  );
+
+  const onSaveAdminMaintenance = useCallback(async () => {
+    if (!token || !adminTwoFactorToken) return;
+    const timestamp = adminMaintenanceTimestamp.trim();
+    const message = adminMaintenanceMessage.trim();
+    if (!timestamp || !message) {
+      Alert.alert('Maintenance', 'Enter start time and message.');
+      return;
+    }
+    setAdminGateLoading(true);
+    try {
+      await setAdminMaintenance(apiBase, token, adminTwoFactorToken, {
+        timestamp,
+        message,
+        sendEmail: false,
+      });
+      await loadAdminSectionData('release', adminTwoFactorToken);
+      Alert.alert('Maintenance', 'Maintenance banner updated.');
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error, 'Maintenance');
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [
+    adminMaintenanceMessage,
+    adminMaintenanceTimestamp,
+    adminTwoFactorToken,
+    apiBase,
+    handleAdminWorkspaceError,
+    loadAdminSectionData,
+    token,
+  ]);
+
+  const onDisableMaintenance = useCallback(async () => {
+    if (!token || !adminTwoFactorToken) return;
+    setAdminGateLoading(true);
+    try {
+      await disableAdminMaintenance(apiBase, token, adminTwoFactorToken);
+      await loadAdminSectionData('release', adminTwoFactorToken);
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error, 'Maintenance');
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [adminTwoFactorToken, apiBase, handleAdminWorkspaceError, loadAdminSectionData, token]);
+
+  const onSaveAdminBanner = useCallback(async () => {
+    if (!token || !adminTwoFactorToken) return;
+    const message = adminBannerMessage.trim();
+    if (!message) {
+      Alert.alert('System banner', 'Enter banner message.');
+      return;
+    }
+    setAdminGateLoading(true);
+    try {
+      await setAdminSystemBanner(apiBase, token, adminTwoFactorToken, {
+        title: adminBannerTitle.trim() || undefined,
+        message,
+        severity: adminBannerSeverity,
+        dismissible: adminBannerDismissible,
+        startsAt: adminBannerStartsAt.trim() || undefined,
+        endsAt: adminBannerEndsAt.trim() || undefined,
+      });
+      await loadAdminSectionData('release', adminTwoFactorToken);
+      Alert.alert('System banner', 'System banner updated.');
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error, 'System banner');
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [
+    adminBannerDismissible,
+    adminBannerEndsAt,
+    adminBannerMessage,
+    adminBannerSeverity,
+    adminBannerStartsAt,
+    adminBannerTitle,
+    adminTwoFactorToken,
+    apiBase,
+    handleAdminWorkspaceError,
+    loadAdminSectionData,
+    token,
+  ]);
+
+  const onDisableAdminBanner = useCallback(async () => {
+    if (!token || !adminTwoFactorToken) return;
+    setAdminGateLoading(true);
+    try {
+      await disableAdminSystemBanner(apiBase, token, adminTwoFactorToken);
+      await loadAdminSectionData('release', adminTwoFactorToken);
+    } catch (error: any) {
+      await handleAdminWorkspaceError(error, 'System banner');
+    } finally {
+      setAdminGateLoading(false);
+    }
+  }, [adminTwoFactorToken, apiBase, handleAdminWorkspaceError, loadAdminSectionData, token]);
+
+  const runAdminUserAction = useCallback(
+    async (action: 'block' | 'unblock' | 'suspend' | 'unsuspend', target: AdminUserRecord) => {
+      if (!token || !adminTwoFactorToken) return;
+      const title = target.username || target.id.slice(0, 8);
+      const question =
+        action === 'block'
+          ? `Block @${title}?`
+          : action === 'unblock'
+          ? `Unblock @${title}?`
+          : action === 'suspend'
+          ? `Suspend @${title}?`
+          : `Remove suspension for @${title}?`;
+      Alert.alert('User action', question, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text:
+            action === 'block'
+              ? 'Block'
+              : action === 'unblock'
+              ? 'Unblock'
+              : action === 'suspend'
+              ? 'Suspend'
+              : 'Restore',
+          style: action === 'block' || action === 'suspend' ? 'destructive' : 'default',
+          onPress: async () => {
+            setAdminGateLoading(true);
+            try {
+              if (action === 'block') await blockAdminUser(apiBase, token, adminTwoFactorToken, target.id);
+              if (action === 'unblock') await unblockAdminUser(apiBase, token, adminTwoFactorToken, target.id);
+              if (action === 'suspend') await suspendAdminUser(apiBase, token, adminTwoFactorToken, target.id);
+              if (action === 'unsuspend') await unsuspendAdminUser(apiBase, token, adminTwoFactorToken, target.id);
+              await loadAdminSectionData('sysadmin', adminTwoFactorToken);
+            } catch (error: any) {
+              await handleAdminWorkspaceError(error, 'User action');
+            } finally {
+              setAdminGateLoading(false);
+            }
+          },
+        },
+      ]);
+    },
+    [adminTwoFactorToken, apiBase, handleAdminWorkspaceError, loadAdminSectionData, token]
+  );
+
   const onSendMessage = useCallback(async () => {
     if (!token || !selectedChat) return;
     const text = composer.trim();
@@ -1015,13 +2597,6 @@ export default function App() {
     }
   }, [apiBase, loadPremiumState, token]);
 
-  const onSaveApiBase = useCallback(async () => {
-    const normalized = await saveApiBase(apiInput);
-    setApiBase(normalized);
-    setApiInput(normalized);
-    Alert.alert('Saved', `Server: ${normalized}`);
-  }, [apiInput]);
-
   const onToggleSecureMode = useCallback(async (next: boolean) => {
     setSecureMode(next);
     await AsyncStorage.setItem(STORAGE_KEYS.secureMode, next ? '1' : '0');
@@ -1133,25 +2708,20 @@ export default function App() {
             <View style={styles.sectionHeaderInline}>
               <View>
                 <Text style={styles.sectionTitle}>Connection</Text>
-                <Text style={styles.sectionSubtitle}>Main SafeGram server for this device.</Text>
+                <Text style={styles.sectionSubtitle}>This public mobile build uses the managed SafeGram cluster.</Text>
               </View>
               <View style={styles.statusPill}>
                 <Text style={styles.statusPillText}>{connectionHost}</Text>
               </View>
             </View>
 
-            <Text style={styles.fieldLabel}>Server</Text>
-            <TextInput
-              value={apiInput}
-              onChangeText={setApiInput}
-              autoCapitalize="none"
-              style={styles.input}
-              placeholder="https://..."
-              placeholderTextColor="#6f7e99"
-            />
-            <Pressable style={styles.secondaryButton} onPress={onSaveApiBase}>
-              <Text style={styles.secondaryButtonText}>Save server</Text>
-            </Pressable>
+            <View style={styles.adminInfoCard}>
+              <Text style={styles.adminInfoTitle}>Primary endpoint</Text>
+              <Text style={styles.serverAddressText}>{apiBase}</Text>
+              <Text style={styles.adminInfoBody}>
+                Manual API switching is disabled. Server routing changes are delivered through signed app updates only.
+              </Text>
+            </View>
           </GlassCard>
 
           <GlassCard>
@@ -1288,23 +2858,41 @@ export default function App() {
                 <Text style={styles.ghostPillText}>Back</Text>
               </Pressable>
             </View>
+            {hasStaffWorkspace ? (
+              <View style={styles.staffEntryRow}>
+                <View style={[styles.statusPill, styles.statusPillSecure]}>
+                  <Text style={styles.statusPillText}>{staffRoleLabel}</Text>
+                </View>
+                <Pressable style={styles.primaryButtonCompact} onPress={enterAdminWorkspace}>
+                  <Text style={styles.primaryButtonText}>Staff workspace</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </GlassCard>
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Workspace</Text>
+            <Text style={styles.sectionSubtitle}>Jump between inbox, servers, support, and staff tools from one device shell.</Text>
+            <View style={styles.primaryActionsRow}>
+              <Pressable style={styles.secondaryButtonWide} onPress={() => setView('chats')}>
+                <Text style={styles.secondaryButtonText}>Open inbox</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryButtonWide} onPress={() => setView('servers')}>
+                <Text style={styles.secondaryButtonText}>Open servers</Text>
+              </Pressable>
+            </View>
           </GlassCard>
 
           <GlassCard>
             <Text style={styles.sectionTitle}>Connection</Text>
-            <Text style={styles.sectionSubtitle}>Connect this device to your SafeGram server.</Text>
-            <Text style={styles.fieldLabel}>Server</Text>
-            <TextInput
-              value={apiInput}
-              onChangeText={setApiInput}
-              autoCapitalize="none"
-              style={styles.input}
-              placeholder="https://..."
-              placeholderTextColor="#6f7e99"
-            />
-            <Pressable style={styles.primaryButton} onPress={onSaveApiBase}>
-              <Text style={styles.primaryButtonText}>Save server</Text>
-            </Pressable>
+            <Text style={styles.sectionSubtitle}>This device stays on the managed SafeGram API cluster.</Text>
+            <View style={styles.adminInfoCard}>
+              <Text style={styles.adminInfoTitle}>Current endpoint</Text>
+              <Text style={styles.serverAddressText}>{apiBase}</Text>
+              <Text style={styles.adminInfoBody}>
+                Public mobile clients cannot edit backend routing from the UI. Endpoint changes ship through release builds only.
+              </Text>
+            </View>
           </GlassCard>
 
           <GlassCard>
@@ -1492,6 +3080,1301 @@ export default function App() {
     );
   }
 
+  if (view === 'admin') {
+    return (
+      <AppFrame>
+        <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
+          <GlassCard style={styles.heroCardCompact}>
+            <View style={styles.topRow}>
+              <View style={styles.identityRow}>
+                <View style={styles.avatarLarge}>
+                  <Text style={styles.avatarLargeText}>{getInitials(user?.username)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.eyebrow}>Staff workspace</Text>
+                  <Text style={styles.cardTitle}>{staffRoleLabel || 'SafeGram staff'}</Text>
+                  <Text style={styles.cardSubtitle}>{connectionHost}</Text>
+                </View>
+              </View>
+              <Pressable style={styles.ghostPill} onPress={() => setView('settings')}>
+                <Text style={styles.ghostPillText}>Back</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.staffEntryRow}>
+              <View style={[styles.statusPill, styles.statusPillSecure]}>
+                <Text style={styles.statusPillText}>{adminTwoFactorToken ? 'Verified' : adminTwoFactorEnabled ? '2FA required' : '2FA missing'}</Text>
+              </View>
+              <Pressable style={styles.secondaryButtonCompact} onPress={onRefreshAdminOverview}>
+                <Text style={styles.secondaryButtonText}>Refresh</Text>
+              </Pressable>
+            </View>
+
+            {staffSections.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                {staffSections.map((section) => (
+                  <Pressable
+                    key={section.id}
+                    style={[styles.choiceChip, adminSection === section.id ? styles.choiceChipActive : null]}
+                    onPress={() => setAdminSection(section.id)}
+                  >
+                    <Text style={[styles.choiceChipText, adminSection === section.id ? styles.choiceChipTextActive : null]}>
+                      {section.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : null}
+          </GlassCard>
+
+          {adminGateLoading ? <ActivityIndicator color="#6fc2ff" style={styles.inlineLoader} /> : null}
+
+          {!adminTwoFactorEnabled ? (
+            <GlassCard>
+              <Text style={styles.sectionTitle}>Admin 2FA required</Text>
+              <Text style={styles.sectionSubtitle}>
+                This account has a staff role, but backend routes require two-factor authentication before the mobile workspace can open.
+              </Text>
+            </GlassCard>
+          ) : !adminTwoFactorToken ? (
+            <GlassCard>
+              <Text style={styles.sectionTitle}>Verify staff access</Text>
+              <Text style={styles.sectionSubtitle}>
+                Enter the current 2FA code for this account. The token is stored locally for this device session.
+              </Text>
+              <Text style={styles.fieldLabel}>2FA code</Text>
+              <TextInput
+                value={adminTwoFactorCode}
+                onChangeText={(value) => setAdminTwoFactorCode(value.replace(/\D/g, '').slice(0, 6))}
+                autoCapitalize="none"
+                keyboardType="number-pad"
+                style={styles.input}
+                placeholder="6-digit code"
+                placeholderTextColor="#6f7e99"
+              />
+              <Pressable style={styles.primaryButton} onPress={verifyAdminWorkspace}>
+                <Text style={styles.primaryButtonText}>Unlock staff workspace</Text>
+              </Pressable>
+            </GlassCard>
+          ) : (
+            <>
+              <View style={styles.statsGrid}>
+                {adminOverviewCards.map((item) => (
+                  <GlassCard key={item.label} style={styles.statCardTall}>
+                    <Text style={styles.statLabel}>{item.label}</Text>
+                    <Text style={styles.statValue}>{item.value}</Text>
+                  </GlassCard>
+                ))}
+              </View>
+
+              {adminSection === 'support' ? (
+                <GlassCard>
+                  <Text style={styles.sectionTitle}>Support queue</Text>
+                  <Text style={styles.sectionSubtitle}>Review incoming tickets and move them through support states.</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                    {ADMIN_FEEDBACK_STATUSES.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        style={[styles.choiceChip, adminFeedbackStatus === option.value ? styles.choiceChipActive : null]}
+                        onPress={() => setAdminFeedbackStatus(option.value)}
+                      >
+                        <Text style={[styles.choiceChipText, adminFeedbackStatus === option.value ? styles.choiceChipTextActive : null]}>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                  {adminFeedback.length > 0 ? (
+                    <View style={styles.supportTicketStack}>
+                      {adminFeedback.slice(0, 12).map((ticket) => (
+                        <View key={ticket.id} style={styles.supportTicketCard}>
+                          <View style={styles.supportTicketTopLine}>
+                            <Text style={styles.supportTicketTitle} numberOfLines={1}>{ticket.subject || 'Ticket'}</Text>
+                            <View style={[styles.statusPill, styles.statusPillMuted]}>
+                              <Text style={styles.statusPillText}>{ticket.statusLabel || ticket.status || 'Open'}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.supportTicketBody} numberOfLines={4}>{ticket.body || 'No description'}</Text>
+                          <Text style={styles.supportTicketMeta}>
+                            {(ticket.user?.username || ticket.userId || 'user').toUpperCase()} · {(ticket.priority || 'normal').toUpperCase()} · {humanDate(ticket.updatedAt || ticket.createdAt)}
+                          </Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                            {ADMIN_FEEDBACK_STATUSES.map((option) => (
+                              <Pressable
+                                key={`${ticket.id}_${option.value}`}
+                                style={[styles.choiceChip, (ticket.status || 'open') === option.value ? styles.choiceChipActive : null]}
+                                onPress={() => onPatchAdminTicketStatus(ticket.id, option.value)}
+                              >
+                                <Text style={[styles.choiceChipText, (ticket.status || 'open') === option.value ? styles.choiceChipTextActive : null]}>
+                                  {option.label}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.sectionSubtitle}>No tickets in this state.</Text>
+                  )}
+                </GlassCard>
+              ) : null}
+
+              {adminSection === 'moderation' ? (
+                <>
+                  <GlassCard>
+                    <Text style={styles.sectionTitle}>Moderation desk</Text>
+                    <Text style={styles.sectionSubtitle}>Reports, active bans, and banned-word rules from the same mobile workspace.</Text>
+                    <View style={styles.statsGrid}>
+                      <GlassCard style={styles.statCardTall}>
+                        <Text style={styles.statLabel}>Reports</Text>
+                        <Text style={styles.statValue}>{adminReports.length}</Text>
+                      </GlassCard>
+                      <GlassCard style={styles.statCardTall}>
+                        <Text style={styles.statLabel}>Queue</Text>
+                        <Text style={styles.statValue}>{adminModQueue.length}</Text>
+                      </GlassCard>
+                      <GlassCard style={styles.statCardTall}>
+                        <Text style={styles.statLabel}>Bans</Text>
+                        <Text style={styles.statValue}>{adminBans.length}</Text>
+                      </GlassCard>
+                      <GlassCard style={styles.statCardTall}>
+                        <Text style={styles.statLabel}>Rules</Text>
+                        <Text style={styles.statValue}>{adminBannedWords.length}</Text>
+                      </GlassCard>
+                    </View>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <Text style={styles.sectionTitle}>Ban user</Text>
+                    <Text style={styles.sectionSubtitle}>Find an account, choose a target, and apply a manual ban from mobile.</Text>
+                    <View style={styles.searchComposerRow}>
+                      <TextInput
+                        value={adminModerationSearchQ}
+                        onChangeText={setAdminModerationSearchQ}
+                        style={[styles.input, styles.searchInputInline]}
+                        placeholder="Search username"
+                        placeholderTextColor="#6f7e99"
+                      />
+                      <Pressable style={styles.primaryButtonCompact} onPress={onFindModerationUser}>
+                        <Text style={styles.primaryButtonText}>Find</Text>
+                      </Pressable>
+                    </View>
+                    {adminModerationSearchLoading ? <ActivityIndicator color="#6fc2ff" style={styles.inlineLoader} /> : null}
+                    {adminModerationSearchResults.length > 0 ? (
+                      <View style={styles.supportTicketStack}>
+                        {adminModerationSearchResults.map((result) => (
+                          <View key={result.id} style={styles.searchResultCard}>
+                            <View style={styles.searchIdentityRow}>
+                              <View style={styles.avatarSmall}>
+                                <Text style={styles.avatarSmallText}>{getInitials(result.username)}</Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.searchResultTitle}>{result.username}</Text>
+                                <Text style={styles.searchResultText}>{result.id}</Text>
+                              </View>
+                            </View>
+                            <Pressable
+                              style={[
+                                styles.secondaryActionButton,
+                                adminBanTargetUserId === result.id ? styles.choiceChipActive : null,
+                              ]}
+                              onPress={() => {
+                                setAdminBanTargetUserId(result.id);
+                                setAdminBanTargetUsername(result.username);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.secondaryActionButtonText,
+                                  adminBanTargetUserId === result.id ? styles.choiceChipTextActive : null,
+                                ]}
+                              >
+                                {adminBanTargetUserId === result.id ? 'Selected' : 'Choose'}
+                              </Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                    <Text style={styles.fieldLabel}>Selected user</Text>
+                    <View style={styles.adminInfoCard}>
+                      <Text style={styles.adminInfoTitle}>{adminBanTargetUsername || 'No user selected'}</Text>
+                      <Text style={styles.adminInfoBody}>{adminBanTargetUserId || 'Pick a user from the search results above.'}</Text>
+                    </View>
+                    <Text style={styles.fieldLabel}>Reason</Text>
+                    <TextInput
+                      value={adminBanReason}
+                      onChangeText={setAdminBanReason}
+                      style={[styles.input, styles.multilineInput]}
+                      placeholder="Explain why the account is being banned"
+                      placeholderTextColor="#6f7e99"
+                      multiline
+                      textAlignVertical="top"
+                    />
+                    <View style={styles.switchRow}>
+                      <Text style={styles.fieldLabel}>Permanent ban</Text>
+                      <Switch value={adminBanPermanent} onValueChange={setAdminBanPermanent} />
+                    </View>
+                    {!adminBanPermanent ? (
+                      <>
+                        <Text style={styles.fieldLabel}>Expires at</Text>
+                        <TextInput
+                          value={adminBanExpiresAt}
+                          onChangeText={setAdminBanExpiresAt}
+                          style={styles.input}
+                          placeholder="2026-03-20T18:00"
+                          placeholderTextColor="#6f7e99"
+                          autoCapitalize="none"
+                        />
+                      </>
+                    ) : null}
+                    <Pressable style={styles.dangerButtonInline} onPress={onCreateAdminBan}>
+                      <Text style={styles.dangerButtonInlineText}>Ban user</Text>
+                    </Pressable>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <Text style={styles.sectionTitle}>Active bans</Text>
+                    <Text style={styles.sectionSubtitle}>Live ban list from backend.</Text>
+                    {adminBans.length > 0 ? (
+                      <View style={styles.supportTicketStack}>
+                        {adminBans.slice(0, 20).map((ban) => (
+                          <View key={ban.id} style={styles.serverChannelCard}>
+                            <Text style={styles.serverChannelTitle}>{ban.username || ban.userId}</Text>
+                            <Text style={styles.serverChannelMeta}>
+                              {ban.permanent ? 'Permanent' : `Until ${ban.expiresAt ? humanDate(new Date(ban.expiresAt).toISOString()) : 'unknown'}`}
+                            </Text>
+                            <Text style={styles.serverChannelMeta}>{ban.reason || 'No reason'}</Text>
+                            <View style={styles.chatCardActions}>
+                              <Pressable style={styles.deleteButtonSmall} onPress={() => onRevokeAdminBan(ban.id || ban.userId)}>
+                                <Text style={styles.deleteButtonSmallText}>Unban</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.sectionSubtitle}>No active bans.</Text>
+                    )}
+                  </GlassCard>
+
+                  <GlassCard>
+                    <Text style={styles.sectionTitle}>Banned words</Text>
+                    <Text style={styles.sectionSubtitle}>Manage moderation rules directly from mobile.</Text>
+                    <Text style={styles.fieldLabel}>Phrase</Text>
+                    <TextInput
+                      value={adminBannedWordPhrase}
+                      onChangeText={setAdminBannedWordPhrase}
+                      style={styles.input}
+                      placeholder="Enter phrase or regex"
+                      placeholderTextColor="#6f7e99"
+                    />
+                    <Text style={styles.fieldLabel}>Action</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                      {(['warn', 'ban', 'delete_message'] as const).map((action) => (
+                        <Pressable
+                          key={action}
+                          style={[styles.choiceChip, adminBannedWordAction === action ? styles.choiceChipActive : null]}
+                          onPress={() => setAdminBannedWordAction(action)}
+                        >
+                          <Text style={[styles.choiceChipText, adminBannedWordAction === action ? styles.choiceChipTextActive : null]}>
+                            {action}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                    <Text style={styles.fieldLabel}>Scope</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                      {(['global', 'chat'] as const).map((scope) => (
+                        <Pressable
+                          key={scope}
+                          style={[styles.choiceChip, adminBannedWordScope === scope ? styles.choiceChipActive : null]}
+                          onPress={() => setAdminBannedWordScope(scope)}
+                        >
+                          <Text style={[styles.choiceChipText, adminBannedWordScope === scope ? styles.choiceChipTextActive : null]}>
+                            {scope}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                    <View style={styles.switchRow}>
+                      <Text style={styles.fieldLabel}>Regex rule</Text>
+                      <Switch value={adminBannedWordRegex} onValueChange={setAdminBannedWordRegex} />
+                    </View>
+                    <Pressable style={styles.primaryButton} onPress={onCreateAdminBannedWord}>
+                      <Text style={styles.primaryButtonText}>Add rule</Text>
+                    </Pressable>
+
+                    {adminBannedWords.length > 0 ? (
+                      <View style={styles.supportTicketStack}>
+                        {adminBannedWords.slice(0, 20).map((item) => (
+                          <View key={item.id} style={styles.serverChannelCard}>
+                            <Text style={styles.serverChannelTitle}>{item.phrase}</Text>
+                            <Text style={styles.serverChannelMeta}>
+                              {(item.action || 'warn').toUpperCase()} · {(item.scope || 'global').toUpperCase()} · {item.isRegex ? 'REGEX' : 'PLAIN'}
+                            </Text>
+                            <Text style={styles.serverChannelMeta}>{item.active ? 'Active' : 'Disabled'}</Text>
+                            <View style={styles.chatCardActions}>
+                              <Pressable style={styles.secondaryActionButton} onPress={() => onToggleAdminBannedWordActive(item)}>
+                                <Text style={styles.secondaryActionButtonText}>{item.active ? 'Disable' : 'Enable'}</Text>
+                              </Pressable>
+                              <Pressable style={styles.deleteButtonSmall} onPress={() => onDeleteAdminBannedWord(item.id)}>
+                                <Text style={styles.deleteButtonSmallText}>Delete</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </GlassCard>
+                </>
+              ) : null}
+
+              {adminSection === 'risk' || adminSection === 'safety' ? (
+                <GlassCard>
+                  <Text style={styles.sectionTitle}>{adminSection === 'risk' ? 'Risk desk' : 'Safety operations'}</Text>
+                  <Text style={styles.sectionSubtitle}>Live health and growth signals for abuse review and safety checks.</Text>
+                  <View style={styles.adminMetricStack}>
+                    {adminHealth?.services?.map((service) => (
+                      <View key={service.name} style={styles.adminMetricRow}>
+                        <Text style={styles.adminMetricLabel}>{service.name.toUpperCase()}</Text>
+                        <Text style={styles.adminMetricValueSmall}>{service.status}</Text>
+                      </View>
+                    ))}
+                    {adminAnalytics?.chart?.slice(-5).map((point) => (
+                      <View key={point.date} style={styles.adminMetricRow}>
+                        <Text style={styles.adminMetricLabel}>{point.date}</Text>
+                        <Text style={styles.adminMetricValueSmall}>{point.messages} msg · {point.newUsers} new</Text>
+                      </View>
+                    ))}
+                  </View>
+                </GlassCard>
+              ) : null}
+
+              {adminSection === 'billing' ? (
+                <GlassCard>
+                  <Text style={styles.sectionTitle}>Billing overview</Text>
+                  <Text style={styles.sectionSubtitle}>Premium conversion and revenue snapshot from backend analytics.</Text>
+                  <View style={styles.adminMetricStack}>
+                    <View style={styles.adminMetricRow}>
+                      <Text style={styles.adminMetricLabel}>Premium users</Text>
+                      <Text style={styles.adminMetricValueSmall}>{adminPremium?.premiumUsers ?? 0}</Text>
+                    </View>
+                    <View style={styles.adminMetricRow}>
+                      <Text style={styles.adminMetricLabel}>Conversion</Text>
+                      <Text style={styles.adminMetricValueSmall}>{typeof adminPremium?.conversion === 'number' ? `${adminPremium.conversion.toFixed(1)}%` : '0%'}</Text>
+                    </View>
+                    <View style={styles.adminMetricRow}>
+                      <Text style={styles.adminMetricLabel}>Revenue</Text>
+                      <Text style={styles.adminMetricValueSmall}>{adminPremium?.revenue ?? 0}</Text>
+                    </View>
+                  </View>
+                </GlassCard>
+              ) : null}
+
+              {adminSection === 'release' ? (
+                <>
+                  <GlassCard>
+                    <Text style={styles.sectionTitle}>Maintenance</Text>
+                    <Text style={styles.sectionSubtitle}>Show global maintenance mode with schedule text and a public status message.</Text>
+                    <Text style={styles.fieldLabel}>Start timestamp</Text>
+                    <TextInput
+                      value={adminMaintenanceTimestamp}
+                      onChangeText={setAdminMaintenanceTimestamp}
+                      style={styles.input}
+                      placeholder="2026-03-14T23:00"
+                      placeholderTextColor="#6f7e99"
+                    />
+                    <Text style={styles.fieldLabel}>Message</Text>
+                    <TextInput
+                      value={adminMaintenanceMessage}
+                      onChangeText={setAdminMaintenanceMessage}
+                      style={[styles.input, styles.multilineInput]}
+                      placeholder="What users should know during maintenance"
+                      placeholderTextColor="#6f7e99"
+                      multiline
+                      textAlignVertical="top"
+                    />
+                    <View style={styles.primaryActionsRow}>
+                      <Pressable style={styles.primaryButton} onPress={onSaveAdminMaintenance}>
+                        <Text style={styles.primaryButtonText}>Enable / update</Text>
+                      </Pressable>
+                      <Pressable style={styles.secondaryButtonWide} onPress={onDisableMaintenance}>
+                        <Text style={styles.secondaryButtonText}>Disable</Text>
+                      </Pressable>
+                    </View>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <Text style={styles.sectionTitle}>System banner</Text>
+                    <Text style={styles.sectionSubtitle}>Run a dismissible or pinned banner across web and desktop.</Text>
+                    <Text style={styles.fieldLabel}>Title</Text>
+                    <TextInput
+                      value={adminBannerTitle}
+                      onChangeText={setAdminBannerTitle}
+                      style={styles.input}
+                      placeholder="Optional title"
+                      placeholderTextColor="#6f7e99"
+                    />
+                    <Text style={styles.fieldLabel}>Message</Text>
+                    <TextInput
+                      value={adminBannerMessage}
+                      onChangeText={setAdminBannerMessage}
+                      style={[styles.input, styles.multilineInput]}
+                      placeholder="Banner text"
+                      placeholderTextColor="#6f7e99"
+                      multiline
+                      textAlignVertical="top"
+                    />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                      {SYSTEM_BANNER_SEVERITIES.map((option) => (
+                        <Pressable
+                          key={option.value}
+                          style={[styles.choiceChip, adminBannerSeverity === option.value ? styles.choiceChipActive : null]}
+                          onPress={() => setAdminBannerSeverity(option.value)}
+                        >
+                          <Text style={[styles.choiceChipText, adminBannerSeverity === option.value ? styles.choiceChipTextActive : null]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                    <Text style={styles.fieldLabel}>Starts at</Text>
+                    <TextInput
+                      value={adminBannerStartsAt}
+                      onChangeText={setAdminBannerStartsAt}
+                      style={styles.input}
+                      placeholder="2026-03-14T22:00"
+                      placeholderTextColor="#6f7e99"
+                    />
+                    <Text style={styles.fieldLabel}>Ends at</Text>
+                    <TextInput
+                      value={adminBannerEndsAt}
+                      onChangeText={setAdminBannerEndsAt}
+                      style={styles.input}
+                      placeholder="2026-03-14T23:00"
+                      placeholderTextColor="#6f7e99"
+                    />
+                    <View style={styles.toggleRowCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.toggleTitle}>Dismissible</Text>
+                        <Text style={styles.toggleText}>Allow users to close this banner on their current device.</Text>
+                      </View>
+                      <Switch value={adminBannerDismissible} onValueChange={setAdminBannerDismissible} />
+                    </View>
+                    <View style={styles.primaryActionsRow}>
+                      <Pressable style={styles.primaryButton} onPress={onSaveAdminBanner}>
+                        <Text style={styles.primaryButtonText}>Publish banner</Text>
+                      </Pressable>
+                      <Pressable style={styles.secondaryButtonWide} onPress={onDisableAdminBanner}>
+                        <Text style={styles.secondaryButtonText}>Disable banner</Text>
+                      </Pressable>
+                    </View>
+                  </GlassCard>
+                </>
+              ) : null}
+
+              {adminSection === 'sysadmin' || adminSection === 'owner' ? (
+                <>
+                  <GlassCard>
+                    <Text style={styles.sectionTitle}>Users</Text>
+                    <Text style={styles.sectionSubtitle}>Review accounts and apply operational actions from mobile.</Text>
+                    <TextInput
+                      value={adminUserSearch}
+                      onChangeText={setAdminUserSearch}
+                      style={styles.input}
+                      placeholder="Search by username or email"
+                      placeholderTextColor="#6f7e99"
+                    />
+                    <Pressable style={styles.secondaryButtonWide} onPress={onRefreshAdminOverview}>
+                      <Text style={styles.secondaryButtonText}>Load matching users</Text>
+                    </Pressable>
+                    <View style={styles.supportTicketStack}>
+                      {adminUsers.slice(0, 20).map((item) => (
+                        <View key={item.id} style={styles.supportTicketCard}>
+                          <View style={styles.supportTicketTopLine}>
+                            <Text style={styles.supportTicketTitle}>@{item.username}</Text>
+                            <View style={[styles.statusPill, item.status === 'suspended' ? styles.statusPillPlain : styles.statusPillMuted]}>
+                              <Text style={styles.statusPillText}>{item.status || 'online'}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.supportTicketMeta}>
+                            {(Array.isArray(item.roles) ? item.roles.join(', ') : item.roles || 'user').toUpperCase()} · {item.email || 'no email'}
+                          </Text>
+                          <View style={styles.adminActionRow}>
+                            <Pressable style={styles.secondaryActionButton} onPress={() => runAdminUserAction('suspend', item)}>
+                              <Text style={styles.secondaryActionButtonText}>Suspend</Text>
+                            </Pressable>
+                            <Pressable style={styles.secondaryActionButton} onPress={() => runAdminUserAction('unsuspend', item)}>
+                              <Text style={styles.secondaryActionButtonText}>Restore</Text>
+                            </Pressable>
+                            <Pressable style={styles.deleteButtonSmall} onPress={() => runAdminUserAction('block', item)}>
+                              <Text style={styles.deleteButtonSmallText}>Block</Text>
+                            </Pressable>
+                            <Pressable style={styles.secondaryActionButton} onPress={() => runAdminUserAction('unblock', item)}>
+                              <Text style={styles.secondaryActionButtonText}>Unblock</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <Text style={styles.sectionTitle}>System health</Text>
+                    <Text style={styles.sectionSubtitle}>Backend status snapshot from admin APIs.</Text>
+                    <View style={styles.adminMetricStack}>
+                      {adminHealth?.services?.map((service) => (
+                        <View key={service.name} style={styles.adminMetricRow}>
+                          <Text style={styles.adminMetricLabel}>{service.name.toUpperCase()}</Text>
+                          <Text style={styles.adminMetricValueSmall}>{service.status}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </GlassCard>
+                </>
+              ) : null}
+            </>
+          )}
+        </ScrollView>
+      </AppFrame>
+    );
+  }
+
+  if (view === 'server' && selectedServer) {
+    const categorizedTextSections = serverCategories
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((category) => ({
+        category,
+        channels: selectedServerTextChannels.filter((channel) => channel.categoryId === category.id),
+      }))
+      .filter((section) => section.channels.length > 0);
+    const uncategorizedTextChannels = selectedServerTextChannels.filter((channel) => !channel.categoryId);
+    const selectedVoiceParticipants = selectedServerVoiceChannel
+      ? serverVoiceState[selectedServerVoiceChannel.id] || []
+      : [];
+
+    return (
+      <AppFrame>
+        <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
+          <GlassCard style={styles.heroCardCompact}>
+            <View style={styles.topRow}>
+              <View style={styles.identityRow}>
+                <View style={styles.avatarLarge}>
+                  <Text style={styles.avatarLargeText}>{getInitials(selectedServer.name)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.eyebrow}>Server workspace</Text>
+                  <Text style={styles.cardTitle}>{selectedServer.name}</Text>
+                  <Text style={styles.cardSubtitle}>{selectedServer.description || connectionHost}</Text>
+                </View>
+              </View>
+              <Pressable
+                style={styles.ghostPill}
+                onPress={() => {
+                  setView('servers');
+                  setSelectedVoiceRoom(null);
+                  setSelectedVoiceChannelId('');
+                }}
+              >
+                <Text style={styles.ghostPillText}>Back</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.pillRowWrap}>
+              <View style={[styles.statusPill, styles.statusPillSecure]}>
+                <Text style={styles.statusPillText}>{selectedServerRole.toUpperCase()}</Text>
+              </View>
+              <View style={styles.statusPill}>
+                <Text style={styles.statusPillText}>{serverMembers.length} members</Text>
+              </View>
+              <View style={styles.statusPill}>
+                <Text style={styles.statusPillText}>{serverChannels.length} channels</Text>
+              </View>
+              <View style={styles.statusPill}>
+                <Text style={styles.statusPillText}>{selectedServerVoiceChannels.length} voice</Text>
+              </View>
+            </View>
+
+            <View style={styles.primaryActionsRow}>
+              <Pressable
+                style={styles.secondaryButtonWide}
+                onPress={() =>
+                  loadSelectedServerData(selectedServer.id, {
+                    preferredVoiceChannelId: selectedVoiceChannelId || undefined,
+                  })
+                }
+              >
+                <Text style={styles.secondaryButtonText}>{serverBusy ? 'Refreshing...' : 'Refresh server'}</Text>
+              </Pressable>
+              {selectedServerRole !== 'owner' ? (
+                <Pressable style={styles.dangerButtonInline} onPress={onLeaveSelectedServer}>
+                  <Text style={styles.dangerButtonInlineText}>Leave server</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </GlassCard>
+
+          {serverBusy ? <ActivityIndicator color="#6fc2ff" style={styles.inlineLoader} /> : null}
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Server settings</Text>
+            <Text style={styles.sectionSubtitle}>Update the public name, description, and invite flow for this server.</Text>
+            <Text style={styles.fieldLabel}>Server name</Text>
+            <TextInput
+              value={serverSettingsName}
+              onChangeText={setServerSettingsName}
+              style={styles.input}
+              placeholder="SafeGram Lobby"
+              placeholderTextColor="#6f7e99"
+            />
+            <Text style={styles.fieldLabel}>Description</Text>
+            <TextInput
+              value={serverSettingsDescription}
+              onChangeText={setServerSettingsDescription}
+              style={[styles.input, styles.multilineInput]}
+              placeholder="What this server is used for"
+              placeholderTextColor="#6f7e99"
+              multiline
+              textAlignVertical="top"
+            />
+            <Text style={styles.fieldLabel}>Invite link</Text>
+            <View style={styles.adminInfoCard}>
+              <Text style={styles.adminInfoTitle}>Current invite</Text>
+              <Text style={styles.serverAddressText}>
+                {selectedServerInviteUrl || 'Invite not generated yet'}
+              </Text>
+              <Text style={styles.adminInfoBody}>Rotate the invite if you want a fresh onboarding link for new members.</Text>
+            </View>
+            <View style={styles.primaryActionsRow}>
+              {canManageSelectedServer ? (
+                <Pressable style={styles.primaryButton} onPress={onUpdateSelectedServer}>
+                  <Text style={styles.primaryButtonText}>Save settings</Text>
+                </Pressable>
+              ) : null}
+              {canManageSelectedServer ? (
+                <Pressable style={styles.secondaryButtonWide} onPress={onRotateServerInvite}>
+                  <Text style={styles.secondaryButtonText}>Rotate invite</Text>
+                </Pressable>
+              ) : null}
+              {inviteReadyForShare ? (
+                <Pressable style={styles.secondaryButtonWide} onPress={onShareSelectedServerInvite}>
+                  <Text style={styles.secondaryButtonText}>Share invite</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </GlassCard>
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Text channels</Text>
+            <Text style={styles.sectionSubtitle}>Open a channel in the existing message screen. Channel chat history is backed by the same backend chat API.</Text>
+
+            {categorizedTextSections.map((section) => (
+              <View key={section.category.id} style={styles.serverChannelSection}>
+                <View style={styles.serverCategoryHeader}>
+                  <Text style={styles.serverSectionLabel}>{section.category.name}</Text>
+                  {canManageSelectedServer ? (
+                    <Pressable style={styles.deleteButtonSmall} onPress={() => onDeleteServerCategory(section.category)}>
+                      <Text style={styles.deleteButtonSmallText}>Delete category</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                {section.channels.map((channel) => (
+                  <View key={channel.id} style={styles.serverChannelCard}>
+                    <Pressable style={styles.serverChannelPrimary} onPress={() => onOpenServerTextChannel(channel)}>
+                      <Text style={styles.serverChannelTitle}># {channel.name}</Text>
+                      <Text style={styles.serverChannelMeta}>Text channel · synced with main chat API</Text>
+                    </Pressable>
+                    <View style={styles.chatCardActions}>
+                      <Pressable style={styles.secondaryActionButton} onPress={() => onOpenServerTextChannel(channel)}>
+                        <Text style={styles.secondaryActionButtonText}>Open</Text>
+                      </Pressable>
+                      {canManageSelectedServer ? (
+                        <Pressable style={styles.deleteButtonSmall} onPress={() => onDeleteServerChannel(channel)}>
+                          <Text style={styles.deleteButtonSmallText}>Delete</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    {canManageSelectedServer ? (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                        <Pressable
+                          style={[styles.choiceChip, !channel.categoryId ? styles.choiceChipActive : null]}
+                          onPress={() => onMoveServerChannelToCategory(channel)}
+                        >
+                          <Text style={[styles.choiceChipText, !channel.categoryId ? styles.choiceChipTextActive : null]}>
+                            General
+                          </Text>
+                        </Pressable>
+                        {serverCategories.map((category) => (
+                          <Pressable
+                            key={`${channel.id}_${category.id}`}
+                            style={[styles.choiceChip, channel.categoryId === category.id ? styles.choiceChipActive : null]}
+                            onPress={() => onMoveServerChannelToCategory(channel, category.id)}
+                          >
+                            <Text
+                              style={[
+                                styles.choiceChipText,
+                                channel.categoryId === category.id ? styles.choiceChipTextActive : null,
+                              ]}
+                            >
+                              {category.name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ))}
+
+            {uncategorizedTextChannels.length > 0 ? (
+              <View style={styles.serverChannelSection}>
+                <Text style={styles.serverSectionLabel}>General</Text>
+                {uncategorizedTextChannels.map((channel) => (
+                  <View key={channel.id} style={styles.serverChannelCard}>
+                    <Pressable style={styles.serverChannelPrimary} onPress={() => onOpenServerTextChannel(channel)}>
+                      <Text style={styles.serverChannelTitle}># {channel.name}</Text>
+                      <Text style={styles.serverChannelMeta}>Text channel</Text>
+                    </Pressable>
+                    <View style={styles.chatCardActions}>
+                      <Pressable style={styles.secondaryActionButton} onPress={() => onOpenServerTextChannel(channel)}>
+                        <Text style={styles.secondaryActionButtonText}>Open</Text>
+                      </Pressable>
+                      {canManageSelectedServer ? (
+                        <Pressable style={styles.deleteButtonSmall} onPress={() => onDeleteServerChannel(channel)}>
+                          <Text style={styles.deleteButtonSmallText}>Delete</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    {canManageSelectedServer && serverCategories.length > 0 ? (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                        <Pressable style={[styles.choiceChip, styles.choiceChipActive]} onPress={() => onMoveServerChannelToCategory(channel)}>
+                          <Text style={[styles.choiceChipText, styles.choiceChipTextActive]}>General</Text>
+                        </Pressable>
+                        {serverCategories.map((category) => (
+                          <Pressable
+                            key={`${channel.id}_${category.id}`}
+                            style={styles.choiceChip}
+                            onPress={() => onMoveServerChannelToCategory(channel, category.id)}
+                          >
+                            <Text style={styles.choiceChipText}>{category.name}</Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {selectedServerTextChannels.length === 0 ? (
+              <Text style={styles.sectionSubtitle}>No text channels in this server yet.</Text>
+            ) : null}
+          </GlassCard>
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Voice rooms</Text>
+            <Text style={styles.sectionSubtitle}>Mobile currently shows live participant presence and room state. Full audio transport still needs a native WebRTC stack.</Text>
+
+            {selectedServerVoiceChannels.length > 0 ? (
+              <View style={styles.supportTicketStack}>
+                {selectedServerVoiceChannels.map((channel) => {
+                  const participantIds = serverVoiceState[channel.id] || [];
+                  const isSelected = selectedVoiceChannelId === channel.id;
+                  return (
+                    <View key={channel.id} style={[styles.serverChannelCard, isSelected ? styles.serverChannelCardActive : null]}>
+                      <Pressable style={styles.serverChannelPrimary} onPress={() => onSelectServerVoiceChannel(channel)}>
+                        <Text style={styles.serverChannelTitle}>Voice · {channel.name}</Text>
+                        <Text style={styles.serverChannelMeta}>
+                          {participantIds.length > 0
+                            ? `${participantIds.length} connected · ${participantIds.map((id) => getServerMemberName(id)).join(', ')}`
+                            : 'Nobody connected yet'}
+                        </Text>
+                      </Pressable>
+                      <View style={styles.chatCardActions}>
+                        <Pressable style={styles.secondaryActionButton} onPress={() => onSelectServerVoiceChannel(channel)}>
+                          <Text style={styles.secondaryActionButtonText}>Monitor</Text>
+                        </Pressable>
+                        {selectedVoiceRoom && isSelected ? (
+                          <Pressable
+                            style={selectedVoiceRoom.createdBy === user?.id ? styles.dangerButtonSmall : styles.secondaryActionButton}
+                            onPress={selectedVoiceRoom.createdBy === user?.id ? onEndVoiceRoom : () => onSelectServerVoiceChannel(channel)}
+                          >
+                            <Text style={selectedVoiceRoom.createdBy === user?.id ? styles.deleteButtonSmallText : styles.secondaryActionButtonText}>
+                              {selectedVoiceRoom.createdBy === user?.id ? 'End room' : 'Active'}
+                            </Text>
+                          </Pressable>
+                        ) : (
+                          <Pressable style={styles.secondaryActionButton} onPress={() => onStartVoiceRoom(channel)}>
+                            <Text style={styles.secondaryActionButtonText}>Start room</Text>
+                          </Pressable>
+                        )}
+                        {canManageSelectedServer ? (
+                          <Pressable style={styles.deleteButtonSmall} onPress={() => onDeleteServerChannel(channel)}>
+                            <Text style={styles.deleteButtonSmallText}>Delete</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                      {canManageSelectedServer ? (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                          <Pressable
+                            style={[styles.choiceChip, !channel.categoryId ? styles.choiceChipActive : null]}
+                            onPress={() => onMoveServerChannelToCategory(channel)}
+                          >
+                            <Text style={[styles.choiceChipText, !channel.categoryId ? styles.choiceChipTextActive : null]}>
+                              General
+                            </Text>
+                          </Pressable>
+                          {serverCategories.map((category) => (
+                            <Pressable
+                              key={`${channel.id}_${category.id}`}
+                              style={[styles.choiceChip, channel.categoryId === category.id ? styles.choiceChipActive : null]}
+                              onPress={() => onMoveServerChannelToCategory(channel, category.id)}
+                            >
+                              <Text
+                                style={[
+                                  styles.choiceChipText,
+                                  channel.categoryId === category.id ? styles.choiceChipTextActive : null,
+                                ]}
+                              >
+                                {category.name}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.sectionSubtitle}>No voice channels yet.</Text>
+            )}
+
+            {selectedServerVoiceChannel ? (
+              <View style={styles.adminInfoCard}>
+                <Text style={styles.adminInfoTitle}>Selected voice room</Text>
+                <Text style={styles.serverAddressText}>{selectedServerVoiceChannel.name}</Text>
+                <Text style={styles.adminInfoBody}>
+                  {selectedVoiceRoom
+                    ? `Room active since ${humanDate(selectedVoiceRoom.createdAt)}. Started by ${getServerMemberName(selectedVoiceRoom.createdBy)}.`
+                    : 'No active room on this channel right now.'}
+                </Text>
+                <Text style={styles.adminInfoBody}>
+                  Participants: {selectedVoiceParticipants.length > 0 ? selectedVoiceParticipants.map((id) => getServerMemberName(id)).join(', ') : 'none'}
+                </Text>
+              </View>
+            ) : null}
+          </GlassCard>
+
+          {canManageSelectedServer ? (
+            <GlassCard>
+              <Text style={styles.sectionTitle}>Server controls</Text>
+              <Text style={styles.sectionSubtitle}>Create categories and channels from the same mobile shell.</Text>
+
+              <Text style={styles.fieldLabel}>New category</Text>
+              <View style={styles.searchComposerRow}>
+                <TextInput
+                  value={categoryDraftName}
+                  onChangeText={setCategoryDraftName}
+                  style={[styles.input, styles.searchInputInline]}
+                  placeholder="Announcements"
+                  placeholderTextColor="#6f7e99"
+                />
+                <Pressable style={styles.primaryButtonCompact} onPress={onCreateServerCategory}>
+                  <Text style={styles.primaryButtonText}>Add</Text>
+                </Pressable>
+              </View>
+
+              {serverCategories.length > 0 ? (
+                <View style={styles.supportTicketStack}>
+                  {serverCategories.map((category) => (
+                    <View key={category.id} style={styles.serverChannelCard}>
+                      <Text style={styles.serverChannelTitle}>{category.name}</Text>
+                      <Text style={styles.serverChannelMeta}>Position {category.position}</Text>
+                      <View style={styles.chatCardActions}>
+                        <Pressable style={styles.deleteButtonSmall} onPress={() => onDeleteServerCategory(category)}>
+                          <Text style={styles.deleteButtonSmallText}>Delete</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              <Text style={styles.fieldLabel}>New channel</Text>
+              <TextInput
+                value={channelDraftName}
+                onChangeText={setChannelDraftName}
+                style={styles.input}
+                placeholder="general, updates, stage..."
+                placeholderTextColor="#6f7e99"
+              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                {(['text', 'voice'] as const).map((type) => (
+                  <Pressable
+                    key={type}
+                    style={[styles.choiceChip, channelDraftType === type ? styles.choiceChipActive : null]}
+                    onPress={() => setChannelDraftType(type)}
+                  >
+                    <Text style={[styles.choiceChipText, channelDraftType === type ? styles.choiceChipTextActive : null]}>
+                      {type === 'text' ? 'Text channel' : 'Voice channel'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Pressable style={styles.primaryButton} onPress={onCreateServerChannel}>
+                <Text style={styles.primaryButtonText}>Create channel</Text>
+              </Pressable>
+            </GlassCard>
+          ) : null}
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Members</Text>
+            <Text style={styles.sectionSubtitle}>Live member list for this server.</Text>
+            {canManageSelectedServer ? (
+              <>
+                <Text style={styles.fieldLabel}>Add members</Text>
+                <View style={styles.searchComposerRow}>
+                  <TextInput
+                    value={serverMemberSearchQ}
+                    onChangeText={setServerMemberSearchQ}
+                    style={[styles.input, styles.searchInputInline]}
+                    placeholder="Search users to add"
+                    placeholderTextColor="#6f7e99"
+                  />
+                  <Pressable style={styles.primaryButtonCompact} onPress={onFindServerMembersToAdd}>
+                    <Text style={styles.primaryButtonText}>Find</Text>
+                  </Pressable>
+                </View>
+                {serverMemberSearchLoading ? <ActivityIndicator color="#6fc2ff" style={styles.inlineLoader} /> : null}
+                {serverMemberSearchResults.length > 0 ? (
+                  <View style={styles.supportTicketStack}>
+                    {serverMemberSearchResults.slice(0, 8).map((result) => (
+                      <View key={result.id} style={styles.searchResultCard}>
+                        <View style={styles.searchIdentityRow}>
+                          <View style={styles.avatarSmall}>
+                            <Text style={styles.avatarSmallText}>{getInitials(result.username)}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.searchResultTitle}>{result.username}</Text>
+                            <Text style={styles.searchResultText}>Available to add to this server</Text>
+                          </View>
+                        </View>
+                        <View style={styles.chatCardActions}>
+                          <Pressable style={styles.primaryButtonCompact} onPress={() => onAddServerMember(result.id)}>
+                            <Text style={styles.primaryButtonText}>Add</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+            {serverMembers.length > 0 ? (
+              <View style={styles.supportTicketStack}>
+                {serverMembers.slice(0, 18).map((member) => (
+                  <View key={member.id} style={styles.searchResultCard}>
+                    <View style={styles.searchIdentityRow}>
+                      <View style={styles.avatarSmall}>
+                        <Text style={styles.avatarSmallText}>{getInitials(member.user?.username)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.searchResultTitle}>{member.user?.username || member.userId}</Text>
+                        <Text style={styles.searchResultText}>
+                          {(member.role || 'member').toUpperCase()} · {member.user?.status || 'offline'} · {humanDate(member.joinedAt)}
+                        </Text>
+                        {(member.roles || []).length > 0 ? (
+                          <Text style={styles.searchResultText}>
+                            Custom roles: {(member.roles || []).map((role) => role.name || role.id || 'role').join(', ')}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {canManageSelectedServer && member.userId !== user?.id ? (
+                      <View style={styles.memberRoleTools}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                          {(['member', 'moderator', 'admin'] as const).map((role) => (
+                            <Pressable
+                              key={`${member.id}_${role}`}
+                              style={[styles.choiceChip, (member.role || 'member') === role ? styles.choiceChipActive : null]}
+                              onPress={() => onSetSelectedServerMemberRole(member, role)}
+                            >
+                              <Text style={[styles.choiceChipText, (member.role || 'member') === role ? styles.choiceChipTextActive : null]}>
+                                {role}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                        {serverRoles.length > 0 ? (
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                            {serverRoles.map((role) => {
+                              const enabled = (member.roles || []).some((assigned) => assigned.id === role.id);
+                              return (
+                                <Pressable
+                                  key={`${member.id}_custom_${role.id}`}
+                                  style={[styles.choiceChip, enabled ? styles.choiceChipActive : null]}
+                                  onPress={() => onToggleServerMemberCustomRole(member, role.id)}
+                                >
+                                  <Text style={[styles.choiceChipText, enabled ? styles.choiceChipTextActive : null]}>
+                                    {role.name}
+                                  </Text>
+                                </Pressable>
+                              );
+                            })}
+                          </ScrollView>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.sectionSubtitle}>No members loaded.</Text>
+            )}
+          </GlassCard>
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Server roles</Text>
+            <Text style={styles.sectionSubtitle}>Create custom roles, tune permissions, and assign them to members from mobile.</Text>
+            {canManageSelectedServer ? (
+              <>
+                <Text style={styles.fieldLabel}>Role name</Text>
+                <TextInput
+                  value={serverRoleDraftName}
+                  onChangeText={setServerRoleDraftName}
+                  style={styles.input}
+                  placeholder="Announcements team"
+                  placeholderTextColor="#6f7e99"
+                />
+                <Text style={styles.fieldLabel}>Color</Text>
+                <TextInput
+                  value={serverRoleDraftColor}
+                  onChangeText={(value) => setServerRoleDraftColor(value.replace(/[^a-fA-F0-9]/g, '').slice(0, 6))}
+                  style={styles.input}
+                  placeholder="99aab5"
+                  placeholderTextColor="#6f7e99"
+                  autoCapitalize="none"
+                />
+                <Text style={styles.fieldLabel}>Permissions</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  {serverAllPermissions.map((permission) => (
+                    <Pressable
+                      key={permission}
+                      style={[styles.choiceChip, serverRoleDraftPermissions.includes(permission) ? styles.choiceChipActive : null]}
+                      onPress={() => onToggleServerRolePermission(permission)}
+                    >
+                      <Text
+                        style={[
+                          styles.choiceChipText,
+                          serverRoleDraftPermissions.includes(permission) ? styles.choiceChipTextActive : null,
+                        ]}
+                      >
+                        {permission}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+                <View style={styles.primaryActionsRow}>
+                  <Pressable style={styles.primaryButton} onPress={onSaveServerRole}>
+                    <Text style={styles.primaryButtonText}>{editingServerRoleId ? 'Save role' : 'Create role'}</Text>
+                  </Pressable>
+                  {editingServerRoleId ? (
+                    <Pressable style={styles.secondaryButtonWide} onPress={onResetServerRoleDraft}>
+                      <Text style={styles.secondaryButtonText}>Cancel edit</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
+            {serverRoles.length > 0 ? (
+              <View style={styles.supportTicketStack}>
+                {serverRoles.map((role) => (
+                  <View key={role.id} style={styles.serverChannelCard}>
+                    <Text style={styles.serverChannelTitle}>{role.name}</Text>
+                    <Text style={styles.serverChannelMeta}>
+                      {role.color ? `#${role.color}` : 'no color'} · position {role.position ?? 0}
+                    </Text>
+                    <Text style={styles.serverChannelMeta}>
+                      {(role.permissions || []).length > 0 ? role.permissions!.join(', ') : 'No explicit permissions'}
+                    </Text>
+                    {canManageSelectedServer ? (
+                      <View style={styles.chatCardActions}>
+                        <Pressable style={styles.secondaryActionButton} onPress={() => onStartEditServerRole(role)}>
+                          <Text style={styles.secondaryActionButtonText}>Edit</Text>
+                        </Pressable>
+                        <Pressable style={styles.deleteButtonSmall} onPress={() => onDeleteSelectedServerRole(role)}>
+                          <Text style={styles.deleteButtonSmallText}>Delete</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.sectionSubtitle}>No custom roles on this server yet.</Text>
+            )}
+          </GlassCard>
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Recent history</Text>
+            <Text style={styles.sectionSubtitle}>Latest member and moderation events recorded by backend.</Text>
+            {serverHistory.length > 0 ? (
+              <View style={styles.supportTicketStack}>
+                {serverHistory.slice(0, 12).map((event) => (
+                  <View key={event.id} style={styles.serverChannelCard}>
+                    <Text style={styles.serverChannelTitle}>{event.action}</Text>
+                    <Text style={styles.serverChannelMeta}>
+                      user {getServerMemberName(event.userId)} · actor {getServerMemberName(event.actorId || event.actorID)}
+                    </Text>
+                    <Text style={styles.serverChannelMeta}>{humanDate(event.createdAt)}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.sectionSubtitle}>No recent server history.</Text>
+            )}
+          </GlassCard>
+        </ScrollView>
+      </AppFrame>
+    );
+  }
+
+  if (view === 'servers') {
+    return (
+      <AppFrame>
+        <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
+          <GlassCard style={styles.heroCardCompact}>
+            <View style={styles.topRow}>
+              <View style={styles.identityRow}>
+                <View style={styles.avatarLarge}>
+                  <Text style={styles.avatarLargeText}>{getInitials(user?.username)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.eyebrow}>Server network</Text>
+                  <Text style={styles.cardTitle}>SafeGram servers</Text>
+                  <Text style={styles.cardSubtitle}>Community lobby, private spaces, and voice presence in one list.</Text>
+                </View>
+              </View>
+              <Pressable style={styles.ghostPill} onPress={() => setView('chats')}>
+                <Text style={styles.ghostPillText}>Inbox</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.primaryActionsRow}>
+              <Pressable style={styles.secondaryButtonWide} onPress={() => loadServersSafe(token)}>
+                <Text style={styles.secondaryButtonText}>{serversLoading ? 'Refreshing...' : 'Refresh servers'}</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryButtonWide} onPress={() => setView('settings')}>
+                <Text style={styles.secondaryButtonText}>Settings</Text>
+              </Pressable>
+            </View>
+          </GlassCard>
+
+          <View style={styles.statsGrid}>
+            <GlassCard style={styles.statCardTall}>
+              <Text style={styles.statLabel}>Servers</Text>
+              <Text style={styles.statValue}>{servers.length}</Text>
+            </GlassCard>
+            <GlassCard style={styles.statCardTall}>
+              <Text style={styles.statLabel}>Text</Text>
+              <Text style={styles.statValue}>{selectedServerTextChannels.length}</Text>
+            </GlassCard>
+            <GlassCard style={styles.statCardTall}>
+              <Text style={styles.statLabel}>Voice</Text>
+              <Text style={styles.statValue}>{selectedServerVoiceChannels.length}</Text>
+            </GlassCard>
+            <GlassCard style={styles.statCardTall}>
+              <Text style={styles.statLabel}>Role</Text>
+              <Text style={styles.statValue}>{hasStaffWorkspace ? 'Staff' : 'User'}</Text>
+            </GlassCard>
+          </View>
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Join by invite</Text>
+            <Text style={styles.sectionSubtitle}>Paste an invite code or a full `/app/servers/join/...` link from SafeGram.</Text>
+            <TextInput
+              value={serverJoinCode}
+              onChangeText={setServerJoinCode}
+              style={styles.input}
+              placeholder="safegram-lobby or full invite link"
+              placeholderTextColor="#6f7e99"
+              autoCapitalize="none"
+            />
+            <Pressable style={styles.primaryButton} onPress={onJoinServerByCode}>
+              <Text style={styles.primaryButtonText}>{serverBusy ? 'Joining...' : 'Join server'}</Text>
+            </Pressable>
+          </GlassCard>
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Create server</Text>
+            <Text style={styles.sectionSubtitle}>Spin up a new workspace and get a default #general text channel instantly.</Text>
+            <Text style={styles.fieldLabel}>Server name</Text>
+            <TextInput
+              value={serverDraftName}
+              onChangeText={setServerDraftName}
+              style={styles.input}
+              placeholder="SafeGram Club"
+              placeholderTextColor="#6f7e99"
+            />
+            <Text style={styles.fieldLabel}>Description</Text>
+            <TextInput
+              value={serverDraftDescription}
+              onChangeText={setServerDraftDescription}
+              style={[styles.input, styles.multilineInput]}
+              placeholder="What this server is for"
+              placeholderTextColor="#6f7e99"
+              multiline
+              textAlignVertical="top"
+            />
+            <Pressable style={styles.primaryButton} onPress={onCreateServer}>
+              <Text style={styles.primaryButtonText}>{serverBusy ? 'Creating...' : 'Create server'}</Text>
+            </Pressable>
+          </GlassCard>
+
+          <GlassCard>
+            <Text style={styles.sectionTitle}>My servers</Text>
+            <Text style={styles.sectionSubtitle}>Open an existing server, then switch between text channels and voice status.</Text>
+            {serversLoading ? <ActivityIndicator color="#6fc2ff" style={styles.inlineLoader} /> : null}
+            {servers.length > 0 ? (
+              <View style={styles.supportTicketStack}>
+                {servers.map((server) => (
+                  <Pressable key={server.id} style={styles.serverCard} onPress={() => openServer(server)}>
+                    <View style={styles.searchIdentityRow}>
+                      <View style={styles.avatarLarge}>
+                        <Text style={styles.avatarLargeText}>{getInitials(server.name)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.chatTitle}>{server.name}</Text>
+                        <Text style={styles.chatSubtitle} numberOfLines={2}>
+                          {server.description || 'No description yet'}
+                        </Text>
+                        <View style={styles.chatMetaRow}>
+                          <View style={styles.metaPill}>
+                            <Text style={styles.metaPillText}>{server.inviteLink ? 'Invite ready' : 'Private'}</Text>
+                          </View>
+                          <View style={styles.metaPill}>
+                            <Text style={styles.metaPillText}>{humanRelativeTime(server.updatedAt || server.createdAt)}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.sectionSubtitle}>No servers yet. Create one above or use the lobby after next login.</Text>
+            )}
+          </GlassCard>
+        </ScrollView>
+      </AppFrame>
+    );
+  }
+
   if (view === 'chat' && selectedChat) {
     return (
       <AppFrame>
@@ -1509,7 +4392,7 @@ export default function App() {
                     setSelectedChat(null);
                     setMessages([]);
                     setAttachmentDraft(null);
-                    setView('chats');
+                    setView(chatOrigin === 'server' && selectedServer ? 'server' : 'chats');
                   }}
                 >
                   <Text style={styles.ghostPillText}>Back</Text>
@@ -1713,6 +4596,9 @@ export default function App() {
                     <Text style={styles.cardSubtitle}>{connectionHost}</Text>
                   </View>
                 </View>
+                <Pressable style={styles.ghostPill} onPress={() => setView('servers')}>
+                  <Text style={styles.ghostPillText}>Servers</Text>
+                </Pressable>
                 <Pressable style={styles.ghostPill} onPress={() => setView('settings')}>
                   <Text style={styles.ghostPillText}>Settings</Text>
                 </Pressable>
@@ -2638,6 +5524,38 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 12,
   },
+  adminInfoCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(109, 136, 168, 0.18)',
+    backgroundColor: 'rgba(4, 10, 18, 0.58)',
+    padding: 14,
+    gap: 8,
+  },
+  adminInfoTitle: {
+    color: '#dcecff',
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  serverAddressText: {
+    color: '#f7fbff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  adminInfoBody: {
+    color: '#93abc7',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  staffEntryRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
   choiceChip: {
     borderWidth: 1,
     borderColor: 'rgba(109, 136, 168, 0.18)',
@@ -2657,6 +5575,38 @@ const styles = StyleSheet.create({
   },
   choiceChipTextActive: {
     color: '#f7fbff',
+  },
+  adminMetricStack: {
+    gap: 10,
+  },
+  adminMetricRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(109, 136, 168, 0.18)',
+    backgroundColor: 'rgba(4, 10, 18, 0.58)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  adminMetricLabel: {
+    color: '#cfe2f8',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
+  adminMetricValueSmall: {
+    color: '#f7fbff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  adminActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
   },
   templateChip: {
     borderWidth: 1,
@@ -2949,5 +5899,86 @@ const styles = StyleSheet.create({
     color: '#ffe3e3',
     fontWeight: '800',
     fontSize: 12,
+  },
+  dangerButtonInline: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(228, 115, 115, 0.18)',
+    backgroundColor: 'rgba(74, 21, 21, 0.84)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  dangerButtonInlineText: {
+    color: '#ffe3e3',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  dangerButtonSmall: {
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(228, 115, 115, 0.18)',
+    backgroundColor: 'rgba(74, 21, 21, 0.84)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  serverChannelSection: {
+    gap: 10,
+    marginTop: 12,
+  },
+  serverCategoryHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  serverSectionLabel: {
+    color: '#8fb5d8',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    fontWeight: '800',
+  },
+  serverChannelCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(109, 136, 168, 0.16)',
+    backgroundColor: 'rgba(5, 11, 20, 0.58)',
+    padding: 12,
+    gap: 10,
+  },
+  serverChannelCardActive: {
+    borderColor: 'rgba(111, 194, 255, 0.34)',
+    backgroundColor: 'rgba(10, 24, 44, 0.72)',
+  },
+  serverChannelPrimary: {
+    gap: 4,
+  },
+  serverChannelTitle: {
+    color: '#f3fbff',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  serverChannelMeta: {
+    color: '#91a8c3',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  serverCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(109, 136, 168, 0.16)',
+    backgroundColor: 'rgba(12, 20, 34, 0.84)',
+    padding: 14,
+  },
+  memberRoleTools: {
+    flex: 1,
+    gap: 6,
+  },
+  switchRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
   },
 });
