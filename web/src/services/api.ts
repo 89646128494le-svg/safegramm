@@ -1,24 +1,32 @@
 
-const SAFEGRAM_API_SERVER = 'https://141.8.198.152.nip.io';
-const FALLBACK_API = SAFEGRAM_API_SERVER;
+const PRIMARY_SAFEGRAM_ORIGIN = 'https://safegram.site';
+
+function fallbackApiBase(): string {
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin || '';
+    if (/^https?:\/\//i.test(origin)) return origin.replace(/\/+$/, '');
+  }
+  return PRIMARY_SAFEGRAM_ORIGIN;
+}
 
 function normalizeBaseUrl(url: string): string {
+  const fallback = fallbackApiBase();
   const u = url.replace(/\/+$/, '');
-  if (!u) return FALLBACK_API;
-  if (!/^https?:\/\//i.test(u)) return FALLBACK_API;
+  if (!u) return fallback;
+  if (!/^https?:\/\//i.test(u)) return fallback;
   try {
     const parsed = new URL(u);
-    if (!parsed.hostname || parsed.hostname === '') return FALLBACK_API;
+    if (!parsed.hostname || parsed.hostname === '') return fallback;
     return u;
   } catch {
-    return FALLBACK_API;
+    return fallback;
   }
 }
 
 const DEFAULT_API = normalizeBaseUrl(
   typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL.trim() !== ''
     ? import.meta.env.VITE_API_URL.trim()
-    : SAFEGRAM_API_SERVER
+    : fallbackApiBase()
 );
 
 // Runtime config из /config.json (для деплоя на Vercel при API на своём ПК)
@@ -41,15 +49,15 @@ export function loadApiConfig(): Promise<void> {
   const isDesktop = !!electronAPI;
   if (isDesktop) {
     if (typeof electronAPI.getConfig !== 'function') {
-      runtimeApiUrl = SAFEGRAM_API_SERVER;
+      runtimeApiUrl = PRIMARY_SAFEGRAM_ORIGIN;
       return Promise.resolve();
     }
     return electronAPI.getConfig()
       .then((c: { serverUrl?: string }) => {
         if (c?.serverUrl && String(c.serverUrl).trim()) runtimeApiUrl = normalizeBaseUrl(String(c.serverUrl).trim());
-        else runtimeApiUrl = SAFEGRAM_API_SERVER;
+        else runtimeApiUrl = PRIMARY_SAFEGRAM_ORIGIN;
       })
-      .catch(() => { runtimeApiUrl = SAFEGRAM_API_SERVER; });
+      .catch(() => { runtimeApiUrl = PRIMARY_SAFEGRAM_ORIGIN; });
   }
   return fetch('/config.json')
     .then((r) => (r.ok ? r.json() : null))
@@ -66,7 +74,7 @@ export function loadApiConfig(): Promise<void> {
 export function getApiBaseUrl(): string {
   const w = typeof window !== 'undefined' ? window : null;
   const isDesktop = w && (w as any).electronAPI;
-  if (isDesktop && runtimeApiUrl == null) return SAFEGRAM_API_SERVER;
+  if (isDesktop && runtimeApiUrl == null) return PRIMARY_SAFEGRAM_ORIGIN;
   const proxy = w ? (localStorage.getItem('safegram_proxy_url') || '').trim() : '';
   return normalizeBaseUrl(runtimeApiUrl || proxy || DEFAULT_API);
 }

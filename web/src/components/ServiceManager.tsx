@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Square, RefreshCw, Database, Globe, Bot, Server, Activity, CheckCircle, XCircle, Loader } from 'lucide-react';
-import { api } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 import { showToast } from './Toast';
 
 interface Service {
@@ -22,8 +22,8 @@ interface Service {
 const defaultServices: Service[] = [
   {
     id: 'web-app',
-    name: 'Веб-приложение',
-    description: 'Основное веб-приложение SafeGram на Vercel',
+    name: 'Ð’ÐµÐ±-Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ',
+    description: 'ÐžÑÐ½Ð¾Ð²Ð½Ð¾Ð¹ Ð¿ÑƒÐ±Ð»Ð¸Ñ‡Ð½Ñ‹Ð¹ frontend SafeGram',
     type: 'web',
     status: 'running',
     url: window.location.origin,
@@ -35,12 +35,12 @@ const defaultServices: Service[] = [
   },
   {
     id: 'api-server',
-    name: 'API сервер',
+    name: 'API ÑÐµÑ€Ð²ÐµÑ€',
     description: 'Backend API (Go/Node.js)',
     type: 'api',
     status: 'running',
-    url: import.meta.env.VITE_API_URL || 'http://localhost:8082',
-    port: 8082,
+    url: getApiBaseUrl(),
+    port: 8080,
     health: {
       status: 'healthy',
       lastCheck: Date.now(),
@@ -49,8 +49,8 @@ const defaultServices: Service[] = [
   },
   {
     id: 'database',
-    name: 'База данных',
-    description: 'PostgreSQL база данных',
+    name: 'Ð‘Ð°Ð·Ð° Ð´Ð°Ð½Ð½Ñ‹Ñ…',
+    description: 'PostgreSQL Ð±Ð°Ð·Ð° Ð´Ð°Ð½Ð½Ñ‹Ñ…',
     type: 'database',
     status: 'running',
     port: 5432,
@@ -62,8 +62,8 @@ const defaultServices: Service[] = [
   },
   {
     id: 'telegram-bot',
-    name: 'Telegram бот',
-    description: 'Бот для интеграции с Telegram',
+    name: 'Telegram Ð±Ð¾Ñ‚',
+    description: 'Ð‘Ð¾Ñ‚ Ð´Ð»Ñ Ð¸Ð½Ñ‚ÐµÐ³Ñ€Ð°Ñ†Ð¸Ð¸ Ñ Telegram',
     type: 'telegram',
     status: 'stopped',
     health: {
@@ -73,8 +73,8 @@ const defaultServices: Service[] = [
   },
   {
     id: 'redis',
-    name: 'Redis кэш',
-    description: 'Redis для кэширования и онлайн статусов',
+    name: 'Redis ÐºÑÑˆ',
+    description: 'Redis Ð´Ð»Ñ ÐºÑÑˆÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ Ð¸ Ð¾Ð½Ð»Ð°Ð¹Ð½ ÑÑ‚Ð°Ñ‚ÑƒÑÐ¾Ð²',
     type: 'database',
     status: 'running',
     port: 6379,
@@ -99,7 +99,7 @@ export default function ServiceManager() {
     if (autoRefresh) {
       const interval = setInterval(() => {
         loadServices();
-      }, 10000); // Проверка каждые 10 секунд
+      }, 10000); // ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° ÐºÐ°Ð¶Ð´Ñ‹Ðµ 10 ÑÐµÐºÑƒÐ½Ð´
 
       return () => clearInterval(interval);
     }
@@ -119,7 +119,7 @@ export default function ServiceManager() {
       }
     } catch (e) {
       console.error('Failed to load services:', e);
-      // Используем дефолтные сервисы
+      // Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ Ð´ÐµÑ„Ð¾Ð»Ñ‚Ð½Ñ‹Ðµ ÑÐµÑ€Ð²Ð¸ÑÑ‹
     }
   };
 
@@ -127,10 +127,10 @@ export default function ServiceManager() {
     setLoading(prev => ({ ...prev, [serviceId]: true }));
     try {
       await api(`/api/admin/services/${serviceId}/start`, 'POST');
-      showToast(`Запуск сервиса "${serviceList.find(s => s.id === serviceId)?.name}"...`, 'info');
+      showToast(`Ð—Ð°Ð¿ÑƒÑÐº ÑÐµÑ€Ð²Ð¸ÑÐ° "${serviceList.find(s => s.id === serviceId)?.name}"...`, 'info');
       await loadServices();
     } catch (e: any) {
-      showToast(`Ошибка запуска: ${e.message || 'Неизвестная ошибка'}`, 'error');
+      showToast(`ÐžÑˆÐ¸Ð±ÐºÐ° Ð·Ð°Ð¿ÑƒÑÐºÐ°: ${e.message || 'ÐÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ð°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ°'}`, 'error');
     } finally {
       setLoading(prev => ({ ...prev, [serviceId]: false }));
     }
@@ -140,10 +140,10 @@ export default function ServiceManager() {
     setLoading(prev => ({ ...prev, [serviceId]: true }));
     try {
       await api(`/api/admin/services/${serviceId}/stop`, 'POST');
-      showToast(`Остановка сервиса "${serviceList.find(s => s.id === serviceId)?.name}"...`, 'info');
+      showToast(`ÐžÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ° ÑÐµÑ€Ð²Ð¸ÑÐ° "${serviceList.find(s => s.id === serviceId)?.name}"...`, 'info');
       await loadServices();
     } catch (e: any) {
-      showToast(`Ошибка остановки: ${e.message || 'Неизвестная ошибка'}`, 'error');
+      showToast(`ÐžÑˆÐ¸Ð±ÐºÐ° Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ¸: ${e.message || 'ÐÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ð°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ°'}`, 'error');
     } finally {
       setLoading(prev => ({ ...prev, [serviceId]: false }));
     }
@@ -204,13 +204,13 @@ export default function ServiceManager() {
             marginBottom: '8px',
             color: '#e9ecf5'
           }}>
-            Управление сервисами
+            Ð£Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐµÑ€Ð²Ð¸ÑÐ°Ð¼Ð¸
           </h3>
           <p style={{
             fontSize: '14px',
             color: 'rgba(233, 236, 245, 0.6)'
           }}>
-            Управление всеми сервисами SafeGram инфраструктуры
+            Ð£Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ Ð²ÑÐµÐ¼Ð¸ ÑÐµÑ€Ð²Ð¸ÑÐ°Ð¼Ð¸ SafeGram Ð¸Ð½Ñ„Ñ€Ð°ÑÑ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ñ‹
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -233,7 +233,7 @@ export default function ServiceManager() {
             }}
           >
             <Activity size={16} />
-            {autoRefresh ? 'Автообновление: ВКЛ' : 'Автообновление: ВЫКЛ'}
+            {autoRefresh ? 'ÐÐ²Ñ‚Ð¾Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ: Ð’ÐšÐ›' : 'ÐÐ²Ñ‚Ð¾Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ: Ð’Ð«ÐšÐ›'}
           </motion.button>
           <motion.button
             onClick={loadServices}
@@ -254,7 +254,7 @@ export default function ServiceManager() {
             }}
           >
             <RefreshCw size={16} />
-            Обновить все
+            ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ð²ÑÐµ
           </motion.button>
         </div>
       </div>
@@ -371,7 +371,7 @@ export default function ServiceManager() {
                       {service.port && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Server size={14} />
-                          <span>Порт: {service.port}</span>
+                          <span>ÐŸÐ¾Ñ€Ñ‚: {service.port}</span>
                         </div>
                       )}
                       {service.health && (
@@ -387,7 +387,7 @@ export default function ServiceManager() {
                             <XCircle size={14} />
                           )}
                           <span>
-                            {service.health.status === 'healthy' ? 'Работает' : 'Недоступен'}
+                            {service.health.status === 'healthy' ? 'Ð Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚' : 'ÐÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½'}
                             {service.health.responseTime && ` (${service.health.responseTime}ms)`}
                           </span>
                         </div>
@@ -428,7 +428,7 @@ export default function ServiceManager() {
                         ) : (
                           <RefreshCw size={16} />
                         )}
-                        Перезапуск
+                        ÐŸÐµÑ€ÐµÐ·Ð°Ð¿ÑƒÑÐº
                       </motion.button>
                       <motion.button
                         onClick={() => stopService(service.id)}
@@ -455,7 +455,7 @@ export default function ServiceManager() {
                         ) : (
                           <Square size={16} />
                         )}
-                        Остановить
+                        ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ
                       </motion.button>
                     </>
                   ) : (
@@ -484,7 +484,7 @@ export default function ServiceManager() {
                       ) : (
                         <Play size={16} />
                       )}
-                      Запустить
+                      Ð—Ð°Ð¿ÑƒÑÑ‚Ð¸Ñ‚ÑŒ
                     </motion.button>
                   )}
                 </div>
@@ -500,18 +500,18 @@ export default function ServiceManager() {
                 color: 'rgba(233, 236, 245, 0.5)'
               }}>
                 <span>ID: {service.id}</span>
-                <span>•</span>
-                <span>Тип: {service.type}</span>
-                <span>•</span>
+                <span>â€¢</span>
+                <span>Ð¢Ð¸Ð¿: {service.type}</span>
+                <span>â€¢</span>
                 <span style={{
                   color: statusColor,
                   fontWeight: 600
                 }}>
-                  Статус: {service.status === 'running' ? 'Запущен' :
-                           service.status === 'stopped' ? 'Остановлен' :
-                           service.status === 'starting' ? 'Запускается...' :
-                           service.status === 'stopping' ? 'Останавливается...' :
-                           'Ошибка'}
+                  Ð¡Ñ‚Ð°Ñ‚ÑƒÑ: {service.status === 'running' ? 'Ð—Ð°Ð¿ÑƒÑ‰ÐµÐ½' :
+                           service.status === 'stopped' ? 'ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½' :
+                           service.status === 'starting' ? 'Ð—Ð°Ð¿ÑƒÑÐºÐ°ÐµÑ‚ÑÑ...' :
+                           service.status === 'stopping' ? 'ÐžÑÑ‚Ð°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÑ‚ÑÑ...' :
+                           'ÐžÑˆÐ¸Ð±ÐºÐ°'}
                 </span>
               </div>
             </motion.div>
@@ -528,3 +528,4 @@ export default function ServiceManager() {
     </div>
   );
 }
+

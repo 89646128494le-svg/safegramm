@@ -1,13 +1,34 @@
-# HTTP по 80 (редирект и проверки)
-:80 {
-	reverse_proxy 127.0.0.1:8080
+{
+	email admin@safegram.site
 }
 
-# HTTPS для nip.io (Let's Encrypt). Нужны открытые порты 80 и 443.
+www.safegram.site {
+	redir https://safegram.site{uri} permanent
+}
+
+safegram.site {
+	encode zstd gzip
+
+	@backend path /api/* /ws* /uploads/* /health /metrics
+	handle @backend {
+		reverse_proxy 127.0.0.1:8080 {
+			header_up Host {host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		root * /srv/safegram
+		try_files {path} /index.html
+		file_server
+	}
+}
+
 141.8.198.152.nip.io {
 	reverse_proxy 127.0.0.1:8080 {
 		header_up Host {host}
-		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Proto {scheme}
 		header_up X-Real-IP {remote_host}
 	}
 }

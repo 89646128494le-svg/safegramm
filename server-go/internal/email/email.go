@@ -208,6 +208,46 @@ func maskEmailForLog(email string) string {
 	return string(email[0]) + "***@" + email[at+1:]
 }
 
+func PublicAppURL() string {
+	candidates := []string{
+		strings.TrimSpace(getEnv("APP_URL", "")),
+		strings.TrimSpace(getEnv("PUBLIC_APP_URL", "")),
+		strings.TrimSpace(getEnv("WEB_APP_URL", "")),
+		strings.TrimSpace(getEnv("FRONTEND_URL", "")),
+		"https://safegram.site",
+	}
+	for _, raw := range candidates {
+		if raw == "" {
+			continue
+		}
+		if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+			continue
+		}
+		return strings.TrimRight(raw, "/")
+	}
+	return "https://safegram.site"
+}
+
+func SupportURL() string {
+	return PublicAppURL() + "/support"
+}
+
+func SettingsURL() string {
+	return PublicAppURL() + "/app/settings"
+}
+
+func BillingURL() string {
+	return PublicAppURL() + "/app/settings/billing"
+}
+
+func ResetPasswordURL() string {
+	return PublicAppURL() + "/reset-password"
+}
+
+func StatusURL() string {
+	return PublicAppURL() + "/status"
+}
+
 const smtpDialTimeout = 15 * time.Second
 
 // sendViaSMTP sends an email via SMTP with multipart text/plain and text/html bodies.
@@ -547,7 +587,7 @@ func SendLoginNotification(to, username, ip, device string) error {
 		IP:        ip,
 		Device:    device,
 		Timestamp: time.Now().Format("02.01.2006 15:04"),
-		Link:      "https://safegram-hazel.vercel.app/app/settings",
+		Link:      SettingsURL(),
 	}
 	return SendEmail(to, subject, TemplateLoginNotification(data))
 }
@@ -559,7 +599,7 @@ func SendPasswordResetCode(to, username, code string) error {
 		Username:  username,
 		Code:      code,
 		ExpiresIn: "15 минут",
-		Link:      "https://safegram-hazel.vercel.app/reset-password",
+		Link:      ResetPasswordURL(),
 	}
 	return SendEmail(to, subject, TemplatePasswordReset(data))
 }
@@ -571,7 +611,7 @@ func SendPasswordChangedNotification(to, username, ip string) error {
 		Username:  username,
 		IP:        ip,
 		Timestamp: time.Now().Format("02.01.2006 15:04"),
-		Link:      "https://safegram-hazel.vercel.app/app/settings",
+		Link:      SettingsURL(),
 	}
 	return SendEmail(to, subject, TemplatePasswordChanged(data))
 }
@@ -640,7 +680,7 @@ func SendBackupCodes(to, username, codes string) error {
 	data := EmailTemplateData{
 		Username: username,
 		Codes:    codes,
-		Link:     "https://safegram-hazel.vercel.app/app/settings",
+		Link:     SettingsURL(),
 	}
 	return SendEmail(to, subject, TemplateBackupCode(data))
 }
@@ -651,7 +691,7 @@ func SendBackupCodesRegenerated(to, username, codes string) error {
 	data := EmailTemplateData{
 		Username: username,
 		Codes:    codes,
-		Link:     "https://safegram-hazel.vercel.app/app/settings",
+		Link:     SettingsURL(),
 	}
 	return SendEmail(to, subject, TemplateBackupCode(data))
 }
@@ -675,7 +715,7 @@ func SendMaintenanceNotification(to, username, timestamp, message string) error 
 		Username:  username,
 		Timestamp: timestamp,
 		Message:   message,
-		Link:      "https://safegram-hazel.vercel.app/status",
+		Link:      StatusURL(),
 	}
 	return SendEmail(to, subject, TemplateMaintenanceNotification(data))
 }
@@ -686,7 +726,7 @@ func SendRecruitApproved(to, name string) error {
 	if name == "" {
 		name = "пользователь"
 	}
-	return SendEmail(to, subject, TemplateRecruitApproved(EmailTemplateData{Username: name, Link: "https://safegram-hazel.vercel.app"}))
+	return SendEmail(to, subject, TemplateRecruitApproved(EmailTemplateData{Username: name, Link: PublicAppURL()}))
 }
 
 // SendRecruitDeclined sends a rejection email for a recruit application.
@@ -698,7 +738,7 @@ func SendRecruitDeclined(to, name, reason string) error {
 	if reason == "" {
 		reason = "Причина не указана."
 	}
-	return SendEmail(to, subject, TemplateRecruitDeclined(EmailTemplateData{Username: name, Reason: reason, Link: "https://safegram-hazel.vercel.app"}))
+	return SendEmail(to, subject, TemplateRecruitDeclined(EmailTemplateData{Username: name, Reason: reason, Link: PublicAppURL()}))
 }
 
 // SendEmailChangeVerification sends a code to confirm a new email address.
@@ -708,7 +748,7 @@ func SendEmailChangeVerification(to, username, code string) error {
 		Username:  username,
 		Code:      code,
 		ExpiresIn: "10 минут",
-		Link:      "https://safegram-hazel.vercel.app/app/settings",
+		Link:      SettingsURL(),
 	}
 	return SendEmail(to, subject, TemplateEmailChangeVerification(data))
 }
@@ -720,7 +760,7 @@ func SendEmailChangedNotification(to, username, newEmail string) error {
 		Username:  username,
 		Email:     newEmail,
 		Timestamp: time.Now().Format("02.01.2006 15:04"),
-		Link:      "https://safegram-hazel.vercel.app/app/settings",
+		Link:      SettingsURL(),
 	}
 	return SendEmail(to, subject, TemplateEmailChanged(data))
 }
@@ -733,7 +773,7 @@ func SendPremiumReceipt(to, username, planName, amount, timestamp string) error 
 		PlanName:  planName,
 		Amount:    amount,
 		Timestamp: timestamp,
-		Link:      "https://safegram-hazel.vercel.app/app/settings/billing",
+		Link:      BillingURL(),
 	}
 	return SendEmail(to, subject, TemplatePremiumReceipt(data))
 }

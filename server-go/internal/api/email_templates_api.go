@@ -36,7 +36,7 @@ func TestEmailTemplates(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var err error
-		appURL := "https://safegram-hazel.vercel.app"
+		appURL := premiumAppURL()
 
 		switch req.Template {
 		case "verification":

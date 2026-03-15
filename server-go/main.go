@@ -244,6 +244,8 @@ func corsMiddleware() gin.HandlerFunc {
 			"http://127.0.0.1:5173",
 			"http://26.241.113.242:5173",
 			"https://safegram.app",
+			"https://safegram.site",
+			"https://www.safegram.site",
 			"https://safegram-hazel.vercel.app",
 			"https://141.8.198.152.nip.io",
 			"http://141.8.198.152.nip.io",

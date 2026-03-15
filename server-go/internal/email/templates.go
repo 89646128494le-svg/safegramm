@@ -418,11 +418,11 @@ func countString(value int) string {
 }
 
 func appLink(link string) string {
-	return valueOr(link, "https://safegram-hazel.vercel.app")
+	return valueOr(link, PublicAppURL())
 }
 
 func supportLink(link string) string {
-	return valueOr(link, "https://safegram-hazel.vercel.app/support")
+	return valueOr(link, SupportURL())
 }
 
 func TemplateVerificationCode(data EmailTemplateData) string {

@@ -84,7 +84,7 @@ func publicAPIBaseURL() string {
 		os.Getenv("API_BASE_URL"),
 		os.Getenv("APP_API_URL"),
 		os.Getenv("BACKEND_URL"),
-		"https://141.8.198.152.nip.io/api",
+		email.PublicAppURL() + "/api",
 	}
 	for _, raw := range candidates {
 		raw = strings.TrimSpace(raw)
@@ -108,7 +108,7 @@ func publicAPIBaseURL() string {
 		u.Fragment = ""
 		return strings.TrimRight(u.String(), "/")
 	}
-	return "https://141.8.198.152.nip.io/api"
+	return email.PublicAppURL() + "/api"
 }
 
 func supportCenterURL() string {

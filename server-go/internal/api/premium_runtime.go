@@ -138,24 +138,7 @@ func premiumCheckoutMode() string {
 }
 
 func premiumAppURL() string {
-	candidates := []string{
-		os.Getenv("APP_URL"),
-		os.Getenv("PUBLIC_APP_URL"),
-		os.Getenv("WEB_APP_URL"),
-		os.Getenv("FRONTEND_URL"),
-		"https://safegram-hazel.vercel.app",
-	}
-	for _, raw := range candidates {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
-		}
-		if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
-			continue
-		}
-		return strings.TrimRight(raw, "/")
-	}
-	return "https://safegram-hazel.vercel.app"
+	return email.PublicAppURL()
 }
 
 func premiumBillingURL() string {
