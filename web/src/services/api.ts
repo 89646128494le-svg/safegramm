@@ -1,4 +1,6 @@
 
+import { safeGetItem, safeSetItem, safeRemoveItem } from '../lib/safeStorage';
+
 const PRIMARY_SAFEGRAM_ORIGIN = 'https://safegram.site';
 
 function fallbackApiBase(): string {
@@ -75,7 +77,7 @@ export function getApiBaseUrl(): string {
   const w = typeof window !== 'undefined' ? window : null;
   const isDesktop = w && (w as any).electronAPI;
   if (isDesktop && runtimeApiUrl == null) return PRIMARY_SAFEGRAM_ORIGIN;
-  const proxy = w ? (localStorage.getItem('safegram_proxy_url') || '').trim() : '';
+  const proxy = w ? (safeGetItem('safegram_proxy_url') || '').trim() : '';
   return normalizeBaseUrl(runtimeApiUrl || proxy || DEFAULT_API);
 }
 
@@ -154,11 +156,11 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
   }
 
   const makeRequest = async (attempt: number = 0): Promise<any> => {
-    const token = localStorage.getItem('token');
+    const token = safeGetItem('token');
     const headers: Record<string,string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
     const admin2FA = typeof window !== 'undefined' && path.startsWith('/api/admin/') && !path.includes('2fa-status') && !path.includes('verify-2fa')
-      ? sessionStorage.getItem('admin_2fa_token')
+      ? safeGetItem('admin_2fa_token', 'session')
       : null;
     if (admin2FA) headers['X-Admin-2FA-Token'] = admin2FA;
 
@@ -351,10 +353,10 @@ export function clearCache(path?: string): void {
 
 /** Токен верификации 2FA для входа в админку (хранится в sessionStorage). */
 export function setAdmin2FAToken(token: string): void {
-  if (typeof window !== 'undefined') sessionStorage.setItem('admin_2fa_token', token);
+  if (typeof window !== 'undefined') safeSetItem('admin_2fa_token', token, 'session');
 }
 export function clearAdmin2FAToken(): void {
-  if (typeof window !== 'undefined') sessionStorage.removeItem('admin_2fa_token');
+  if (typeof window !== 'undefined') safeRemoveItem('admin_2fa_token', 'session');
 }
 
 /** Для обратной совместимости; при наличии прокси лучше использовать getApiBaseUrl(). */

@@ -1,5 +1,6 @@
 // web/src/store/useStore.ts
-import { create } from 'zustand'; // Исправлен импорт (было import create from ...)
+import { create } from 'zustand';
+import { safeGetItem, safeRemoveItem, safeSetItem } from '../lib/safeStorage'; // Исправлен импорт (было import create from ...)
 
 interface User {
   id: string;
@@ -50,29 +51,27 @@ interface AppState {
 
 export const useStore = create<AppState>()((set) => ({
   user: null,
-  token: typeof window !== 'undefined' ? localStorage.getItem('token') : null,
+  token: safeGetItem('token'),
   maintenance: null,
   ui: {
-    theme: (typeof window !== 'undefined' ? localStorage.getItem('theme') : null) as UIState['theme'] || 'dark',
+    theme: (safeGetItem('theme') as UIState['theme'] | null) || 'dark',
     sidebarOpen: true,
     notificationsEnabled: true,
-    stealthMode: typeof window !== 'undefined' ? localStorage.getItem('safegram_stealth_mode') === '1' : false,
-    proxyUrl: typeof window !== 'undefined' ? (localStorage.getItem('safegram_proxy_url') || '') : '',
+    stealthMode: safeGetItem('safegram_stealth_mode') === '1',
+    proxyUrl: safeGetItem('safegram_proxy_url') || '',
   },
   setUser: (user) => set({ user }),
   setToken: (token) => {
-    if (typeof window !== 'undefined') {
-      if (token) {
-        localStorage.setItem('token', token);
-      } else {
-        localStorage.removeItem('token');
-      }
+    if (token) {
+      safeSetItem('token', token);
+    } else {
+      safeRemoveItem('token');
     }
     set({ token });
   },
   setTheme: (theme) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('theme', theme);
+      safeSetItem('theme', theme);
       document.documentElement.setAttribute('data-theme', theme);
     }
     set((state) => ({ ui: { ...state.ui, theme } }));
@@ -80,24 +79,18 @@ export const useStore = create<AppState>()((set) => ({
   setSidebarOpen: (open) => set((state) => ({ ui: { ...state.ui, sidebarOpen: open } })),
   setNotificationsEnabled: (enabled) => set((state) => ({ ui: { ...state.ui, notificationsEnabled: enabled } })),
   setStealthMode: (enabled) => {
-    if (typeof window !== 'undefined') {
-      if (enabled) localStorage.setItem('safegram_stealth_mode', '1');
-      else localStorage.removeItem('safegram_stealth_mode');
-    }
+    if (enabled) safeSetItem('safegram_stealth_mode', '1');
+    else safeRemoveItem('safegram_stealth_mode');
     set((state) => ({ ui: { ...state.ui, stealthMode: enabled } }));
   },
   setProxyUrl: (url) => {
-    if (typeof window !== 'undefined') {
-      if (url) localStorage.setItem('safegram_proxy_url', url);
-      else localStorage.removeItem('safegram_proxy_url');
-    }
+    if (url) safeSetItem('safegram_proxy_url', url);
+    else safeRemoveItem('safegram_proxy_url');
     set((state) => ({ ui: { ...state.ui, proxyUrl: url } }));
   },
   setMaintenance: (data) => set({ maintenance: data }),
   logout: () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('token');
-    }
+    safeRemoveItem('token');
     set({ user: null, token: null });
   },
 }));

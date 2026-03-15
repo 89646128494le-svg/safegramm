@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { api } from './services/api';
+import { safeGetItem, safeRemoveItem } from './lib/safeStorage';
 import { useStore } from './store/useStore';
 import ErrorBoundary from './components/ErrorBoundary';
 import MaintenanceBanner from './components/MaintenanceBanner';
 import DesktopTitlebar, { DESKTOP_TITLEBAR_HEIGHT } from './components/DesktopTitlebar';
 import { DomainMigrationProvider, useDomainMigration } from './contexts/DomainMigrationContext';
-import Landing from './pages/Landing';
-import AppShell from './pages/AppShell';
-import Feedback from './pages/Feedback';
-import Status from './pages/Status';
-import DomainMigration from './pages/DomainMigration';
 
+const Landing = lazy(() => import('./pages/Landing'));
+const AppShell = lazy(() => import('./pages/AppShell'));
+const Feedback = lazy(() => import('./pages/Feedback'));
+const Status = lazy(() => import('./pages/Status'));
+const DomainMigration = lazy(() => import('./pages/DomainMigration'));
 const Features = lazy(() => import('./pages/Features'));
 const Pricing = lazy(() => import('./pages/Pricing'));
 const About = lazy(() => import('./pages/About'));
@@ -59,12 +60,12 @@ function AppRoutes() {
   const { token, setToken, setUser, user, maintenance } = useStore();
   const domainMigration = useDomainMigration();
   const authChecked = useRef(false);
-  const hasStoredToken = !!(token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null));
+  const hasStoredToken = !!(token || safeGetItem('token'));
   const [authCheckDone, setAuthCheckDone] = useState(!hasStoredToken);
 
   useEffect(() => {
     if (authChecked.current) return;
-    const t = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+    const t = token || safeGetItem('token');
     if (!t) {
       setUser(null);
       setAuthCheckDone(true);
@@ -78,7 +79,7 @@ function AppRoutes() {
       setAuthCheckDone(true);
       setToken(null);
       setUser(null);
-      if (typeof localStorage !== 'undefined') localStorage.removeItem('token');
+      safeRemoveItem('token');
     }, AUTH_TIMEOUT_MS);
     api('/api/users/me')
       .then((userData) => {
@@ -95,14 +96,14 @@ function AppRoutes() {
         if (status === 401 || status === 403 || code === 'unauthorized' || msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('авторизац') || msg.includes('токен')) {
           setToken(null);
           setUser(null);
-          if (typeof localStorage !== 'undefined') localStorage.removeItem('token');
+          safeRemoveItem('token');
         }
         setAuthCheckDone(true);
       });
   }, [token, setToken, setUser]);
 
   const handleAuthSuccess = () => {
-    const t = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+    const t = safeGetItem('token');
     if (t) {
       api('/api/users/me').then((userData) => { setToken(t); setUser(userData); }).catch(() => { setToken(null); setUser(null); });
     }

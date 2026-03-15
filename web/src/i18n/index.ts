@@ -1,6 +1,7 @@
 import { ru } from './locales/ru';
 import { en } from './locales/en';
 import { de } from './locales/de';
+import { safeGetItem, safeSetItem } from '../lib/safeStorage';
 
 export type Locale = 'ru' | 'en' | 'de';
 
@@ -29,12 +30,12 @@ const translations = {
 
 // Получаем язык из localStorage или определяем по браузеру
 const getBrowserLocale = (): Locale => {
-  const stored = localStorage.getItem('locale') as Locale;
+  const stored = safeGetItem('locale') as Locale | null;
   if (stored && (stored === 'ru' || stored === 'en' || stored === 'de')) {
     return stored;
   }
 
-  const browserLang = navigator.language.toLowerCase();
+  const browserLang = typeof navigator !== 'undefined' ? navigator.language.toLowerCase() : 'en';
   if (browserLang.startsWith('ru')) return 'ru';
   if (browserLang.startsWith('de')) return 'de';
   return 'en';
@@ -46,7 +47,7 @@ class I18n {
 
   setLocale(locale: Locale) {
     this.locale = locale;
-    localStorage.setItem('locale', locale);
+    safeSetItem('locale', locale);
     // Обновляем lang в HTML
     document.documentElement.lang = locale;
   }
