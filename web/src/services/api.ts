@@ -1,4 +1,3 @@
-
 import { safeGetItem, safeSetItem, safeRemoveItem } from '../lib/safeStorage';
 
 const PRIMARY_SAFEGRAM_ORIGIN = 'https://safegram.site';
@@ -88,6 +87,8 @@ export function humanFriendlyMessage(raw: string): string {
   if (!raw || typeof raw !== 'string') return 'Что-то пошло не так. Попробуйте ещё раз.';
   const s = raw.toLowerCase();
   if (/failed to fetch|network request failed|load failed|networkerror/i.test(s)) return 'Нет связи с сервером. Проверьте интернет и попробуйте снова.';
+  if (/502|503|504|bad gateway|gateway timeout|service unavailable/i.test(s)) return 'Сервер временно недоступен. Попробуйте чуть позже или откройте страницу статуса.';
+  if (/429|too many|rate limit/i.test(s)) return 'Слишком много запросов. Подождите немного и попробуйте снова.';
   if (/511|network authentication required/i.test(s)) return 'Сеть требует авторизации (каптив-портал). Откройте в браузере новую вкладку, войдите в Wi‑Fi или примите условия сети, затем обновите страницу.';
   if (/timeout|timed out/i.test(s)) return 'Сервер не ответил вовремя. Попробуйте позже.';
   if (/511|network authentication required/i.test(s)) return 'Туннель (loca.lt) требует подтверждения: откройте ссылку API в новой вкладке, нажмите «Продолжить», затем обновите страницу.';
@@ -198,28 +199,45 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
 
       // 429: не ретраим при блокировке IP; при лимите — не более 1 повтора, чтобы не усугублять
       if (rsp.status === 429) {
+        const retryAfterHeader = Number.parseInt(rsp.headers.get('Retry-After') || '', 10);
         const raw429 = await rsp.text();
         let errCode = '';
+        let retryAfterSec = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0 ? retryAfterHeader : 0;
         try {
           const j = JSON.parse(raw429 || '{}');
           errCode = j.error || '';
+          if (typeof j.retryAfterSec === 'number' && Number.isFinite(j.retryAfterSec) && j.retryAfterSec > 0) {
+            retryAfterSec = j.retryAfterSec;
+          }
         } catch (_) {}
         if (errCode === 'ip_temporarily_blocked') {
-          const e = new Error('IP временно заблокирован. Подождите несколько минут.') as any;
+          const e = new Error(
+            retryAfterSec > 0
+              ? `IP временно заблокирован. Подождите ${retryAfterSec} сек.`
+              : 'IP временно заблокирован. Подождите несколько минут.'
+          ) as any;
           e.status = 429;
           e.errorCode = errCode;
+          e.retryAfterSec = retryAfterSec || undefined;
           throw e;
         }
         const max429Retries = 1;
-        if (attempt < max429Retries) {
-          const delayMs = Math.min(1000 * Math.pow(2, attempt), 5000);
+        if (attempt < max429Retries && retryAfterSec <= 5) {
+          const delayMs = retryAfterSec > 0
+            ? Math.max(1000, retryAfterSec * 1000)
+            : Math.min(1000 * Math.pow(2, attempt), 5000);
           console.warn(`Rate limited (429), retry once after ${delayMs}ms...`);
           await delay(delayMs);
           return makeRequest(attempt + 1);
         }
-        const e = new Error('Слишком много запросов. Подождите минуту.') as any;
+        const e = new Error(
+          retryAfterSec > 0
+            ? `Слишком много запросов. Попробуйте снова через ${retryAfterSec} сек.`
+            : 'Слишком много запросов. Подождите немного и попробуйте снова.'
+        ) as any;
         e.status = 429;
         e.errorCode = errCode || 'too_many_requests';
+        e.retryAfterSec = retryAfterSec || undefined;
         throw e;
       }
 
@@ -322,6 +340,7 @@ export async function api(path: string, method: string = 'GET', body?: any, retr
       err.status = error?.status;
       err.errorCode = error?.errorCode;
       err.response = error?.response;
+      err.retryAfterSec = error?.retryAfterSec;
       throw err;
     }
   };

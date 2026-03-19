@@ -9,12 +9,12 @@ import { useDomainMigration } from '../contexts/DomainMigrationContext';
 import logoPrimaryUrl from '../assets/brand/logo-primary.png';
 
 const publicNavItems = [
-  { path: '/', label: 'Ð“Ð»Ð°Ð²Ð½Ð°Ñ', icon: Home },
-  { path: '/features', label: 'Ð¤ÑƒÐ½ÐºÑ†Ð¸Ð¸', icon: Star },
-  { path: '/pricing', label: 'Ð¢Ð°Ñ€Ð¸Ñ„Ñ‹', icon: DollarSign },
-  { path: '/about', label: 'Ðž Ð½Ð°Ñ', icon: Info },
-  { path: '/privacy', label: 'ÐŸÑ€Ð¸Ð²Ð°Ñ‚Ð½Ð¾ÑÑ‚ÑŒ', icon: Lock },
-  { path: '/terms', label: 'Ð£ÑÐ»Ð¾Ð²Ð¸Ñ', icon: FileText },
+  { path: '/', label: 'Главная', icon: Home },
+  { path: '/features', label: 'Функции', icon: Star },
+  { path: '/pricing', label: 'Тарифы', icon: DollarSign },
+  { path: '/about', label: 'О нас', icon: Info },
+  { path: '/privacy', label: 'Приватность', icon: Lock },
+  { path: '/terms', label: 'Условия', icon: FileText },
 ];
 
 interface User {
@@ -177,7 +177,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
             <button
               type="button"
               className="header-burger"
-              aria-label="ÐœÐµÐ½ÑŽ"
+              aria-label="Меню"
               onClick={() => setShowPublicNav(!showPublicNav)}
               style={{
                 display: 'none',
@@ -201,7 +201,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
         <ThemeSwitcher />
         {ui.stealthMode && (
           <span
-            title="Stealth mode Ð²ÐºÐ»ÑŽÑ‡ÐµÐ½"
+            title="Stealth mode включён"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -250,7 +250,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                     }}
                   >
                     <Crown size={16} />
-                    <span>ÐŸÐ°Ð½ÐµÐ»ÑŒ</span>
+                    <span>Панель</span>
                   </Link>
                 </motion.div>
               )}
@@ -297,7 +297,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 whileTap={{ scale: 0.95 }}
               >
                 <LogOut size={16} />
-                <span>Ð’Ñ‹Ð¹Ñ‚Ð¸</span>
+                <span>Выйти</span>
               </motion.button>
             </div>
 
@@ -385,7 +385,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
         )}
       </div>
 
-      {/* Mobile: Ð¿ÑƒÐ±Ð»Ð¸Ñ‡Ð½Ð¾Ðµ Ð¼ÐµÐ½ÑŽ (ÑÑ‚Ñ€Ð°Ð½Ð¸Ñ†Ñ‹ ÑÐ°Ð¹Ñ‚Ð° + Ð’Ð¾Ð¹Ñ‚Ð¸ + Ð ÐµÐ³Ð¸ÑÑ‚Ñ€Ð°Ñ†Ð¸Ñ) */}
+      {/* Mobile: публичное меню (страницы сайта + Войти + Регистрация) */}
       <AnimatePresence>
         {showPublicNav && !user && (
           <>
@@ -523,7 +523,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
         )}
       </AnimatePresence>
 
-      {/* Mobile Menu (Ð´Ð»Ñ Ð°Ð²Ñ‚Ð¾Ñ€Ð¸Ð·Ð¾Ð²Ð°Ð½Ð½Ñ‹Ñ…) */}
+      {/* Mobile Menu (для авторизованных) */}
       <AnimatePresence>
         {showMenu && user && (
           <motion.div
@@ -566,7 +566,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                   }}
                 >
                   <Crown size={18} />
-                  <span>ÐŸÐ°Ð½ÐµÐ»ÑŒ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ</span>
+                  <span>Панель управления</span>
                 </Link>
               </motion.div>
             )}
@@ -588,7 +588,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 }}
               >
                 <User size={18} />
-                <span>ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ</span>
+                <span>Профиль</span>
               </Link>
             </motion.div>
             <motion.div
@@ -609,7 +609,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 }}
               >
                 <Settings size={18} />
-                <span>ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸</span>
+                <span>Настройки</span>
               </Link>
             </motion.div>
             <motion.button
@@ -635,7 +635,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
               }}
             >
               <LogOut size={18} />
-              <span>Ð’Ñ‹Ð¹Ñ‚Ð¸</span>
+              <span>Выйти</span>
             </motion.button>
           </motion.div>
         )}

@@ -39,6 +39,22 @@ interface SystemBannerStatus {
   endsAt?: string;
 }
 
+interface PublicStatusSummary {
+  status?: string;
+  api?: {
+    ok?: boolean;
+    error?: string;
+  };
+  maintenance?: {
+    enabled?: boolean;
+    isActive?: boolean;
+    id?: string;
+    message?: string;
+    timestamp?: string;
+  };
+  systemBanner?: SystemBannerStatus | null;
+}
+
 type BannerNotice =
   | {
       kind: 'migration';
@@ -64,6 +80,13 @@ type BannerNotice =
       dismissible: boolean;
     }
   | {
+      kind: 'api';
+      id: 'api-unavailable';
+      title: string;
+      message: string;
+      timestamp?: string;
+    }
+  | {
       kind: 'beta';
       id: 'beta';
       title: string;
@@ -81,9 +104,14 @@ const MIGRATION_TITLE = 'SafeGram переезжает на safegram.site';
 const MIGRATION_MESSAGE =
   'До переключения остался последний час. На этом адресе новые входы и регистрации уже закрыты, чтобы переезд прошёл спокойно и без потерь.';
 const SUPPORT_BUTTON_LABEL = 'Написать в Техподдержку';
+const STATUS_BUTTON_LABEL = 'Открыть статус системы';
 const CLOSE_LABEL = 'Закрыть уведомление';
 const TECHWORKS_BADGE = 'Техработы';
 const MIGRATION_BADGE = 'Переезд';
+const API_BADGE = 'Сбой';
+const API_UNAVAILABLE_TITLE = 'SafeGram временно недоступен';
+const API_UNAVAILABLE_MESSAGE =
+  'Не удалось получить состояние API SafeGram. Можно попробовать обновить страницу или открыть страницу статуса.';
 const SYSTEM_BADGE_LABELS: Record<SystemBannerSeverity, string> = {
   info: 'Инфо',
   success: 'Обновление',
@@ -110,6 +138,7 @@ export default function MaintenanceBanner() {
   const domainMigration = useDomainMigration();
   const [maintenanceData, setMaintenanceData] = useState<MaintenanceStatus | null>(null);
   const [systemBannerData, setSystemBannerData] = useState<SystemBannerStatus | null>(null);
+  const [apiUnavailable, setApiUnavailable] = useState(false);
   const [betaDismissed, setBetaDismissed] = useState(false);
   const countdown = useMemo(
     () => formatCountdownParts(domainMigration.msUntilDeadline),
@@ -123,11 +152,10 @@ export default function MaintenanceBanner() {
 
   const checkMaintenanceStatus = useCallback(async () => {
     try {
-      const [maintenanceResponse, bannerResponse] = await Promise.all([
-        api('/api/maintenance/status', 'GET'),
-        api('/api/system-banner/status', 'GET').catch(() => null),
-      ]);
-      const data = maintenanceResponse?.isActive
+      const summary = (await api('/api/status/summary', 'GET')) as PublicStatusSummary;
+      const maintenanceResponse = summary?.maintenance;
+      const bannerResponse = summary?.systemBanner;
+      const data = maintenanceResponse?.isActive || maintenanceResponse?.enabled
         ? {
             isActive: true,
             message: maintenanceResponse.message || '',
@@ -139,10 +167,12 @@ export default function MaintenanceBanner() {
       setMaintenance(data);
       setMaintenanceData(data);
       setSystemBannerData(bannerResponse?.isActive ? bannerResponse : null);
+      setApiUnavailable(Boolean(summary?.api && summary.api.ok === false));
     } catch {
       setMaintenance(null);
       setMaintenanceData(null);
       setSystemBannerData(null);
+      setApiUnavailable(true);
     }
   }, [setMaintenance]);
 
@@ -231,12 +261,21 @@ export default function MaintenanceBanner() {
       };
     }
 
+    if (apiUnavailable) {
+      return {
+        kind: 'api',
+        id: 'api-unavailable',
+        title: API_UNAVAILABLE_TITLE,
+        message: API_UNAVAILABLE_MESSAGE,
+      };
+    }
+
     if (!maintenanceData?.isActive && !betaDismissed) {
       return readPendingBetaNotice();
     }
 
     return null;
-  }, [betaDismissed, domainMigration.shouldShowCountdown, maintenanceData, systemBannerData]);
+  }, [apiUnavailable, betaDismissed, domainMigration.shouldShowCountdown, maintenanceData, systemBannerData]);
 
   const palette = useMemo(() => {
     if (activeNotice?.kind === 'migration') {
@@ -260,6 +299,18 @@ export default function MaintenanceBanner() {
         border: 'rgba(255,255,255,0.24)',
         icon: <Wrench size={22} strokeWidth={2.4} />,
         shadow: '0 14px 36px rgba(255, 138, 0, 0.28)',
+      };
+    }
+
+    if (activeNotice?.kind === 'api') {
+      return {
+        background:
+          'linear-gradient(135deg, rgba(127, 29, 29, 0.96) 0%, rgba(194, 65, 12, 0.96) 100%)',
+        foreground: '#fff7ed',
+        badgeBackground: 'rgba(255,255,255,0.12)',
+        border: 'rgba(255,255,255,0.18)',
+        icon: <AlertTriangle size={22} strokeWidth={2.4} />,
+        shadow: '0 14px 36px rgba(194, 65, 12, 0.26)',
       };
     }
 
@@ -339,6 +390,11 @@ export default function MaintenanceBanner() {
   const openSupport = useCallback(() => {
     if (typeof window === 'undefined') return;
     window.location.assign('/support');
+  }, []);
+
+  const openStatus = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.location.assign('/status');
   }, []);
 
   if (!activeNotice && !domainMigration.shouldShowCompletion) {
@@ -426,14 +482,18 @@ export default function MaintenanceBanner() {
                       border: `1px solid ${palette.border}`,
                     }}
                   >
-                    {activeNotice.kind === 'maintenance' ? <AlertTriangle size={14} /> : <Info size={14} />}
+                    {activeNotice.kind === 'maintenance' || activeNotice.kind === 'api'
+                      ? <AlertTriangle size={14} />
+                      : <Info size={14} />}
                     {activeNotice.kind === 'maintenance'
                       ? TECHWORKS_BADGE
-                      : activeNotice.kind === 'migration'
-                        ? MIGRATION_BADGE
-                        : activeNotice.kind === 'system'
-                          ? SYSTEM_BADGE_LABELS[activeNotice.severity]
-                          : 'Beta'}
+                      : activeNotice.kind === 'api'
+                        ? API_BADGE
+                        : activeNotice.kind === 'migration'
+                          ? MIGRATION_BADGE
+                          : activeNotice.kind === 'system'
+                            ? SYSTEM_BADGE_LABELS[activeNotice.severity]
+                            : 'Beta'}
                   </span>
                 </div>
 
@@ -533,6 +593,30 @@ export default function MaintenanceBanner() {
                     >
                       <Info size={15} />
                       {SUPPORT_BUTTON_LABEL}
+                    </button>
+                  )}
+                  {(activeNotice.kind === 'maintenance' ||
+                    activeNotice.kind === 'api' ||
+                    activeNotice.kind === 'system') && (
+                    <button
+                      type="button"
+                      onClick={openStatus}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '9px 14px',
+                        borderRadius: 12,
+                        border: `1px solid ${palette.border}`,
+                        background: 'rgba(255,255,255,0.18)',
+                        color: palette.foreground,
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <ArrowRight size={15} />
+                      {STATUS_BUTTON_LABEL}
                     </button>
                   )}
                 </div>
@@ -675,3 +759,4 @@ export default function MaintenanceBanner() {
     </>
   );
 }
+

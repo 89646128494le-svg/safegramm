@@ -10,17 +10,17 @@ export default function LandingFooter() {
           <img src={logoPrimaryUrl} alt="SafeGram" width={32} height={32} />
           <span>SafeGram</span>
         </div>
-        <nav className="landing-footer-nav" aria-label="??????????? ??????">
-          <Link to="/privacy">Privacy Policy</Link>
-          <span className="landing-footer-sep" aria-hidden>?</span>
-          <Link to="/terms">Terms of Service</Link>
-          <span className="landing-footer-sep" aria-hidden>?</span>
-          <Link to="/join">?????????????? ? ???????</Link>
-          <span className="landing-footer-sep" aria-hidden>?</span>
-          <Link to="/support">Support</Link>
+        <nav className="landing-footer-nav" aria-label="Нижняя навигация">
+          <Link to="/privacy">Политика конфиденциальности</Link>
+          <span className="landing-footer-sep" aria-hidden>•</span>
+          <Link to="/terms">Условия использования</Link>
+          <span className="landing-footer-sep" aria-hidden>•</span>
+          <Link to="/join">Присоединиться к команде</Link>
+          <span className="landing-footer-sep" aria-hidden>•</span>
+          <Link to="/support">Поддержка</Link>
         </nav>
         <p className="landing-footer-copy">
-          ? {new Date().getFullYear()} SafeGram. ?????????? ???????.
+          © {new Date().getFullYear()} SafeGram. Все права защищены.
         </p>
       </div>
     </footer>

@@ -190,12 +190,19 @@ func SecurityMiddleware() gin.HandlerFunc {
 			return
 		}
 		if globalBlocklist.isBanned(ip) {
+			c.Header("Retry-After", strconv.Itoa(envInt("SECURITY_BAN_MINUTES", defaultBanDurationMin)*60))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "ip_temporarily_blocked"})
 			return
 		}
 		if !globalDDoSlimiter.allow(ip) {
 			// Не записываем нарушение — только 429, без блокировки IP
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too_many_requests"})
+			retryAfterSec := int(globalDDoSlimiter.window.Seconds())
+			c.Header("Retry-After", strconv.Itoa(retryAfterSec))
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"error":         "too_many_requests",
+				"detail":        "security_global_rate_limit",
+				"retryAfterSec": retryAfterSec,
+			})
 			return
 		}
 		if c.Request.Body != nil && c.Request.ContentLength > maxBody {

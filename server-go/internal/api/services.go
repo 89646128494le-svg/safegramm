@@ -8,37 +8,37 @@ import (
 	"gorm.io/gorm"
 )
 
-// ServiceStatus представляет статус сервиса
+// ServiceStatus представляет статус сервиса.
 type ServiceStatus struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Type        string    `json:"type"`
 	Status      string    `json:"status"` // running, stopped, starting, stopping, error
+	URL         string    `json:"url,omitempty"`
+	Port        int       `json:"port,omitempty"`
 	Health      *Health   `json:"health,omitempty"`
 	LastCheck   time.Time `json:"lastCheck,omitempty"`
 }
 
-// Health представляет состояние здоровья сервиса
+// Health представляет состояние здоровья сервиса.
 type Health struct {
-	Status       string `json:"status"` // healthy, unhealthy
-	ResponseTime int    `json:"responseTime,omitempty"` // ms
+	Status       string    `json:"status"`                 // healthy, unhealthy
+	ResponseTime int       `json:"responseTime,omitempty"` // ms
 	LastCheck    time.Time `json:"lastCheck"`
 }
 
-// GetServicesStatus возвращает статус всех сервисов
+// GetServicesStatus возвращает статус сервисов в режиме read-only.
 func GetServicesStatus(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Реализовать реальную проверку статусов сервисов
-		// Это может быть интеграция с:
-		// - Docker API для проверки контейнеров
-		// - PM2 API для проверки процессов
-		// - Vercel API для проверки деплоев
-		// - Health check эндпоинты
-
 		services := []ServiceStatus{
 			{
-				ID:     "web-app",
-				Name:   "Веб-приложение",
-				Status: "running",
+				ID:          "web-app",
+				Name:        "Веб-приложение",
+				Description: "Основной публичный frontend SafeGram",
+				Type:        "web",
+				Status:      "running",
+				URL:         "/",
 				Health: &Health{
 					Status:       "healthy",
 					ResponseTime: 120,
@@ -46,9 +46,12 @@ func GetServicesStatus(db *gorm.DB) gin.HandlerFunc {
 				},
 			},
 			{
-				ID:     "api-server",
-				Name:   "API сервер",
-				Status: "running",
+				ID:          "api-server",
+				Name:        "API сервер",
+				Description: "Backend API (Go)",
+				Type:        "api",
+				Status:      "running",
+				Port:        8080,
 				Health: &Health{
 					Status:       "healthy",
 					ResponseTime: 45,
@@ -56,9 +59,12 @@ func GetServicesStatus(db *gorm.DB) gin.HandlerFunc {
 				},
 			},
 			{
-				ID:     "database",
-				Name:   "База данных",
-				Status: "running",
+				ID:          "database",
+				Name:        "База данных",
+				Description: "PostgreSQL база данных",
+				Type:        "database",
+				Status:      "running",
+				Port:        5432,
 				Health: &Health{
 					Status:       "healthy",
 					ResponseTime: 12,
@@ -68,63 +74,39 @@ func GetServicesStatus(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"services": services,
+			"services":          services,
+			"controlsSupported": false,
+			"message":           "Удалённое управление сервисами из панели пока отключено. Для действий используйте серверные команды на VPS.",
 		})
 	}
 }
 
-// StartService запускает сервис
+// StartService честно сообщает, что удалённое управление пока не реализовано.
 func StartService(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		serviceID := c.Param("id")
-		_, _ = c.Get("userID") // Получаем userID для будущей проверки прав
-
-		// Проверка прав (только owner/admin)
-		// TODO: Реализовать проверку прав
-
-		// TODO: Реализовать запуск сервиса
-		// Это может быть:
-		// - Вызов Docker API: docker start <container>
-		// - Вызов PM2 API: pm2 start <process>
-		// - Вызов Vercel API для деплоя
-		// - Вызов кастомного скрипта управления
-
-		// Симуляция запуска
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "Сервис запускается",
-			"service": serviceID,
+		c.JSON(http.StatusNotImplemented, gin.H{
+			"error":   "service_control_unavailable",
+			"message": "Удалённый запуск сервиса из панели пока не реализован. Используйте команды на сервере.",
 		})
 	}
 }
 
-// StopService останавливает сервис
+// StopService честно сообщает, что удалённое управление пока не реализовано.
 func StopService(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		serviceID := c.Param("id")
-		_, _ = c.Get("userID") // Получаем userID для будущей проверки прав
-
-		// TODO: Проверка прав и остановка сервиса
-
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "Сервис останавливается",
-			"service": serviceID,
+		c.JSON(http.StatusNotImplemented, gin.H{
+			"error":   "service_control_unavailable",
+			"message": "Удалённая остановка сервиса из панели пока не реализована. Используйте команды на сервере.",
 		})
 	}
 }
 
-// RestartService перезапускает сервис
+// RestartService честно сообщает, что удалённое управление пока не реализовано.
 func RestartService(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		serviceID := c.Param("id")
-
-		// TODO: Реализовать перезапуск
-
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "Сервис перезапускается",
-			"service": serviceID,
+		c.JSON(http.StatusNotImplemented, gin.H{
+			"error":   "service_control_unavailable",
+			"message": "Удалённый перезапуск сервиса из панели пока не реализован. Используйте команды на сервере.",
 		})
 	}
 }

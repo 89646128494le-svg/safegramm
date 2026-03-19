@@ -1,7 +1,7 @@
 {
   "name": "SafeGram",
   "short_name": "SafeGram",
-  "description": "?????????? ?????????? ? E2EE ? Safety AI",
+  "description": "Безопасный мессенджер с E2EE и Safety AI",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b1020",

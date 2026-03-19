@@ -1,4 +1,64 @@
-﻿# SafeGram Backend â€” ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ‹ Ð¸ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ (ÑÐµÑ€Ð²ÐµÑ€ 141.8.198.152)
+﻿## Быстрое обновление SafeGram (frontend + backend)
+
+### На ПК
+
+```powershell
+cd "C:\Users\Lev\Desktop\Projects\SafeGram restart\web"
+npm run build
+tar -czf safegram-web-dist.tgz dist
+scp safegram-web-dist.tgz root@141.8.198.152:/root/
+
+cd "C:\Users\Lev\Desktop\Projects\SafeGram restart\server-go"
+.\build-for-server.bat
+scp main Caddyfile start-container.sh start-caddy.sh check-api.sh Dockerfile.prebuilt root@141.8.198.152:/root/safegram-server-files/
+```
+
+### На сервере
+
+```bash
+mkdir -p /var/www/safegram /root/safegram-server-files
+rm -rf /var/www/safegram/*
+tar -xzf /root/safegram-web-dist.tgz -C /var/www/safegram --strip-components=1
+
+cd ~/safegram-api/server-go
+cp /root/safegram-server-files/main ./main
+cp /root/safegram-server-files/Caddyfile ./Caddyfile
+cp /root/safegram-server-files/start-container.sh ./start-container.sh
+cp /root/safegram-server-files/start-caddy.sh ./start-caddy.sh
+cp /root/safegram-server-files/check-api.sh ./check-api.sh
+cp /root/safegram-server-files/Dockerfile.prebuilt ./Dockerfile.prebuilt
+
+perl -i -pe 's/^\xEF\xBB\xBF//' start-container.sh start-caddy.sh check-api.sh
+sed -i 's/\r$//' start-container.sh start-caddy.sh check-api.sh
+chmod +x ./main ./start-container.sh ./start-caddy.sh ./check-api.sh
+
+docker build -f Dockerfile.prebuilt -t safegram-server .
+docker rm -f safegram-server 2>/dev/null || true
+bash start-container.sh
+
+docker rm -f caddy-safegram 2>/dev/null || true
+bash start-caddy.sh
+```
+
+### Проверка после обновления
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+curl -s http://127.0.0.1:8080/health
+echo
+curl -sk https://safegram.site/health
+echo
+curl -sk https://safegram.site/api/status/summary
+echo
+curl -sk https://safegram.site/api/maintenance/status
+```
+
+Если всё в порядке:
+- `127.0.0.1:8080/health` даёт JSON
+- `https://safegram.site/health` даёт JSON
+- `https://safegram.site/api/status/summary` даёт JSON
+- главная, логин, регистрация, календарь и задачи открываются
+# SafeGram Backend â€” ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ‹ Ð¸ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ (ÑÐµÑ€Ð²ÐµÑ€ 141.8.198.152)
 
 ## Ð§Ñ‚Ð¾ Ð·Ð°Ð¿ÑƒÑ‰ÐµÐ½Ð¾
 - safegram-server â€” ÐºÐ¾Ð½Ñ‚ÐµÐ¹Ð½ÐµÑ€ Ñ API (Ð¿Ð¾Ñ€Ñ‚ 8080)
@@ -121,7 +181,6 @@ docker logs -f caddy-safegram
 
 sudo ufw allow 80
 sudo ufw allow 443
-sudo ufw allow 8080
 sudo ufw status
 
 ---
@@ -200,4 +259,5 @@ bash start-container.sh
 Ð£Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ Ñ‡ÐµÑ€ÐµÐ· Ð°Ð´Ð¼Ð¸Ð½ÐºÑƒ: Ñ€Ð°Ð·Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ Ð¸Ð»Ð¸ Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ IP Ð¼Ð¾Ð¶Ð½Ð¾ Ð¸ Ð±ÐµÐ· Ð¾Ñ‚ÐºÐ»ÑŽÑ‡ÐµÐ½Ð¸Ñ Ð² .env â€” ÐÐ´Ð¼Ð¸Ð½ÐºÐ° â†’ Security Dashboard (Ð¡Ð»ÑƒÐ¶Ð±Ð° Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾ÑÑ‚Ð¸): ÑÐ¿Ð¸ÑÐ¾Ðº Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ñ… IP, ÐºÐ½Ð¾Ð¿ÐºÐ° Â«Ð Ð°Ð·Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒÂ» Ñƒ ÐºÐ°Ð¶Ð´Ð¾Ð³Ð¾, Ð¿Ð¾Ð»Ðµ Ð´Ð»Ñ Ñ€ÑƒÑ‡Ð½Ð¾Ð¹ Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²ÐºÐ¸ IP.
 
 (ÐÐ»ÑŒÑ‚ÐµÑ€Ð½Ð°Ñ‚Ð¸Ð²Ð° Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð´Ð»Ñ ÑÐ²Ð¾ÐµÐ³Ð¾ IP: Ð² .env Ð·Ð°Ð´Ð°Ñ‚ÑŒ SECURITY_IP_WHITELIST=Ð²Ð°Ñˆ_ip â€” Ñ‚Ð¾Ð³Ð´Ð° Ð²Ð°Ñˆ IP Ð½Ðµ Ð±Ð°Ð½Ð¸Ñ‚ÑÑ Ð¸ Ð½Ðµ Ð»Ð¸Ð¼Ð¸Ñ‚Ð¸Ñ€ÑƒÐµÑ‚ÑÑ, Ð¾ÑÑ‚Ð°Ð»ÑŒÐ½Ñ‹Ðµ â€” Ð¿Ð¾-Ð¿Ñ€ÐµÐ¶Ð½ÐµÐ¼Ñƒ.)
+
 

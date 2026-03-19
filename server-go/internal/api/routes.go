@@ -49,6 +49,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, wsHub *websocket.Hub, cfg *con
 	// Публичный статус техработ (без авторизации — для баннера на фронте)
 	api.GET("/maintenance/status", GetMaintenanceStatus(db))
 	api.GET("/system-banner/status", GetSystemBannerStatus(db))
+	api.GET("/status/summary", GetPublicStatusSummary(db))
 
 	// Набор тестировщиков и хелперов (публичная заявка, с rate limit)
 	api.POST("/recruit", AuthRateLimitMiddleware(), SubmitRecruit(db))

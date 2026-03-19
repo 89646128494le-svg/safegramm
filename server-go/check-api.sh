@@ -1,20 +1,23 @@
-﻿#!/bin/bash
-# ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾ÑÑ‚Ð¸ API Ð½Ð° ÑÐµÑ€Ð²ÐµÑ€Ðµ. Ð—Ð°Ð¿ÑƒÑÐº: bash check-api.sh
-echo "=== ÐšÐ¾Ð½Ñ‚ÐµÐ¹Ð½ÐµÑ€Ñ‹ ==="
+#!/bin/bash
+# Quick server-side health checks for backend + Caddy.
+
+set -euo pipefail
+
+echo "=== Containers ==="
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "safegram|caddy|NAMES"
 echo ""
-echo "=== Ð‘ÑÐºÐµÐ½Ð´ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾ :8080 ==="
+echo "=== Backend local :8080 ==="
 curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/health && echo " OK" || echo " FAIL"
-echo "=== API maintenance Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾ ==="
+echo "=== API maintenance local ==="
 curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/api/maintenance/status && echo " OK" || echo " FAIL"
 echo ""
-echo "=== Ð§ÐµÑ€ÐµÐ· Caddy :443 (Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾) ==="
-curl -sk -o /dev/null -w "%{http_code}" https://127.0.0.1/api/maintenance/status && echo " OK" || echo " FAIL (Caddy Ð½Ðµ ÑÐ»ÑƒÑˆÐ°ÐµÑ‚ 443?)"
+echo "=== Through Caddy :443 (local resolve) ==="
+curl -sk --resolve safegram.site:443:127.0.0.1 -o /dev/null -w "%{http_code}" https://safegram.site/health && echo " OK" || echo " FAIL"
+curl -sk --resolve safegram.site:443:127.0.0.1 -o /dev/null -w "%{http_code}" https://safegram.site/api/maintenance/status && echo " OK" || echo " FAIL"
 echo ""
-echo "=== Ð¡Ð½Ð°Ñ€ÑƒÐ¶Ð¸ (ÐµÑÐ»Ð¸ Ð´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½) ==="
+echo "=== Public ==="
 curl -sk -o /dev/null -w "%{http_code}" https://safegram.site/api/maintenance/status 2>/dev/null && echo " OK" || echo " FAIL"
 echo "=== Tech fallback nip.io ==="
 curl -sk -o /dev/null -w "%{http_code}" https://141.8.198.152.nip.io/api/maintenance/status 2>/dev/null && echo " OK" || echo " FAIL"
 echo ""
-echo "Ð›Ð¾Ð³Ð¸ Caddy: docker logs caddy-safegram 2>&1 | tail -30"
-
+echo "Caddy logs: docker logs caddy-safegram 2>&1 | tail -30"

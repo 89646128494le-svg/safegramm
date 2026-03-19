@@ -29,6 +29,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.SystemLimit{}, &models.FeatureFlag{}, &models.SecurityPolicy{},
 		&models.SafetyAlert{}, &models.SuspiciousActivity{}, &models.GlobalInviteLink{},
 		&models.Payment{}, &models.Subscription{},
+		&models.CalendarEvent{}, &models.Todo{},
 	)
 	if err != nil {
 		return err
@@ -83,6 +84,10 @@ func CreateIndexes(db *gorm.DB) error {
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_payments_provider_status ON payments(provider, status)")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status ON subscriptions(user_id, status)")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_subscriptions_period_end ON subscriptions(current_period_end)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_calendar_events_start_time ON calendar_events(start_time)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_calendar_events_chat_time ON calendar_events(chat_id, start_time)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_todos_chat_completed ON todos(chat_id, completed)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_todos_creator_completed ON todos(created_by, completed)")
 	log.Println("Database indexes created successfully")
 	return nil
 }
