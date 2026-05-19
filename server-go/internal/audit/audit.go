@@ -14,8 +14,8 @@ import (
 const auditFileName = "admin.audit"
 
 var (
-	mu     sync.Mutex
-	dir    = "logs"
+	mu  sync.Mutex
+	dir = "logs"
 )
 
 func init() {
@@ -27,14 +27,14 @@ func init() {
 // Record — одна запись аудита.
 type Record struct {
 	Timestamp time.Time `json:"ts"`
-	AdminID   string   `json:"adminId"`
-	AdminName string   `json:"adminName,omitempty"`
-	Action    string   `json:"action"`
-	TargetID  string   `json:"targetId,omitempty"`
-	Target    string   `json:"target,omitempty"`
-	Reason    string   `json:"reason,omitempty"`
-	IP        string   `json:"ip,omitempty"`
-	Extra     string   `json:"extra,omitempty"`
+	AdminID   string    `json:"adminId"`
+	AdminName string    `json:"adminName,omitempty"`
+	Action    string    `json:"action"`
+	TargetID  string    `json:"targetId,omitempty"`
+	Target    string    `json:"target,omitempty"`
+	Reason    string    `json:"reason,omitempty"`
+	IP        string    `json:"ip,omitempty"`
+	Extra     string    `json:"extra,omitempty"`
 }
 
 // Log пишет запись в admin.audit. Формат строки: JSON + " " + SHA256(JSON) (hex).

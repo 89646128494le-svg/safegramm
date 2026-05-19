@@ -29,12 +29,12 @@ func UpdateWebhookSettings(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 		var req struct {
 			WebhookURL string `json:"webhookURL"`
 		}
-		
+
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 			return
 		}
-		
+
 		// Валидация URL
 		if req.WebhookURL != "" {
 			if !isValidURL(req.WebhookURL) {
@@ -42,16 +42,16 @@ func UpdateWebhookSettings(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 		}
-		
+
 		// Обновляем webhook URL
 		logger.SetWebhook(req.WebhookURL)
-		
+
 		// Логируем изменение
 		userId := c.GetString("userId")
 		logger.LogAction("webhook_updated", userId, map[string]interface{}{
 			"webhookURL": maskURL(req.WebhookURL),
 		})
-		
+
 		c.JSON(http.StatusOK, gin.H{
 			"success":    true,
 			"webhookURL": req.WebhookURL != "",
@@ -63,12 +63,12 @@ func UpdateWebhookSettings(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 // TestWebhook отправляет тестовое сообщение на webhook
 func TestWebhook(c *gin.Context) {
 	logger.Info("Test webhook message", map[string]interface{}{
-		"test": true,
+		"test":    true,
 		"message": "This is a test message from SafeGram server",
 	})
-	
+
 	logger.Flush() // Принудительно отправляем
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Test message sent",
@@ -81,7 +81,7 @@ func GetLogs(c *gin.Context) {
 	logPath := os.Getenv("LOG_FILE")
 	if logPath == "" {
 		c.JSON(http.StatusOK, gin.H{
-			"logs": []interface{}{},
+			"logs":    []interface{}{},
 			"message": "Set LOG_FILE in .env to see file logs here. Otherwise check process stdout (journalctl -u <service>, docker logs, or terminal).",
 		})
 		return
@@ -90,7 +90,7 @@ func GetLogs(c *gin.Context) {
 	f, err := os.Open(logPath)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"logs": []interface{}{},
+			"logs":    []interface{}{},
 			"message": "LOG_FILE not readable: " + err.Error(),
 		})
 		return
@@ -103,7 +103,7 @@ func GetLogs(c *gin.Context) {
 	}
 	if err := sc.Err(); err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"logs": []interface{}{},
+			"logs":    []interface{}{},
 			"message": "Read error: " + err.Error(),
 		})
 		return

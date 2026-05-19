@@ -19,5 +19,3 @@ type MessageReadReceipt struct {
 func (MessageReadReceipt) TableName() string {
 	return "message_read_receipts"
 }
-
-

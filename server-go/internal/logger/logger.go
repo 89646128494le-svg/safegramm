@@ -25,17 +25,17 @@ const (
 )
 
 type LogEntry struct {
-	Level      LogLevel              `json:"level"`
-	Message    string                `json:"message"`
-	Timestamp  time.Time             `json:"timestamp"`
-	Service    string                `json:"service,omitempty"`
-	UserID     string                `json:"userId,omitempty"`
-	ChatID     string                `json:"chatId,omitempty"`
-	Action     string                `json:"action,omitempty"`
-	Error      string                `json:"error,omitempty"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
-	IP         string                `json:"ip,omitempty"`
-	UserAgent  string                `json:"userAgent,omitempty"`
+	Level     LogLevel               `json:"level"`
+	Message   string                 `json:"message"`
+	Timestamp time.Time              `json:"timestamp"`
+	Service   string                 `json:"service,omitempty"`
+	UserID    string                 `json:"userId,omitempty"`
+	ChatID    string                 `json:"chatId,omitempty"`
+	Action    string                 `json:"action,omitempty"`
+	Error     string                 `json:"error,omitempty"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	IP        string                 `json:"ip,omitempty"`
+	UserAgent string                 `json:"userAgent,omitempty"`
 }
 
 type Logger struct {
@@ -114,7 +114,7 @@ func Log(level LogLevel, message string, metadata map[string]interface{}) {
 		Timestamp: time.Now(),
 		Metadata:  metadata,
 	}
-	
+
 	// Стандартное логирование
 	logMsg := fmt.Sprintf("[%s] %s", level, message)
 	if metadata != nil && len(metadata) > 0 {
@@ -123,7 +123,7 @@ func Log(level LogLevel, message string, metadata map[string]interface{}) {
 		}
 	}
 	log.Println(logMsg)
-	
+
 	// Отправка на webhook
 	if defaultLogger != nil && defaultLogger.enabled && defaultLogger.webhookURL != "" {
 		defaultLogger.sendToWebhook(entry)
@@ -179,7 +179,7 @@ func (l *Logger) sendToWebhook(entry LogEntry) {
 	l.buffer = append(l.buffer, entry)
 	bufferFull := len(l.buffer) >= l.bufferSize
 	l.mu.Unlock()
-	
+
 	// Отправляем сразу для важных событий или при заполнении буфера
 	if entry.Level == LogLevelError || bufferFull {
 		l.flushBuffer()
@@ -192,41 +192,41 @@ func (l *Logger) flushBuffer() {
 		l.mu.Unlock()
 		return
 	}
-	
+
 	entries := make([]LogEntry, len(l.buffer))
 	copy(entries, l.buffer)
 	l.buffer = l.buffer[:0]
 	l.mu.Unlock()
-	
+
 	// Отправляем в отдельной горутине
 	go func() {
 		payload := map[string]interface{}{
-			"logs": entries,
+			"logs":   entries,
 			"server": os.Getenv("SERVER_NAME"),
 		}
-		
+
 		jsonData, err := json.Marshal(payload)
 		if err != nil {
 			log.Printf("Failed to marshal log entry: %v", err)
 			return
 		}
-		
+
 		req, err := http.NewRequest("POST", l.webhookURL, bytes.NewBuffer(jsonData))
 		if err != nil {
 			log.Printf("Failed to create webhook request: %v", err)
 			return
 		}
-		
+
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", "SafeGram-Server/1.0")
-		
+
 		resp, err := l.client.Do(req)
 		if err != nil {
 			log.Printf("Failed to send webhook: %v", err)
 			return
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("Webhook returned non-200 status: %d", resp.StatusCode)
 		}

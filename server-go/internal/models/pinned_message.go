@@ -21,5 +21,3 @@ type PinnedMessage struct {
 func (PinnedMessage) TableName() string {
 	return "pinned_messages"
 }
-
-

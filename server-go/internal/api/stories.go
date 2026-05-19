@@ -21,9 +21,9 @@ func CreateStory(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var req struct {
-			Type           string `json:"type" binding:"required"` // image, video, text
-			ContentURL     string `json:"contentUrl,omitempty"`
-			Text           string `json:"text,omitempty"`
+			Type            string `json:"type" binding:"required"` // image, video, text
+			ContentURL      string `json:"contentUrl,omitempty"`
+			Text            string `json:"text,omitempty"`
 			BackgroundColor string `json:"backgroundColor,omitempty"`
 		}
 
@@ -34,13 +34,13 @@ func CreateStory(db *gorm.DB) gin.HandlerFunc {
 
 		// Создаем историю с временем жизни 24 часа
 		story := models.Story{
-			ID:            uuid.New().String(),
-			UserID:        userIDStr,
-			Type:          req.Type,
-			ContentURL:    req.ContentURL,
-			Text:          req.Text,
+			ID:              uuid.New().String(),
+			UserID:          userIDStr,
+			Type:            req.Type,
+			ContentURL:      req.ContentURL,
+			Text:            req.Text,
 			BackgroundColor: req.BackgroundColor,
-			ExpiresAt:     time.Now().Add(24 * time.Hour),
+			ExpiresAt:       time.Now().Add(24 * time.Hour),
 		}
 
 		if err := db.Create(&story).Error; err != nil {
@@ -52,20 +52,20 @@ func CreateStory(db *gorm.DB) gin.HandlerFunc {
 		db.Preload("User").First(&story, "id = ?", story.ID)
 
 		response := gin.H{
-			"id":            story.ID,
-			"userId":        story.UserID,
-			"type":          story.Type,
-			"contentUrl":    story.ContentURL,
-			"text":          story.Text,
+			"id":              story.ID,
+			"userId":          story.UserID,
+			"type":            story.Type,
+			"contentUrl":      story.ContentURL,
+			"text":            story.Text,
 			"backgroundColor": story.BackgroundColor,
-			"expiresAt":     story.ExpiresAt.Unix() * 1000,
-			"createdAt":     story.CreatedAt.Unix() * 1000,
+			"expiresAt":       story.ExpiresAt.Unix() * 1000,
+			"createdAt":       story.CreatedAt.Unix() * 1000,
 		}
 
 		if story.User.ID != "" {
 			response["user"] = gin.H{
-				"id":       story.User.ID,
-				"username": story.User.Username,
+				"id":        story.User.ID,
+				"username":  story.User.Username,
 				"avatarUrl": story.User.AvatarURL,
 			}
 		}
@@ -104,14 +104,14 @@ func GetStories(db *gorm.DB) gin.HandlerFunc {
 			}
 
 			storyData := gin.H{
-				"id":            story.ID,
-				"type":          story.Type,
-				"contentUrl":    story.ContentURL,
-				"text":          story.Text,
+				"id":              story.ID,
+				"type":            story.Type,
+				"contentUrl":      story.ContentURL,
+				"text":            story.Text,
 				"backgroundColor": story.BackgroundColor,
-				"expiresAt":     story.ExpiresAt.Unix() * 1000,
-				"createdAt":     story.CreatedAt.Unix() * 1000,
-				"viewed":        len(story.Views) > 0, // Просмотрена ли текущим пользователем
+				"expiresAt":       story.ExpiresAt.Unix() * 1000,
+				"createdAt":       story.CreatedAt.Unix() * 1000,
+				"viewed":          len(story.Views) > 0, // Просмотрена ли текущим пользователем
 			}
 
 			userId := story.UserID
@@ -129,8 +129,8 @@ func GetStories(db *gorm.DB) gin.HandlerFunc {
 			for _, story := range stories {
 				if story.UserID == userId && story.User.ID != "" {
 					userInfo = gin.H{
-						"id":       story.User.ID,
-						"username": story.User.Username,
+						"id":        story.User.ID,
+						"username":  story.User.Username,
 						"avatarUrl": story.User.AvatarURL,
 					}
 					break
@@ -218,4 +218,3 @@ func DeleteStory(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
-

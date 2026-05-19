@@ -40,4 +40,3 @@ func GetICEServers() gin.HandlerFunc {
 
 // WebRTC signaling будет через WebSocket
 // События: webrtc:offer, webrtc:answer, webrtc:ice, webrtc:hangup
-

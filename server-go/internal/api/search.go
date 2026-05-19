@@ -67,8 +67,8 @@ func UniversalSearch(db *gorm.DB) gin.HandlerFunc {
 					messagesData[i]["sender"] = gin.H{"id": "anonymous", "username": "Тень", "avatarUrl": ""}
 				} else if msg.Sender.ID != "" {
 					messagesData[i]["sender"] = gin.H{
-						"id":       msg.Sender.ID,
-						"username": msg.Sender.Username,
+						"id":        msg.Sender.ID,
+						"username":  msg.Sender.Username,
 						"avatarUrl": msg.Sender.AvatarURL,
 					}
 				}
@@ -221,4 +221,3 @@ func SearchMessages(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"messages": out})
 	}
 }
-

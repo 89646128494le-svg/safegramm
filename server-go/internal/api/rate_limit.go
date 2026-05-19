@@ -164,4 +164,3 @@ func SearchRateLimitMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
-

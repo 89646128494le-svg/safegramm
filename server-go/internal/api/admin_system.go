@@ -121,11 +121,11 @@ func GetAdminFeatureFlags(db *gorm.DB) gin.HandlerFunc {
 func PostAdminFeatureFlag(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Key    string `json:"key"`
-			Enabled bool  `json:"enabled"`
-			Roles  string `json:"roles"`
-			Plans  string `json:"plans"`
-			Percent int   `json:"percent"`
+			Key     string `json:"key"`
+			Enabled bool   `json:"enabled"`
+			Roles   string `json:"roles"`
+			Plans   string `json:"plans"`
+			Percent int    `json:"percent"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil || req.Key == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
@@ -159,7 +159,7 @@ func PatchAdminFeatureFlag(db *gorm.DB) gin.HandlerFunc {
 			Enabled *bool   `json:"enabled"`
 			Roles   *string `json:"roles"`
 			Plans   *string `json:"plans"`
-			Percent *int   `json:"percent"`
+			Percent *int    `json:"percent"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})

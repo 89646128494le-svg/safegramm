@@ -134,7 +134,7 @@ func SendPushNotification(db *gorm.DB, userID string, title string, body string,
 	// В реальной реализации здесь должен быть вызов web-push библиотеки
 	// Для упрощения просто логируем
 	// TODO: Интегрировать библиотеку web-push для Go (например, github.com/SherClockHolmes/webpush-go)
-	
+
 	// Пока что просто возвращаем nil - уведомления будут работать через WebSocket
 	_ = payloadJSON
 	_ = subscriptions
@@ -162,4 +162,3 @@ func TestPush(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Тестовое уведомление отправлено"})
 	}
 }
-

@@ -43,4 +43,3 @@ type AdminMute struct {
 func (AdminMute) TableName() string {
 	return "admin_mutes"
 }
-

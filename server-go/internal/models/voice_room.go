@@ -15,4 +15,3 @@ type VoiceRoom struct {
 func (VoiceRoom) TableName() string {
 	return "voice_rooms"
 }
-

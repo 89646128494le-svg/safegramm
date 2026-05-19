@@ -168,8 +168,8 @@ func ApproveMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			"moderationStatus": msg.ModerationStatus,
 			"createdAt":        msg.CreatedAt,
 			"sender": gin.H{
-				"id":       msg.Sender.ID,
-				"username": msg.Sender.Username,
+				"id":        msg.Sender.ID,
+				"username":  msg.Sender.Username,
 				"avatarUrl": msg.Sender.AvatarURL,
 			},
 		}
@@ -193,7 +193,9 @@ func RejectMessage(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		var req struct{ Reason string `json:"reason"` }
+		var req struct {
+			Reason string `json:"reason"`
+		}
 		_ = c.ShouldBindJSON(&req)
 
 		var msg models.Message
@@ -244,9 +246,9 @@ func BanUser(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var req struct {
-			UserID    string `json:"userId" binding:"required"`
-			Minutes   int    `json:"minutes"`
-			Reason    string `json:"reason"`
+			UserID  string `json:"userId" binding:"required"`
+			Minutes int    `json:"minutes"`
+			Reason  string `json:"reason"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
@@ -294,7 +296,9 @@ func UnbanUser(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		var req struct{ UserID string `json:"userId" binding:"required"` }
+		var req struct {
+			UserID string `json:"userId" binding:"required"`
+		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
 			return
@@ -333,4 +337,3 @@ func GetModerationLogs(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"logs": logs})
 	}
 }
-

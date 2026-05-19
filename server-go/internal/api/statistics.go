@@ -83,10 +83,10 @@ func GetChatStatistics(db *gorm.DB) gin.HandlerFunc {
 		// Топ участников
 		type ParticipantStat struct {
 			UserID            string `json:"userId"`
-			Username         string `json:"username"`
-			MessageCount     int64  `json:"messageCount"`
-			ReactionsGiven   int64  `json:"reactionsGiven"`
-			ReactionsReceived int64 `json:"reactionsReceived"`
+			Username          string `json:"username"`
+			MessageCount      int64  `json:"messageCount"`
+			ReactionsGiven    int64  `json:"reactionsGiven"`
+			ReactionsReceived int64  `json:"reactionsReceived"`
 		}
 		var topParticipants []ParticipantStat
 		db.Model(&models.Message{}).
@@ -136,13 +136,13 @@ func GetChatStatistics(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"totalMessages":    totalMessages,
-			"totalMedia":       totalMedia,
-			"totalReactions":   totalReactions,
-			"messagesByDay":    messagesByDay,
-			"messagesByHour":   messagesByHour,
+			"totalMessages":   totalMessages,
+			"totalMedia":      totalMedia,
+			"totalReactions":  totalReactions,
+			"messagesByDay":   messagesByDay,
+			"messagesByHour":  messagesByHour,
 			"topParticipants": topParticipants,
-			"activityTrend":    activityTrend,
+			"activityTrend":   activityTrend,
 		})
 	}
 }

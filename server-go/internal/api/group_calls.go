@@ -21,11 +21,11 @@ func CreateGroupCall(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var req struct {
-			ChatID        string   `json:"chatId" binding:"required"`
-			Type          string   `json:"type" binding:"required"` // "voice" | "video"
-			Status        string   `json:"status" binding:"required"` // "active" | "ended"
-			StartedAt     int64    `json:"startedAt"`
-			EndedAt       *int64   `json:"endedAt,omitempty"`
+			ChatID         string   `json:"chatId" binding:"required"`
+			Type           string   `json:"type" binding:"required"`   // "voice" | "video"
+			Status         string   `json:"status" binding:"required"` // "active" | "ended"
+			StartedAt      int64    `json:"startedAt"`
+			EndedAt        *int64   `json:"endedAt,omitempty"`
 			ParticipantIds []string `json:"participantIds"`
 		}
 
@@ -102,7 +102,7 @@ func GetGroupCallHistory(db *gorm.DB) gin.HandlerFunc {
 			limit = 50
 		}
 
-		query := db.Where("started_by = ? OR EXISTS (SELECT 1 FROM group_call_participants WHERE group_call_participants.call_id = group_calls.id AND group_call_participants.user_id = ?)", 
+		query := db.Where("started_by = ? OR EXISTS (SELECT 1 FROM group_call_participants WHERE group_call_participants.call_id = group_calls.id AND group_call_participants.user_id = ?)",
 			userIDStr, userIDStr).
 			Preload("Starter").
 			Preload("Participants").
@@ -135,8 +135,8 @@ func GetGroupCallHistory(db *gorm.DB) gin.HandlerFunc {
 					"leftAt":   leftAtInt,
 					"duration": p.Duration,
 					"user": gin.H{
-						"id":       p.User.ID,
-						"username": p.User.Username,
+						"id":        p.User.ID,
+						"username":  p.User.Username,
 						"avatarUrl": p.User.AvatarURL,
 					},
 				}
@@ -159,8 +159,8 @@ func GetGroupCallHistory(db *gorm.DB) gin.HandlerFunc {
 				"recordingUrl": call.RecordingURL,
 				"participants": participantsData,
 				"starter": gin.H{
-					"id":       call.Starter.ID,
-					"username": call.Starter.Username,
+					"id":        call.Starter.ID,
+					"username":  call.Starter.Username,
 					"avatarUrl": call.Starter.AvatarURL,
 				},
 			}

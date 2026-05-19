@@ -46,4 +46,3 @@ func logModeration(db *gorm.DB, chatID, serverID, actorID, action, targetUserID,
 	}
 	_ = db.Create(&l).Error
 }
-

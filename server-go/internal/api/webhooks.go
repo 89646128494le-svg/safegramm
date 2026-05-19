@@ -149,4 +149,3 @@ func fireWebhooks(db *gorm.DB, scopeType, scopeID, event string, payload []byte)
 		_, _ = client.Do(req)
 	}
 }
-

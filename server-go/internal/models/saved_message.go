@@ -17,4 +17,3 @@ type SavedMessage struct {
 func (SavedMessage) TableName() string {
 	return "saved_messages"
 }
-

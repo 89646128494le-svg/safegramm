@@ -134,9 +134,9 @@ func CreateSession(db *gorm.DB, userID, token, ipAddress, userAgent string) (*mo
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || 
-		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		containsHelper(s, substr))))
+	return len(s) >= len(substr) && (s == substr ||
+		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			containsHelper(s, substr))))
 }
 
 func containsHelper(s, substr string) bool {

@@ -138,9 +138,9 @@ func GetChats(db *gorm.DB) gin.HandlerFunc {
 			models.Chat
 			LastMessage *models.Message `json:"lastMessage,omitempty"`
 			ArchivedAt  *int64          `json:"archivedAt,omitempty"` // Timestamp архивирования для текущего пользователя
-			UnreadCount int             `json:"unreadCount"`           // Количество непрочитанных сообщений
+			UnreadCount int             `json:"unreadCount"`          // Количество непрочитанных сообщений
 		}
-		
+
 		result := make([]ChatWithLastMessage, 0, len(chats))
 		for _, chat := range chats {
 			var lastMessage models.Message
@@ -160,7 +160,7 @@ func GetChats(db *gorm.DB) gin.HandlerFunc {
 					archivedAt = &timestamp
 				}
 			}
-			
+
 			// Подсчитываем непрочитанные сообщения
 			// Непрочитанными считаются сообщения, для которых нет записи в MessageReadReceipt
 			var unreadCount int64
@@ -168,12 +168,12 @@ func GetChats(db *gorm.DB) gin.HandlerFunc {
 				Select("message_id").
 				Where("user_id = ?", userIDStr)
 			db.Model(&models.Message{}).
-				Where("chat_id = ? AND deleted_at IS NULL AND sender_id != ? AND id NOT IN (?)", 
+				Where("chat_id = ? AND deleted_at IS NULL AND sender_id != ? AND id NOT IN (?)",
 					chat.ID, userIDStr, subquery).
 				Count(&unreadCount)
-			
+
 			result = append(result, ChatWithLastMessage{
-				Chat:        chat,
+				Chat: chat,
 				LastMessage: func() *models.Message {
 					if hasLast {
 						return &lastMessage
@@ -204,9 +204,9 @@ func CreateChat(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var req struct {
-			Type        string   `json:"type" binding:"required"`
-			Name        string   `json:"name"`
-			MemberIDs   []string `json:"memberIds"`
+			Type      string   `json:"type" binding:"required"`
+			Name      string   `json:"name"`
+			MemberIDs []string `json:"memberIds"`
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -335,7 +335,7 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 		if member.Role != "owner" && member.Role != "admin" && member.Role != "moderator" {
 			query = query.Where("(moderation_status = 'approved' OR sender_id = ?)", userIDStr)
 		}
-		
+
 		if beforeID != "" {
 			// Загружаем сообщения до указанного ID
 			var beforeMessage models.Message
@@ -345,12 +345,12 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 		} else if offset > 0 {
 			query = query.Offset(offset)
 		}
-		
+
 		if err := query.Find(&messages).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
-		
+
 		// Разворачиваем порядок для правильного отображения (от старых к новым)
 		for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
 			messages[i], messages[j] = messages[j], messages[i]
@@ -361,7 +361,7 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 		for i, msg := range messages {
 			messageIDs[i] = msg.ID
 		}
-		
+
 		var readReceiptsSelf []models.MessageReadReceipt
 		if len(messageIDs) > 0 {
 			db.Where("message_id IN ? AND user_id = ?", messageIDs, userIDStr).Find(&readReceiptsSelf)
@@ -392,25 +392,25 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 				senderID = "support"
 			}
 			msgData := gin.H{
-				"id":            msg.ID,
-				"chatId":        msg.ChatID,
-				"senderId":      senderID,
-				"anonymous":     msg.Anonymous,
-				"text":          msg.Text,
-				"ciphertext":    msg.Ciphertext,
+				"id":               msg.ID,
+				"chatId":           msg.ChatID,
+				"senderId":         senderID,
+				"anonymous":        msg.Anonymous,
+				"text":             msg.Text,
+				"ciphertext":       msg.Ciphertext,
 				"moderationStatus": msg.ModerationStatus,
 				"moderationReason": msg.ModerationReason,
-				"attachmentUrl": msg.AttachmentURL,
-				"replyTo":       msg.ReplyTo,
-				"forwardFrom":   msg.ForwardFrom,
-				"threadId":      msg.ThreadID,
-				"stickerId":     msg.StickerID,
-				"gifUrl":        msg.GifURL,
-				"locationLat":   msg.LocationLat,
-				"locationLon":    msg.LocationLon,
-				"createdAt":     msg.CreatedAt,
+				"attachmentUrl":    msg.AttachmentURL,
+				"replyTo":          msg.ReplyTo,
+				"forwardFrom":      msg.ForwardFrom,
+				"threadId":         msg.ThreadID,
+				"stickerId":        msg.StickerID,
+				"gifUrl":           msg.GifURL,
+				"locationLat":      msg.LocationLat,
+				"locationLon":      msg.LocationLon,
+				"createdAt":        msg.CreatedAt,
 			}
-			
+
 			// Загружаем опрос если есть
 			if msg.PollID != "" {
 				var poll models.Poll
@@ -442,7 +442,7 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 					}
 				}
 			}
-			
+
 			// Парсим JSON для календарного события, контакта и документа
 			if msg.CalendarEventJSON != "" {
 				var calendarEventData gin.H
@@ -462,7 +462,7 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 					msgData["document"] = documentData
 				}
 			}
-			
+
 			// Парсим историю редактирования
 			if msg.EditHistoryJSON != "" {
 				var editHistory []gin.H
@@ -485,8 +485,8 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 				msgData["sender"] = gin.H{"id": "anonymous", "username": "Тень", "avatarUrl": ""}
 			} else if msg.Sender.ID != "" {
 				msgData["sender"] = gin.H{
-					"id":       msg.Sender.ID,
-					"username": msg.Sender.Username,
+					"id":        msg.Sender.ID,
+					"username":  msg.Sender.Username,
 					"avatarUrl": msg.Sender.AvatarURL,
 				}
 			}
@@ -521,8 +521,8 @@ func GetMessages(db *gorm.DB) gin.HandlerFunc {
 						"userId": rec.UserID,
 						"readAt": rec.ReadAt,
 						"user": gin.H{
-							"id":       rec.User.ID,
-							"username": rec.User.Username,
+							"id":        rec.User.ID,
+							"username":  rec.User.Username,
 							"avatarUrl": rec.User.AvatarURL,
 						},
 					}
@@ -587,17 +587,17 @@ func GetAttachments(db *gorm.DB) gin.HandlerFunc {
 					return ""
 				}
 				lowerURL := strings.ToLower(url)
-				if strings.Contains(lowerURL, ".jpg") || strings.Contains(lowerURL, ".jpeg") || 
-				   strings.Contains(lowerURL, ".png") || strings.Contains(lowerURL, ".gif") || 
-				   strings.Contains(lowerURL, ".webp") {
+				if strings.Contains(lowerURL, ".jpg") || strings.Contains(lowerURL, ".jpeg") ||
+					strings.Contains(lowerURL, ".png") || strings.Contains(lowerURL, ".gif") ||
+					strings.Contains(lowerURL, ".webp") {
 					return "image"
 				}
-				if strings.Contains(lowerURL, ".mp4") || strings.Contains(lowerURL, ".webm") || 
-				   strings.Contains(lowerURL, ".mov") || strings.Contains(lowerURL, ".avi") {
+				if strings.Contains(lowerURL, ".mp4") || strings.Contains(lowerURL, ".webm") ||
+					strings.Contains(lowerURL, ".mov") || strings.Contains(lowerURL, ".avi") {
 					return "video"
 				}
-				if strings.Contains(lowerURL, ".mp3") || strings.Contains(lowerURL, ".wav") || 
-				   strings.Contains(lowerURL, ".ogg") || strings.Contains(lowerURL, ".m4a") {
+				if strings.Contains(lowerURL, ".mp3") || strings.Contains(lowerURL, ".wav") ||
+					strings.Contains(lowerURL, ".ogg") || strings.Contains(lowerURL, ".m4a") {
 					return "audio"
 				}
 				return "file"
@@ -752,4 +752,3 @@ func DeleteChat(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
-
