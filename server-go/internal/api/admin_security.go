@@ -71,11 +71,11 @@ func GetAdminSuspiciousActivity(db *gorm.DB) gin.HandlerFunc {
 		for i, a := range list {
 			out[i] = gin.H{
 				"id":        a.ID,
-				"userId":   a.UserID,
-				"action":   a.Action,
-				"ip":       a.IP,
+				"userId":    a.UserID,
+				"action":    a.Action,
+				"ip":        a.IP,
 				"userAgent": a.UserAgent,
-				"details":  a.Details,
+				"details":   a.Details,
 				"createdAt": a.CreatedAt,
 			}
 		}
@@ -90,17 +90,17 @@ func GetAdminSecurityPolicy(db *gorm.DB) gin.HandlerFunc {
 		if err := db.First(&p).Error; err != nil {
 			// дефолт
 			p = models.SecurityPolicy{
-				ID:                    uuid.New().String(),
-				Require2FAForAdmins:   false,
-				SessionMaxDays:        30,
-				PasswordMinLength:     8,
+				ID:                     uuid.New().String(),
+				Require2FAForAdmins:    false,
+				SessionMaxDays:         30,
+				PasswordMinLength:      8,
 				PasswordRequireSpecial: false,
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"require2FAForAdmins":   p.Require2FAForAdmins,
-			"sessionMaxDays":       p.SessionMaxDays,
-			"passwordMinLength":    p.PasswordMinLength,
+			"require2FAForAdmins":    p.Require2FAForAdmins,
+			"sessionMaxDays":         p.SessionMaxDays,
+			"passwordMinLength":      p.PasswordMinLength,
 			"passwordRequireSpecial": p.PasswordRequireSpecial,
 		})
 	}
@@ -110,9 +110,9 @@ func GetAdminSecurityPolicy(db *gorm.DB) gin.HandlerFunc {
 func PatchAdminSecurityPolicy(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Require2FAForAdmins   *bool `json:"require2FAForAdmins"`
-			SessionMaxDays       *int  `json:"sessionMaxDays"`
-			PasswordMinLength    *int  `json:"passwordMinLength"`
+			Require2FAForAdmins    *bool `json:"require2FAForAdmins"`
+			SessionMaxDays         *int  `json:"sessionMaxDays"`
+			PasswordMinLength      *int  `json:"passwordMinLength"`
 			PasswordRequireSpecial *bool `json:"passwordRequireSpecial"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -159,7 +159,7 @@ func GetAdminSafetyAlerts(db *gorm.DB) gin.HandlerFunc {
 		out := make([]gin.H, len(list))
 		for i, a := range list {
 			out[i] = gin.H{
-				"id":         a.ID,
+				"id":        a.ID,
 				"type":      a.Type,
 				"userId":    a.UserID,
 				"chatId":    a.ChatID,
@@ -207,15 +207,15 @@ func GetAdminSecuritySessions(db *gorm.DB) gin.HandlerFunc {
 				username = s.User.Username
 			}
 			out[i] = gin.H{
-				"id":        s.ID,
-				"userId":   s.UserID,
-				"username": username,
-				"ip":       s.IPAddress,
-				"ipAddress": s.IPAddress,
-				"userAgent": s.UserAgent,
+				"id":         s.ID,
+				"userId":     s.UserID,
+				"username":   username,
+				"ip":         s.IPAddress,
+				"ipAddress":  s.IPAddress,
+				"userAgent":  s.UserAgent,
 				"lastActive": s.LastUsed,
-				"lastUsed":  s.LastUsed,
-				"createdAt": s.CreatedAt,
+				"lastUsed":   s.LastUsed,
+				"createdAt":  s.CreatedAt,
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{"sessions": out})

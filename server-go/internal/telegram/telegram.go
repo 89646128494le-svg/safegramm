@@ -28,8 +28,8 @@ func Send(text string) bool {
 		return false
 	}
 	body := map[string]interface{}{
-		"chat_id": chatID,
-		"text":    text,
+		"chat_id":    chatID,
+		"text":       text,
 		"parse_mode": "HTML",
 	}
 	raw, _ := json.Marshal(body)

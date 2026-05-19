@@ -1,8 +1,11 @@
 // send-test-email — отправить тестовое письмо с сервера (проверка SMTP/.env).
 // Запуск на сервере из каталога server-go:
-//   go run ./cmd/send-test-email your@email.com
+//
+//	go run ./cmd/send-test-email your@email.com
+//
 // или с загрузкой .env из текущей папки:
-//   cd /path/to/server-go && go run ./cmd/send-test-email your@email.com
+//
+//	cd /path/to/server-go && go run ./cmd/send-test-email your@email.com
 package main
 
 import (

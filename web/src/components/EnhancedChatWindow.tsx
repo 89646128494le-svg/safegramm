@@ -47,6 +47,7 @@ import { getChatBackground, getChatColor } from '../services/appearance';
 import AppearanceSettings from './AppearanceSettings';
 import { UsernameWithRole } from './RoleBadge';
 import { decryptVaultBlob, encryptFileForVault, saveVaultRecord, VaultEnvelope } from '../services/vault';
+import { VirtualizedMessageList } from './VirtualizedMessageList';
 
 const MAX_MESSAGE_LENGTH = 4096;
 
@@ -3116,25 +3117,30 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             <p className="chat-empty-hint">Двойной клик по сообщению — ответить</p>
           </div>
         )}
-        {messages.map((msg, idx) => {
-          const sender = getUser(msg.senderId);
-          const isMe = msg.senderId === currentUser.id;
-          const msgReactions = (reactions.get(msg.id) || []) as Array<{userId: string, emoji: string}>;
-          const prevMsg = idx > 0 ? messages[idx - 1] : null;
-          const showAvatar = !prevMsg || prevMsg.senderId !== msg.senderId;
-          const prevDate = prevMsg ? new Date(prevMsg.createdAt).toDateString() : '';
-          const thisDate = new Date(msg.createdAt).toDateString();
-          const showDateSeparator = prevDate !== thisDate;
+        <VirtualizedMessageList
+          messages={messages}
+          estimatedItemHeight={80}
+          onLoadMore={hasMoreMessages ? loadMoreMessages : undefined}
+          loadMoreThreshold={300}
+          renderMessage={(msg, idx) => {
+            const sender = getUser(msg.senderId);
+            const isMe = msg.senderId === currentUser.id;
+            const msgReactions = (reactions.get(msg.id) || []) as Array<{userId: string, emoji: string}>;
+            const prevMsg = idx > 0 ? messages[idx - 1] : null;
+            const showAvatar = !prevMsg || prevMsg.senderId !== msg.senderId;
+            const prevDate = prevMsg ? new Date(prevMsg.createdAt).toDateString() : '';
+            const thisDate = new Date(msg.createdAt).toDateString();
+            const showDateSeparator = prevDate !== thisDate;
 
-          return (
-            <React.Fragment key={msg.id}>
-              {showDateSeparator && (
-                <div className="message-date-separator">
-                  <span>{formatDateSeparator(msg.createdAt)}</span>
-                </div>
-              )}
-            <div 
-              data-message-id={msg.id} 
+            return (
+              <React.Fragment key={msg.id}>
+                {showDateSeparator && (
+                  <div className="message-date-separator">
+                    <span>{formatDateSeparator(msg.createdAt)}</span>
+                  </div>
+                )}
+              <div
+                data-message-id={msg.id}
               className={`message-wrapper message ${isMe ? 'message-me me' : ''} ${msg.expiresAt && msg.expiresAt < Date.now() ? 'expired' : ''} ${msg.senderId === currentUser.id ? 'sending' : 'received'} ${messageIdWithActions === msg.id ? 'show-actions' : ''}`}
               style={{ animationDelay: `${idx * 0.03}s` }}
               onDoubleClick={() => !msg.deletedAt && setReplyingTo(msg)}
@@ -3756,7 +3762,8 @@ export default function EnhancedChatWindow({ chatId, currentUser, onClose, onBac
             </div>
             </React.Fragment>
           );
-        })}
+        }}
+        />
         {typingUsers.size > 0 && (() => {
           const names = Array.from(typingUsers).map((userId: string) => getUser(userId).username || 'Пользователь');
           const text = names.length === 1

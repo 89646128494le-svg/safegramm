@@ -15,7 +15,7 @@ import (
 const (
 	// SupportSystemUserID is the system user used to present support replies anonymously.
 	SupportSystemUserID = "00000000-0000-0000-0000-000000000001"
-	SupportDisplayName = "Техподдержка"
+	SupportDisplayName  = "Техподдержка"
 )
 
 var supportSenderDisplay = gin.H{

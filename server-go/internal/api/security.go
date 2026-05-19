@@ -12,20 +12,20 @@ import (
 )
 
 const (
-	defaultMaxBodyBytes     = 10 << 20  // 10 MB для обычных запросов
-	defaultDDoSReqPerMin    = 5000      // глобальный лимит запросов/мин с одного IP (не баним по 429)
-	defaultViolationsToBan  = 9999      // по умолчанию не банить по счётчику (только ручной бан в админке)
-	defaultBanDurationMin   = 30        // минуты бана при ручном бане
-	defaultWSConnsPerIP     = 10        // макс WebSocket соединений с одного IP
+	defaultMaxBodyBytes    = 10 << 20 // 10 MB для обычных запросов
+	defaultDDoSReqPerMin   = 5000     // глобальный лимит запросов/мин с одного IP (не баним по 429)
+	defaultViolationsToBan = 9999     // по умолчанию не банить по счётчику (только ручной бан в админке)
+	defaultBanDurationMin  = 30       // минуты бана при ручном бане
+	defaultWSConnsPerIP    = 10       // макс WebSocket соединений с одного IP
 )
 
 // ipBlocklist — только ручной бан через админку (BlockManual). Авто-бан по нарушениям отключён.
 type ipBlocklist struct {
-	mu       sync.RWMutex
-	banned   map[string]time.Time
+	mu         sync.RWMutex
+	banned     map[string]time.Time
 	violations map[string]*violationCount
-	banDur   time.Duration
-	toBan    int
+	banDur     time.Duration
+	toBan      int
 }
 
 type violationCount struct {

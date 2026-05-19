@@ -6,16 +6,16 @@ import (
 
 // SafetyAlert — алерт по срабатыванию Safety AI (антискам, deepfake и т.п.)
 type SafetyAlert struct {
-	ID        string     `json:"id" gorm:"primaryKey"`
-	Type      string     `json:"type" gorm:"index;not null"`   // antiscam, deepfake, filter, etc.
-	UserID    string     `json:"userId" gorm:"index"`
-	ChatID    string     `json:"chatId" gorm:"index"`
-	MessageID string     `json:"messageId" gorm:"index"`
-	Payload   string     `json:"payload" gorm:"type:text"`     // JSON
-	Resolved  bool       `json:"resolved" gorm:"default:false"`
-	ResolvedBy string    `json:"resolvedBy" gorm:"index"`
+	ID         string     `json:"id" gorm:"primaryKey"`
+	Type       string     `json:"type" gorm:"index;not null"` // antiscam, deepfake, filter, etc.
+	UserID     string     `json:"userId" gorm:"index"`
+	ChatID     string     `json:"chatId" gorm:"index"`
+	MessageID  string     `json:"messageId" gorm:"index"`
+	Payload    string     `json:"payload" gorm:"type:text"` // JSON
+	Resolved   bool       `json:"resolved" gorm:"default:false"`
+	ResolvedBy string     `json:"resolvedBy" gorm:"index"`
 	ResolvedAt *time.Time `json:"resolvedAt"`
-	CreatedAt time.Time  `json:"createdAt" gorm:"autoCreateTime;index"`
+	CreatedAt  time.Time  `json:"createdAt" gorm:"autoCreateTime;index"`
 }
 
 func (SafetyAlert) TableName() string {

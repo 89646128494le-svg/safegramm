@@ -36,13 +36,13 @@ func GetAdminMessagesSearch(db *gorm.DB) gin.HandlerFunc {
 		out := make([]gin.H, len(list))
 		for i, m := range list {
 			out[i] = gin.H{
-				"id":         m.ID,
-				"chatId":     m.ChatID,
-				"senderId":   m.SenderID,
-				"text":       m.Text,
-				"attachmentUrl": m.AttachmentURL,
+				"id":               m.ID,
+				"chatId":           m.ChatID,
+				"senderId":         m.SenderID,
+				"text":             m.Text,
+				"attachmentUrl":    m.AttachmentURL,
 				"moderationStatus": m.ModerationStatus,
-				"createdAt":  m.CreatedAt,
+				"createdAt":        m.CreatedAt,
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{"messages": out})
@@ -65,12 +65,12 @@ func GetAdminMediaQueue(db *gorm.DB) gin.HandlerFunc {
 				url = m.GifURL
 			}
 			out[i] = gin.H{
-				"id":             m.ID,
-				"chatId":         m.ChatID,
-				"senderId":       m.SenderID,
-				"attachmentUrl":  url,
+				"id":               m.ID,
+				"chatId":           m.ChatID,
+				"senderId":         m.SenderID,
+				"attachmentUrl":    url,
 				"moderationStatus": m.ModerationStatus,
-				"createdAt":      m.CreatedAt,
+				"createdAt":        m.CreatedAt,
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{"queue": out})
@@ -124,14 +124,14 @@ func GetAdminStickerPacks(db *gorm.DB) gin.HandlerFunc {
 		out := make([]gin.H, len(list))
 		for i, p := range list {
 			out[i] = gin.H{
-				"id":               p.ID,
-				"name":             p.Name,
-				"title":            p.Title,
-				"thumbnailUrl":     p.ThumbnailURL,
-				"createdByUserId":  p.CreatedByUserID,
-				"approvedAt":       p.ApprovedAt,
+				"id":              p.ID,
+				"name":            p.Name,
+				"title":           p.Title,
+				"thumbnailUrl":    p.ThumbnailURL,
+				"createdByUserId": p.CreatedByUserID,
+				"approvedAt":      p.ApprovedAt,
 				"rejectedAt":      p.RejectedAt,
-				"createdAt":        p.CreatedAt,
+				"createdAt":       p.CreatedAt,
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{"packs": out})

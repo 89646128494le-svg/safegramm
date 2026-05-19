@@ -23,7 +23,7 @@ func CreateCall(db *gorm.DB) gin.HandlerFunc {
 		var req struct {
 			ChatID      string `json:"chatId" binding:"required"`
 			OtherUserID string `json:"otherUserId" binding:"required"`
-			Type        string `json:"type" binding:"required"` // "voice" | "video"
+			Type        string `json:"type" binding:"required"`   // "voice" | "video"
 			Status      string `json:"status" binding:"required"` // "completed" | "missed" | "declined"
 			Duration    int    `json:"duration"`
 			StartedAt   int64  `json:"startedAt"`
@@ -51,15 +51,15 @@ func CreateCall(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		call := models.Call{
-			ID:        uuid.New().String(),
-			ChatID:    req.ChatID,
-			CallerID:  callerID,
+			ID:         uuid.New().String(),
+			ChatID:     req.ChatID,
+			CallerID:   callerID,
 			ReceiverID: receiverID,
-			Type:      req.Type,
-			Status:    req.Status,
-			Duration:  req.Duration,
-			StartedAt: startedAt,
-			EndedAt:   endedAt,
+			Type:       req.Type,
+			Status:     req.Status,
+			Duration:   req.Duration,
+			StartedAt:  startedAt,
+			EndedAt:    endedAt,
 		}
 
 		if err := db.Create(&call).Error; err != nil {
@@ -82,13 +82,13 @@ func CreateCall(db *gorm.DB) gin.HandlerFunc {
 				"startedAt":  call.StartedAt,
 				"endedAt":    call.EndedAt,
 				"caller": gin.H{
-					"id":       call.Caller.ID,
-					"username": call.Caller.Username,
+					"id":        call.Caller.ID,
+					"username":  call.Caller.Username,
 					"avatarUrl": call.Caller.AvatarURL,
 				},
 				"receiver": gin.H{
-					"id":       call.Receiver.ID,
-					"username": call.Receiver.Username,
+					"id":        call.Receiver.ID,
+					"username":  call.Receiver.Username,
 					"avatarUrl": call.Receiver.AvatarURL,
 				},
 			},
@@ -138,24 +138,24 @@ func GetCallHistory(db *gorm.DB) gin.HandlerFunc {
 				endedAtInt = &endedAtMs
 			}
 			result[i] = gin.H{
-				"id":         call.ID,
-				"chatId":     call.ChatID,
-				"callerId":   call.CallerID,
-				"receiverId": call.ReceiverID,
-				"type":       call.Type,
-				"status":     call.Status,
-				"duration":   call.Duration,
-				"startedAt":  call.StartedAt.Unix() * 1000, // Конвертируем в миллисекунды
-				"endedAt":    endedAtInt,
+				"id":           call.ID,
+				"chatId":       call.ChatID,
+				"callerId":     call.CallerID,
+				"receiverId":   call.ReceiverID,
+				"type":         call.Type,
+				"status":       call.Status,
+				"duration":     call.Duration,
+				"startedAt":    call.StartedAt.Unix() * 1000, // Конвертируем в миллисекунды
+				"endedAt":      endedAtInt,
 				"recordingUrl": call.RecordingURL,
 				"caller": gin.H{
-					"id":       call.Caller.ID,
-					"username": call.Caller.Username,
+					"id":        call.Caller.ID,
+					"username":  call.Caller.Username,
 					"avatarUrl": call.Caller.AvatarURL,
 				},
 				"receiver": gin.H{
-					"id":       call.Receiver.ID,
-					"username": call.Receiver.Username,
+					"id":        call.Receiver.ID,
+					"username":  call.Receiver.Username,
 					"avatarUrl": call.Receiver.AvatarURL,
 				},
 			}
@@ -188,24 +188,24 @@ func GetMissedCalls(db *gorm.DB) gin.HandlerFunc {
 		result := make([]gin.H, len(calls))
 		for i, call := range calls {
 			result[i] = gin.H{
-				"id":         call.ID,
-				"chatId":     call.ChatID,
-				"callerId":   call.CallerID,
-				"receiverId": call.ReceiverID,
-				"type":       call.Type,
-				"status":     call.Status,
-				"duration":   call.Duration,
-				"startedAt":  call.StartedAt.Unix() * 1000, // Конвертируем в миллисекунды
-				"endedAt":    nil,
+				"id":           call.ID,
+				"chatId":       call.ChatID,
+				"callerId":     call.CallerID,
+				"receiverId":   call.ReceiverID,
+				"type":         call.Type,
+				"status":       call.Status,
+				"duration":     call.Duration,
+				"startedAt":    call.StartedAt.Unix() * 1000, // Конвертируем в миллисекунды
+				"endedAt":      nil,
 				"recordingUrl": call.RecordingURL,
 				"caller": gin.H{
-					"id":       call.Caller.ID,
-					"username": call.Caller.Username,
+					"id":        call.Caller.ID,
+					"username":  call.Caller.Username,
 					"avatarUrl": call.Caller.AvatarURL,
 				},
 				"receiver": gin.H{
-					"id":       "",
-					"username": "",
+					"id":        "",
+					"username":  "",
 					"avatarUrl": "",
 				},
 			}
@@ -282,7 +282,7 @@ func UploadCallRecording(db *gorm.DB) gin.HandlerFunc {
 
 		// Обновляем или создаем запись о звонке
 		var call models.Call
-		if err := db.Where("chat_id = ? AND ((caller_id = ? AND receiver_id = ?) OR (caller_id = ? AND receiver_id = ?))", 
+		if err := db.Where("chat_id = ? AND ((caller_id = ? AND receiver_id = ?) OR (caller_id = ? AND receiver_id = ?))",
 			chatID, userIDStr, otherUserId, otherUserId, userIDStr).
 			Order("started_at DESC").
 			First(&call).Error; err == nil {

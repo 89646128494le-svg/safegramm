@@ -24,16 +24,16 @@ func (EmailTemplate) TableName() string {
 
 // ScheduledBroadcast — запланированная рассылка
 type ScheduledBroadcast struct {
-	ID         string     `json:"id" gorm:"primaryKey"`
-	TemplateID string     `json:"templateId" gorm:"index"`
-	Subject    string     `json:"subject" gorm:"type:text"`
-	BodyHTML   string     `json:"bodyHtml" gorm:"type:text"`
-	FilterPlan string     `json:"filterPlan"` // "", "free", "premium"
-	FilterRole string     `json:"filterRole"`
+	ID          string     `json:"id" gorm:"primaryKey"`
+	TemplateID  string     `json:"templateId" gorm:"index"`
+	Subject     string     `json:"subject" gorm:"type:text"`
+	BodyHTML    string     `json:"bodyHtml" gorm:"type:text"`
+	FilterPlan  string     `json:"filterPlan"` // "", "free", "premium"
+	FilterRole  string     `json:"filterRole"`
 	ScheduledAt time.Time  `json:"scheduledAt" gorm:"index"`
-	SentAt     *time.Time `json:"sentAt"`
-	CreatedBy  string     `json:"createdBy" gorm:"index"`
-	CreatedAt  time.Time  `json:"createdAt" gorm:"autoCreateTime"`
+	SentAt      *time.Time `json:"sentAt"`
+	CreatedBy   string     `json:"createdBy" gorm:"index"`
+	CreatedAt   time.Time  `json:"createdAt" gorm:"autoCreateTime"`
 }
 
 func (ScheduledBroadcast) TableName() string {

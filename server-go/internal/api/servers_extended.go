@@ -54,10 +54,10 @@ func GetServerMembers(db *gorm.DB) gin.HandlerFunc {
 				"joinedAt": m.JoinedAt,
 				"roles":    rolesOut,
 				"user": gin.H{
-					"id":       m.User.ID,
-					"username": m.User.Username,
+					"id":        m.User.ID,
+					"username":  m.User.Username,
 					"avatarUrl": m.User.AvatarURL,
-					"status":   m.User.Status,
+					"status":    m.User.Status,
 				},
 			}
 		}

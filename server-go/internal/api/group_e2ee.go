@@ -51,7 +51,7 @@ func GetGroupKey(db *gorm.DB) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, gin.H{
 			"wrappedKey": groupKey.WrappedKey,
-			"keyVersion":  groupKey.KeyVersion,
+			"keyVersion": groupKey.KeyVersion,
 			"createdBy":  groupKey.CreatedBy,
 		})
 	}

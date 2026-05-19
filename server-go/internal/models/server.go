@@ -28,14 +28,14 @@ type ServerMember struct {
 }
 
 type Channel struct {
-	ID        string    `gorm:"primaryKey" json:"id"`
-	ServerID  string    `gorm:"index;not null" json:"serverId"`
-	CategoryID string   `gorm:"index" json:"categoryId,omitempty"`
-	ChatID    string    `gorm:"index" json:"chatId,omitempty"` // Chat для сообщений в этом канале
-	Name      string    `gorm:"not null" json:"name"`
-	Type      string    `gorm:"default:text" json:"type"`
-	Position  int       `json:"position"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"createdAt"`
+	ID         string    `gorm:"primaryKey" json:"id"`
+	ServerID   string    `gorm:"index;not null" json:"serverId"`
+	CategoryID string    `gorm:"index" json:"categoryId,omitempty"`
+	ChatID     string    `gorm:"index" json:"chatId,omitempty"` // Chat для сообщений в этом канале
+	Name       string    `gorm:"not null" json:"name"`
+	Type       string    `gorm:"default:text" json:"type"`
+	Position   int       `json:"position"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"createdAt"`
 }
 
 func (Server) TableName() string {
@@ -49,4 +49,3 @@ func (ServerMember) TableName() string {
 func (Channel) TableName() string {
 	return "channels"
 }
-

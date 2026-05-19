@@ -71,4 +71,3 @@ func (u *User) SetRecoveryCodes(codes []string) {
 	}
 	u.RecoveryCodes = string(data)
 }
-

@@ -113,4 +113,3 @@ func (c *Client) marshalMessage(msg map[string]interface{}) []byte {
 	}
 	return data
 }
-

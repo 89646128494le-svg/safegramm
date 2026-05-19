@@ -22,8 +22,8 @@ func CreatePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		}
 
 		var req struct {
-			Question   string   `json:"question" binding:"required"`
-			Options    []struct {
+			Question string `json:"question" binding:"required"`
+			Options  []struct {
 				Text string `json:"text" binding:"required"`
 			} `json:"options" binding:"required,min=2,max=10"`
 		}
@@ -60,7 +60,7 @@ func CreatePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			Question:  req.Question,
 			CreatedBy: userIDStr,
 		}
-		
+
 		// Создаем опции
 		for i, opt := range req.Options {
 			if opt.Text != "" {
@@ -77,7 +77,7 @@ func CreatePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
 			return
 		}
-		
+
 		// Обновляем сообщение с pollID
 		message.PollID = poll.ID
 		db.Save(&message)
@@ -93,27 +93,27 @@ func CreatePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 				"text": opt.Text,
 			}
 		}
-		
+
 		response := gin.H{
-			"id":         poll.ID,
-			"messageId":  poll.MessageID,
-			"question":   poll.Question,
-			"options":    optionsData,
-			"createdAt":  poll.CreatedAt.Unix() * 1000,
-			"votes":      make([]gin.H, len(poll.Votes)),
+			"id":        poll.ID,
+			"messageId": poll.MessageID,
+			"question":  poll.Question,
+			"options":   optionsData,
+			"createdAt": poll.CreatedAt.Unix() * 1000,
+			"votes":     make([]gin.H, len(poll.Votes)),
 		}
 
 		for i, vote := range poll.Votes {
 			response["votes"].([]gin.H)[i] = gin.H{
-				"id":       vote.ID,
-				"userId":   vote.UserID,
-				"optionId": vote.OptionID,
+				"id":        vote.ID,
+				"userId":    vote.UserID,
+				"optionId":  vote.OptionID,
 				"createdAt": vote.CreatedAt.Unix() * 1000,
 			}
 			if vote.User.ID != "" {
 				response["votes"].([]gin.H)[i]["user"] = gin.H{
-					"id":       vote.User.ID,
-					"username": vote.User.Username,
+					"id":        vote.User.ID,
+					"username":  vote.User.Username,
 					"avatarUrl": vote.User.AvatarURL,
 				}
 			}
@@ -266,7 +266,7 @@ func VotePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 
 		// Загружаем опции
 		db.Preload("Options").First(&poll, "id = ?", pollID)
-		
+
 		// Проверяем, что опция существует
 		optionExists := false
 		for _, opt := range poll.Options {
@@ -323,27 +323,27 @@ func VotePoll(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 				"text": opt.Text,
 			}
 		}
-		
+
 		response := gin.H{
-			"id":         poll.ID,
-			"messageId":  poll.MessageID,
-			"question":   poll.Question,
-			"options":    optionsData,
-			"createdAt":  poll.CreatedAt.Unix() * 1000,
-			"votes":      make([]gin.H, len(poll.Votes)),
+			"id":        poll.ID,
+			"messageId": poll.MessageID,
+			"question":  poll.Question,
+			"options":   optionsData,
+			"createdAt": poll.CreatedAt.Unix() * 1000,
+			"votes":     make([]gin.H, len(poll.Votes)),
 		}
 
 		for i, v := range poll.Votes {
 			response["votes"].([]gin.H)[i] = gin.H{
-				"id":       v.ID,
-				"userId":   v.UserID,
-				"optionId": v.OptionID,
+				"id":        v.ID,
+				"userId":    v.UserID,
+				"optionId":  v.OptionID,
 				"createdAt": v.CreatedAt.Unix() * 1000,
 			}
 			if v.User.ID != "" {
 				response["votes"].([]gin.H)[i]["user"] = gin.H{
-					"id":       v.User.ID,
-					"username": v.User.Username,
+					"id":        v.User.ID,
+					"username":  v.User.Username,
 					"avatarUrl": v.User.AvatarURL,
 				}
 			}
@@ -366,7 +366,7 @@ func GetPoll(db *gorm.DB) gin.HandlerFunc {
 
 		// Загружаем опции
 		db.Preload("Options").First(&poll, "id = ?", pollID)
-		
+
 		optionsData := make([]gin.H, len(poll.Options))
 		for i, opt := range poll.Options {
 			optionsData[i] = gin.H{
@@ -374,27 +374,27 @@ func GetPoll(db *gorm.DB) gin.HandlerFunc {
 				"text": opt.Text,
 			}
 		}
-		
+
 		response := gin.H{
-			"id":         poll.ID,
-			"messageId":  poll.MessageID,
-			"question":   poll.Question,
-			"options":    optionsData,
-			"createdAt":  poll.CreatedAt.Unix() * 1000,
-			"votes":      make([]gin.H, len(poll.Votes)),
+			"id":        poll.ID,
+			"messageId": poll.MessageID,
+			"question":  poll.Question,
+			"options":   optionsData,
+			"createdAt": poll.CreatedAt.Unix() * 1000,
+			"votes":     make([]gin.H, len(poll.Votes)),
 		}
 
 		for i, vote := range poll.Votes {
 			response["votes"].([]gin.H)[i] = gin.H{
-				"id":       vote.ID,
-				"userId":   vote.UserID,
-				"optionId": vote.OptionID,
+				"id":        vote.ID,
+				"userId":    vote.UserID,
+				"optionId":  vote.OptionID,
 				"createdAt": vote.CreatedAt.Unix() * 1000,
 			}
 			if vote.User.ID != "" {
 				response["votes"].([]gin.H)[i]["user"] = gin.H{
-					"id":       vote.User.ID,
-					"username": vote.User.Username,
+					"id":        vote.User.ID,
+					"username":  vote.User.Username,
 					"avatarUrl": vote.User.AvatarURL,
 				}
 			}
@@ -403,4 +403,3 @@ func GetPoll(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, response)
 	}
 }
-

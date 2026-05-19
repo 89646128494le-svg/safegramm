@@ -50,13 +50,13 @@ func main() {
 	var existingUser models.User
 	if err := db.Where("LOWER(username) = LOWER(?)", username).First(&existingUser).Error; err == nil {
 		fmt.Printf("⚠️  Пользователь '%s' уже существует. Обновляю роль на 'owner'...\n", username)
-		
+
 		// Устанавливаем роль owner
 		roles := []string{"owner"}
 		rolesJSON, _ := json.Marshal(roles)
 		existingUser.Roles = string(rolesJSON)
 		existingUser.Plan = "premium" // Владелец автоматически получает премиум
-		
+
 		// Обновляем пароль, если нужно
 		if password != "" {
 			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -66,12 +66,12 @@ func main() {
 			}
 			existingUser.PassHash = string(hashedPassword)
 		}
-		
+
 		if err := db.Save(&existingUser).Error; err != nil {
 			fmt.Printf("❌ Ошибка обновления пользователя: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		fmt.Printf("✅ Пользователь '%s' успешно обновлен с ролью 'owner'\n", username)
 		fmt.Printf("   ID: %s\n", existingUser.ID)
 		fmt.Printf("   Username: %s\n", existingUser.Username)

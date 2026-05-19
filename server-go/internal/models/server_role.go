@@ -20,5 +20,5 @@ type ServerMemberRole struct {
 	RoleID   string `gorm:"primaryKey;index" json:"roleId"`
 }
 
-func (ServerRole) TableName() string        { return "server_roles" }
-func (ServerMemberRole) TableName() string  { return "server_member_roles" }
+func (ServerRole) TableName() string       { return "server_roles" }
+func (ServerMemberRole) TableName() string { return "server_member_roles" }

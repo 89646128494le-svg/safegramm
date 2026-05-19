@@ -17,4 +17,3 @@ type Webhook struct {
 func (Webhook) TableName() string {
 	return "webhooks"
 }
-

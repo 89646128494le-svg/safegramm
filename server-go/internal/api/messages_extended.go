@@ -61,4 +61,3 @@ func AddLocation(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
-

@@ -5,37 +5,37 @@ import (
 )
 
 type Message struct {
-	ID           string    `gorm:"primaryKey" json:"id"`
-	ChatID      string    `gorm:"index;not null" json:"chatId"`
-	SenderID    string    `gorm:"index;not null" json:"senderId"`
-	Text         string    `json:"text,omitempty"`
-	Ciphertext   string    `gorm:"type:text" json:"ciphertext,omitempty"` // Зашифрованное сообщение (для E2EE групп)
-	ModerationStatus string `gorm:"index;default:approved" json:"moderationStatus,omitempty"` // approved | pending | rejected
-	ModerationReason string `gorm:"type:text" json:"moderationReason,omitempty"`
-	AttachmentURL string   `json:"attachmentUrl,omitempty"`
-	ReplyTo     string    `gorm:"index" json:"replyTo,omitempty"`
-	ForwardFrom string    `json:"forwardFrom,omitempty"`
-	Anonymous   bool      `gorm:"default:false" json:"anonymous,omitempty"` // отправитель скрыт — получатель видит «Тень»
-	ThreadID    string    `gorm:"index" json:"threadId,omitempty"`
-	StickerID   string    `json:"stickerId,omitempty"`
-	GifURL      string    `json:"gifUrl,omitempty"`
-	LocationLat *float64  `json:"locationLat,omitempty"`
-	LocationLon *float64  `json:"locationLon,omitempty"`
-	EditedAt    *time.Time `json:"editedAt,omitempty"`
-	DeletedAt   *time.Time `gorm:"index" json:"deletedAt,omitempty"`
-	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
-	CreatedAt   time.Time `gorm:"autoCreateTime;index" json:"createdAt"`
-	
+	ID               string     `gorm:"primaryKey" json:"id"`
+	ChatID           string     `gorm:"index;not null" json:"chatId"`
+	SenderID         string     `gorm:"index;not null" json:"senderId"`
+	Text             string     `json:"text,omitempty"`
+	Ciphertext       string     `gorm:"type:text" json:"ciphertext,omitempty"`                    // Зашифрованное сообщение (для E2EE групп)
+	ModerationStatus string     `gorm:"index;default:approved" json:"moderationStatus,omitempty"` // approved | pending | rejected
+	ModerationReason string     `gorm:"type:text" json:"moderationReason,omitempty"`
+	AttachmentURL    string     `json:"attachmentUrl,omitempty"`
+	ReplyTo          string     `gorm:"index" json:"replyTo,omitempty"`
+	ForwardFrom      string     `json:"forwardFrom,omitempty"`
+	Anonymous        bool       `gorm:"default:false" json:"anonymous,omitempty"` // отправитель скрыт — получатель видит «Тень»
+	ThreadID         string     `gorm:"index" json:"threadId,omitempty"`
+	StickerID        string     `json:"stickerId,omitempty"`
+	GifURL           string     `json:"gifUrl,omitempty"`
+	LocationLat      *float64   `json:"locationLat,omitempty"`
+	LocationLon      *float64   `json:"locationLon,omitempty"`
+	EditedAt         *time.Time `json:"editedAt,omitempty"`
+	DeletedAt        *time.Time `gorm:"index" json:"deletedAt,omitempty"`
+	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
+	CreatedAt        time.Time  `gorm:"autoCreateTime;index" json:"createdAt"`
+
 	// Новые типы сообщений
-	PollID      string    `gorm:"index" json:"pollId,omitempty"` // ID опроса
-	CalendarEventJSON string `gorm:"type:text" json:"-"` // JSON календарного события
-	ContactJSON string    `gorm:"type:text" json:"-"` // JSON контакта
-	DocumentJSON string   `gorm:"type:text" json:"-"` // JSON документа
-	EditHistoryJSON string `gorm:"type:text" json:"-"` // JSON истории редактирования
+	PollID            string `gorm:"index" json:"pollId,omitempty"` // ID опроса
+	CalendarEventJSON string `gorm:"type:text" json:"-"`            // JSON календарного события
+	ContactJSON       string `gorm:"type:text" json:"-"`            // JSON контакта
+	DocumentJSON      string `gorm:"type:text" json:"-"`            // JSON документа
+	EditHistoryJSON   string `gorm:"type:text" json:"-"`            // JSON истории редактирования
 
 	// Relations
-	Sender User `gorm:"foreignKey:SenderID" json:"sender,omitempty"`
-	Chat   Chat `gorm:"foreignKey:ChatID" json:"chat,omitempty"`
+	Sender    User              `gorm:"foreignKey:SenderID" json:"sender,omitempty"`
+	Chat      Chat              `gorm:"foreignKey:ChatID" json:"chat,omitempty"`
 	Reactions []MessageReaction `gorm:"foreignKey:MessageID" json:"reactions,omitempty"`
 	// Poll связь определена в модели Poll через MessageID, не создаем здесь чтобы избежать конфликта внешних ключей
 }
@@ -59,4 +59,3 @@ func (Message) TableName() string {
 func (MessageReaction) TableName() string {
 	return "message_reactions"
 }
-

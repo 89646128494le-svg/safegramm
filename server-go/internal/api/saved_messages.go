@@ -112,8 +112,8 @@ func GetSavedMessages(db *gorm.DB) gin.HandlerFunc {
 
 				if saved.Message.Sender.ID != "" {
 					msgData["sender"] = gin.H{
-						"id":       saved.Message.Sender.ID,
-						"username": saved.Message.Sender.Username,
+						"id":        saved.Message.Sender.ID,
+						"username":  saved.Message.Sender.Username,
 						"avatarUrl": saved.Message.Sender.AvatarURL,
 					}
 				}
@@ -133,4 +133,3 @@ func GetSavedMessages(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"savedMessages": result})
 	}
 }
-

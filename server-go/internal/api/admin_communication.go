@@ -34,11 +34,11 @@ func GetAdminEmailTemplates(db *gorm.DB) gin.HandlerFunc {
 func PostAdminEmailTemplate(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Name   string `json:"name"`
-			Type   string `json:"type"`
-			Subject string `json:"subject"`
-			BodyHTML string `json:"bodyHtml"`
-			BodyText string `json:"bodyText"`
+			Name      string `json:"name"`
+			Type      string `json:"type"`
+			Subject   string `json:"subject"`
+			BodyHTML  string `json:"bodyHtml"`
+			BodyText  string `json:"bodyText"`
 			Variables string `json:"variables"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
@@ -120,11 +120,11 @@ func PostAdminScheduledBroadcast(db *gorm.DB) gin.HandlerFunc {
 		adminID, _ := c.Get("userID")
 		adminIDStr, _ := adminID.(string)
 		var req struct {
-			TemplateID string `json:"templateId"`
-			Subject   string `json:"subject"`
-			BodyHTML  string `json:"bodyHtml"`
+			TemplateID  string `json:"templateId"`
+			Subject     string `json:"subject"`
+			BodyHTML    string `json:"bodyHtml"`
 			ScheduledAt string `json:"scheduledAt"`
-			FilterPlan string `json:"filterPlan"`
+			FilterPlan  string `json:"filterPlan"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
@@ -172,11 +172,11 @@ func PostAdminDomainList(db *gorm.DB) gin.HandlerFunc {
 		adminID, _ := c.Get("userID")
 		adminIDStr, _ := adminID.(string)
 		var req struct {
-			Value    string `json:"value"`
-			IsDomain bool   `json:"isDomain"`
-			Allow    bool   `json:"allow"`
-			ForInvite bool  `json:"forInvite"`
-			ForReg   bool   `json:"forReg"`
+			Value     string `json:"value"`
+			IsDomain  bool   `json:"isDomain"`
+			Allow     bool   `json:"allow"`
+			ForInvite bool   `json:"forInvite"`
+			ForReg    bool   `json:"forReg"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil || req.Value == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "bad_request"})
@@ -313,8 +313,8 @@ func GetInviteByCode(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"code": l.Code,
-			"inviterName": l.InviterName,
+			"code":          l.Code,
+			"inviterName":   l.InviterName,
 			"questionnaire": l.Questionnaire,
 		})
 	}

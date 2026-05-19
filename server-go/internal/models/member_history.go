@@ -19,4 +19,3 @@ type MemberEvent struct {
 func (MemberEvent) TableName() string {
 	return "member_events"
 }
-

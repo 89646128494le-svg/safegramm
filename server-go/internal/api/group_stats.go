@@ -45,11 +45,10 @@ func GetGroupStats(db *gorm.DB) gin.HandlerFunc {
 			Scan(&rows)
 
 		c.JSON(http.StatusOK, gin.H{
-			"members":         memberCount,
-			"messages24h":     msgs24h,
-			"messages7d":      msgs7d,
-			"activeUsers7d":   len(rows),
+			"members":       memberCount,
+			"messages24h":   msgs24h,
+			"messages7d":    msgs7d,
+			"activeUsers7d": len(rows),
 		})
 	}
 }
-

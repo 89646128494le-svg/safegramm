@@ -145,8 +145,8 @@ func UnpinMessage(db *gorm.DB, wsHub *websocket.Hub) gin.HandlerFunc {
 		unpinJSON, _ := json.Marshal(gin.H{
 			"type": "message:unpinned",
 			"data": gin.H{
-				"messageId": messageID,
-				"chatId":    pinned.ChatID,
+				"messageId":  messageID,
+				"chatId":     pinned.ChatID,
 				"unpinnedBy": userIDStr,
 			},
 		})
@@ -198,8 +198,8 @@ func GetPinnedMessages(db *gorm.DB) gin.HandlerFunc {
 			}
 			if p.Message.Sender.ID != "" {
 				msgData["sender"] = gin.H{
-					"id":       p.Message.Sender.ID,
-					"username": p.Message.Sender.Username,
+					"id":        p.Message.Sender.ID,
+					"username":  p.Message.Sender.Username,
 					"avatarUrl": p.Message.Sender.AvatarURL,
 				}
 			}
@@ -212,8 +212,8 @@ func GetPinnedMessages(db *gorm.DB) gin.HandlerFunc {
 				"pinnedAt":  p.PinnedAt,
 				"message":   msgData,
 				"user": gin.H{
-					"id":       p.User.ID,
-					"username": p.User.Username,
+					"id":        p.User.ID,
+					"username":  p.User.Username,
 					"avatarUrl": p.User.AvatarURL,
 				},
 			}
@@ -222,5 +222,3 @@ func GetPinnedMessages(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"pinned": result})
 	}
 }
-
-

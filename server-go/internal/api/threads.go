@@ -38,10 +38,10 @@ func CreateThread(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		thread := models.Thread{
-			ID:           uuid.New().String(),
-			ChatID:       chatID,
+			ID:            uuid.New().String(),
+			ChatID:        chatID,
 			RootMessageID: req.RootMessageID,
-			Name:         req.Name,
+			Name:          req.Name,
 		}
 
 		if err := db.Create(&thread).Error; err != nil {
@@ -82,18 +82,18 @@ func GetThreads(db *gorm.DB) gin.HandlerFunc {
 		for i, thread := range threads {
 			var count int64
 			db.Model(&models.Message{}).Where("thread_id = ?", thread.ID).Count(&count)
-			
+
 			var lastMessage models.Message
 			db.Where("thread_id = ?", thread.ID).Order("created_at DESC").First(&lastMessage)
 
 			result[i] = gin.H{
-				"id":           thread.ID,
-				"chatId":       thread.ChatID,
+				"id":            thread.ID,
+				"chatId":        thread.ChatID,
 				"rootMessageId": thread.RootMessageID,
-				"name":         thread.Name,
-				"createdAt":    thread.CreatedAt,
-				"messageCount": count,
-				"lastMessage":  lastMessage,
+				"name":          thread.Name,
+				"createdAt":     thread.CreatedAt,
+				"messageCount":  count,
+				"lastMessage":   lastMessage,
 			}
 		}
 
@@ -140,4 +140,3 @@ func GetThreadMessages(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"messages": messages})
 	}
 }
-

@@ -6,14 +6,14 @@ import (
 
 // AdminAuditLog — лог действий админов (кто кого забанил, выдал роль и т.д.)
 type AdminAuditLog struct {
-	ID         string    `json:"id" gorm:"primaryKey"`
-	AdminID    string    `json:"adminId" gorm:"index;not null"`
-	TargetID   string    `json:"targetId" gorm:"index"`           // user/chat/message id
-	Action     string    `json:"action" gorm:"index;not null"`   // block_user, unblock_user, promote, demote, delete_user, ban_chat, etc.
-	Details    string    `json:"details" gorm:"type:text"`        // JSON или текст
-	IP         string    `json:"ip,omitempty" gorm:"type:varchar(64)"`
-	UserAgent  string    `json:"userAgent,omitempty" gorm:"type:text"`
-	CreatedAt  time.Time `json:"createdAt" gorm:"autoCreateTime;index"`
+	ID        string    `json:"id" gorm:"primaryKey"`
+	AdminID   string    `json:"adminId" gorm:"index;not null"`
+	TargetID  string    `json:"targetId" gorm:"index"`        // user/chat/message id
+	Action    string    `json:"action" gorm:"index;not null"` // block_user, unblock_user, promote, demote, delete_user, ban_chat, etc.
+	Details   string    `json:"details" gorm:"type:text"`     // JSON или текст
+	IP        string    `json:"ip,omitempty" gorm:"type:varchar(64)"`
+	UserAgent string    `json:"userAgent,omitempty" gorm:"type:text"`
+	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime;index"`
 }
 
 func (AdminAuditLog) TableName() string {

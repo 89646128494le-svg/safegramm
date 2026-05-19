@@ -189,7 +189,12 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
 
   const createPeerConnection = (stream?: MediaStream) => {
     const iceServers = iceServersRef.current?.length ? iceServersRef.current : [{ urls: 'stun:stun.l.google.com:19302' }];
-    const pc = new RTCPeerConnection({ iceServers });
+    const pc = new RTCPeerConnection({
+      iceServers,
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
+    });
 
     // Добавляем локальный поток
     const streamToUse = stream || localStream;
@@ -205,6 +210,20 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
         setRemoteStream(event.streams[0]);
         setIsConnected(true);
         setIsRinging(false);
+      }
+    };
+
+    // Мониторинг состояния соединения
+    pc.onconnectionstatechange = () => {
+      switch (pc.connectionState) {
+        case 'connected':
+          setIsConnected(true);
+          break;
+        case 'disconnected':
+        case 'failed':
+        case 'closed':
+          endCall();
+          break;
       }
     };
 
@@ -284,8 +303,11 @@ export default function DMCall({ chatId, otherUserId, currentUserId, currentUser
       // Создаем peer connection с потоком
       const pc = createPeerConnection(stream);
 
-      // Создаем offer
-      const offer = await pc.createOffer();
+      // Создаем offer с оптимальными параметрами
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: isVideo,
+      });
       await pc.setLocalDescription(offer);
 
       // Отправляем offer через WebSocket. Не кладём type в корень — иначе перезатрёт type сообщения и сервер не распознает webrtc:offer

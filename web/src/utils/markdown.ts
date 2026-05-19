@@ -1,4 +1,5 @@
 // Улучшенный парсер Markdown для сообщений с подсветкой синтаксиса
+import DOMPurify from 'dompurify';
 
 // Простая подсветка синтаксиса для популярных языков
 function highlightCode(code: string, language?: string): string {
@@ -110,7 +111,13 @@ export function parseMarkdown(text: string): string {
   // Переносы строк
   html = html.replace(/\n/g, '<br>');
   
-  return html;
+  // Очистка HTML с помощью DOMPurify
+  const cleanHtml = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'pre', 'code', 'span', 'del'],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+  });
+
+  return cleanHtml;
 }
 
 // Извлечение языка из блока кода

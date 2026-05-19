@@ -18,5 +18,3 @@ type PushSubscription struct {
 func (PushSubscription) TableName() string {
 	return "push_subscriptions"
 }
-
-

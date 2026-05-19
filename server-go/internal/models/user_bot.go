@@ -11,7 +11,7 @@ type UserBot struct {
 	Username    string    `json:"username" gorm:"uniqueIndex:idx_user_bots_username;not null"` // уникальный в системе, без @
 	Name        string    `json:"name" gorm:"not null"`
 	Description string    `json:"description" gorm:"type:text"`
-	Token       string    `json:"-" gorm:"not null"` // не отдаём в списке/детали; только при create/revoke
+	Token       string    `json:"-" gorm:"not null"`                                        // не отдаём в списке/детали; только при create/revoke
 	WebhookURL  string    `json:"webhookUrl,omitempty" gorm:"column:webhook_url;type:text"` // URL для входящих сообщений боту
 	IsActive    bool      `json:"isActive" gorm:"default:true"`
 	CreatedAt   time.Time `json:"createdAt" gorm:"autoCreateTime"`
